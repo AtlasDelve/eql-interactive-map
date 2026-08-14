@@ -1,0 +1,101 @@
+# Project-scoped Codex configuration for eql-interactive-map.
+#
+# Codex discovers AGENTS.md on its own, so the project guidance needs no wiring here. What this
+# file carries is the Codex-side twin of CLAUDE.md: the harness-specific rules AGENTS.md
+# deliberately does not hold, plus the subagent caps.
+#
+# THIS LAYER LOADS ONLY IN A TRUSTED PROJECT. A project-local config cannot grant its own trust,
+# so accept the trust prompt the first time you run `codex` in this repo, or declare it in
+# ~/.codex/config.toml:
+#
+#   [projects."C:\\source\\repos\\eql-interactive-map"]
+#   trust_level = "trusted"
+#
+# Untrusted, Codex skips this file, .codex/hooks.json and .codex/agents/ alike -- silently as far
+# as the session is concerned, which is the failure mode to check first if the hook never fires.
+#
+# Provider, auth, notification, telemetry and profile-selection keys are ignored in a project-local
+# config by design (openai_base_url, model_provider(s), notify, profile, profiles, otel, ...). Put
+# those in ~/.codex/config.toml instead; setting them here prints a startup warning and does
+# nothing.
+
+# The Codex analogue of CLAUDE.md's Claude Code-only section. Injected into every session in this
+# repo, so it stays short: anything a different agent would also need belongs in AGENTS.md.
+developer_instructions = """
+Harness rules for Codex in this repository. AGENTS.md is loaded separately and owns the project
+itself -- what this is, the commands, the data model, the principles, verification, licensing.
+
+## Your role here is executor
+
+Planning for this repo happens in a separate Claude Code session and arrives as a written plan at
+`docs/internal/<topic>-plan.md`. You implement it. The `$execute-plan` skill holds the protocol;
+read it before starting one.
+
+The plan's steps are decisions someone else already argued against a reviewer, using reference
+material you may not have read. That does not make them correct -- it makes disagreement worth
+surfacing rather than resolving.
+
+**So stop and ask rather than work around.** Halt, append the objection and the options to the
+plan's Execution Log, set Status to `AWAITING DECISION`, and wait. Do not pick one and continue.
+Stop when:
+
+- a step contradicts AGENTS.md or a `docs/reference/` file, or the plan asserts something one of
+  them falsifies;
+- a step needs something on the plan's Out of scope list, or an answer to one of its Open
+  questions;
+- the work touches `data/`, the licensing boundary, redistribution, the pack traces, root-layer
+  zones, or repo visibility -- AGENTS.md is explicit that these are surfaced, never decided;
+- a step cannot work as written, or verification fails for a reason the plan did not anticipate.
+
+Waiting is cheap. The plan was reviewed before it reached you, and a later review session cannot
+tell a considered deviation from a mistake unless you said which it was.
+
+**Keep the Execution Log as you go**, one entry per step, not reconstructed at the end. Commit per
+step: a later session reviews `git diff <base>..HEAD` against that log, and a single squashed
+commit makes both illegible.
+
+## When you are not executing a plan
+
+Working directly, write planning material to `docs/internal/<topic>-plan.md` -- Codex has no
+managed plans directory, so the path is yours to get right, and a name a later session cannot
+guess is as good as no plan. `docs/internal/` is git-ignored; never try to commit it.
+
+For a multi-file change, a 3+ step task, or an architectural decision, spawn the `reviewer`
+subagent over the written plan file and name that path in the request. It reads what is on disk
+and has no access to this conversation, so an unwritten plan gets reviewed as nothing. Fold each
+finding in or reject it with a stated reason. This section is the standing authorization for that
+spawn.
+
+**Spawn it with `agent_type = "reviewer"` AND `fork_turns = "none"`, together.** Naming an
+`agent_type` without `fork_turns` is not a slower path or a worse review -- it is a hard error that
+kills the session: *"Full-history forked agents inherit the parent agent type; omit agent_type, or
+spawn without a full-history fork."* Omitting `fork_turns` means a full-history fork, and such a
+fork inherits the parent's agent type, so an explicit one contradicts it. The two settings are one
+decision, and the tool will not let you make half of it.
+
+`"none"` is also the semantically right value rather than a workaround: it passes the subagent no
+surrounding context, which is precisely the property `.codex/agents/reviewer.toml` is built on --
+a reviewer that starts with no memory of how the plan was argued for. Use `"all"` only when you
+actually want the conversation forwarded, and then drop `agent_type`.
+
+## The commit-time hook is advisory
+
+A PreToolUse hook fires when a `git commit` is about to run and names the docs the working tree
+routes to. It is deliberately non-blocking: it raises the question at the right moment and leaves
+the judgement where AGENTS.md -> "Keeping these instructions current" puts it, which is with you.
+Act on it in the same commit.
+"""
+
+[features]
+# Lifecycle hooks from .codex/hooks.json. On by default in current Codex; stated explicitly so a
+# future default flip cannot silently drop the commit-time docs reminder.
+hooks = true
+
+[agents]
+# Execution here is sequential by design -- one step, one commit, one log entry. The ceiling
+# exists to stop a broad "investigate this" instruction from fanning out across a repo whose whole
+# build is one script.
+max_threads = 4
+# Default. A direct child may spawn, deeper nesting may not -- recursive delegation here buys
+# nothing and costs tokens and predictability.
+max_depth = 1

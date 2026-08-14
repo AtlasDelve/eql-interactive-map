@@ -1,0 +1,43 @@
+# .gitignore for eql-interactive-map
+#
+# Deliberately minimal: only patterns this repo can actually produce. The build needs nothing
+# but the Python 3 standard library, and npm is used solely by the verification harness under
+# tools/verify/js. If a tool is ever added (a venv, pytest, coverage, a linter), add its
+# pattern then rather than carrying boilerplate for tooling that isn't here.
+
+# --- Python bytecode (scripts/build.py and the tools/verify Python layer) ---
+__pycache__/
+*.py[codz]
+
+# --- Generated build output; rebuild with scripts/build.py, never commit ---
+# Anchored to the repo root so it cannot swallow an unrelated nested dist/.
+/dist/
+# The author build exposes the repo-export/authoring surface and must never be committed.
+# /dist/ covers its default output path; this also catches an --out build written elsewhere
+# in the repo, and keeps holding if /dist/ is ever partly un-ignored to publish a prebuilt
+# user map. Distribute the user edition instead.
+*.author.html
+
+# --- Regenerated map geometry (scripts/import_pack.py) ---
+# The traced geometry is derived from a community map pack this project does not own, so it
+# is converted from a user-supplied pack path rather than committed. Anchored to the repo
+# root: the name is generic enough that an unanchored pattern could swallow something else.
+/data/_generated/
+
+# --- Verification harness: node deps and generated artifacts (tools/verify/run.py) ---
+# _out/ collects screenshots and downloads, _fx/ the built fixtures. npm currently lives only
+# in tools/verify/js, but node_modules/ is unanchored so a second npm location is covered too:
+# nobody hand-authors that name, so matching at any depth costs nothing.
+node_modules/
+tools/verify/js/package-lock.json
+tools/verify/_out/
+tools/verify/_fx/
+
+# --- Personal / machine-specific, never committed ---
+# Both patterns match at any depth: the first covers layout.local.json and
+# .claude/settings.local.json, the second a bare suffix such as config.local.
+*.local.*
+*.local
+# Personal planning: specs, implementation plans, session handoffs, reference snapshots.
+# Public-facing documentation goes directly in docs/ instead.
+docs/internal/

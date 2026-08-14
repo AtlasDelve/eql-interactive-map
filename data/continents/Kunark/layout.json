@@ -1,0 +1,501 @@
+{
+  "connectors": [
+    {
+      "a": [
+        -18595,
+        9316
+      ],
+      "b": [
+        -14451,
+        4392
+      ]
+    },
+    {
+      "a": [
+        -7665,
+        -181
+      ],
+      "b": [
+        -15844,
+        -3749
+      ]
+    },
+    {
+      "a": [
+        -5561,
+        -4316
+      ],
+      "b": [
+        -12341,
+        -9732
+      ]
+    },
+    {
+      "a": [
+        4791,
+        1289
+      ],
+      "b": [
+        3776,
+        2541
+      ]
+    },
+    {
+      "a": [
+        -8137,
+        9435
+      ],
+      "b": [
+        -9184,
+        6963
+      ]
+    },
+    {
+      "a": [
+        -25434,
+        11706
+      ],
+      "b": [
+        -24385,
+        7208
+      ]
+    },
+    {
+      "a": [
+        -17987,
+        -12545
+      ],
+      "b": [
+        -9577,
+        -10812
+      ]
+    },
+    {
+      "a": [
+        -8295,
+        -7420
+      ],
+      "b": [
+        -5560,
+        -9902
+      ]
+    },
+    {
+      "a": [
+        2406,
+        1168
+      ],
+      "b": [
+        8790,
+        -766
+      ]
+    },
+    {
+      "a": [
+        2117,
+        -8193
+      ],
+      "b": [
+        6475,
+        -14321
+      ]
+    },
+    {
+      "a": [
+        -15341,
+        -14688
+      ],
+      "b": [
+        3995,
+        -15340
+      ]
+    },
+    {
+      "a": [
+        -17326,
+        575
+      ],
+      "b": [
+        -16359,
+        -131
+      ]
+    },
+    {
+      "a": [
+        -2683,
+        1235
+      ],
+      "b": [
+        -1002,
+        377
+      ]
+    },
+    {
+      "a": [
+        -179,
+        277
+      ],
+      "b": [
+        6762,
+        -3020
+      ]
+    },
+    {
+      "a": [
+        -2984,
+        415
+      ],
+      "b": [
+        4468,
+        -3094
+      ]
+    },
+    {
+      "a": [
+        -7630,
+        -2973
+      ],
+      "b": [
+        -7466,
+        -3113
+      ]
+    },
+    {
+      "a": [
+        -3413,
+        -5182
+      ],
+      "b": [
+        -5714,
+        665
+      ]
+    },
+    {
+      "a": [
+        8604,
+        1075
+      ],
+      "b": [
+        17387,
+        -1937
+      ]
+    }
+  ],
+  "hubs": [
+    {
+      "x": 8519,
+      "y": -19974,
+      "kind": "boat",
+      "label": "Translocator — Firiona Vie"
+    },
+    {
+      "x": -29214,
+      "y": -12356,
+      "kind": "ring",
+      "label": "Druid Ring — The Dreadlands"
+    },
+    {
+      "x": -31148,
+      "y": -11830,
+      "kind": "spire",
+      "label": "Wizard Spires — The Dreadlands"
+    },
+    {
+      "x": 6754,
+      "y": 3178,
+      "kind": "spire",
+      "label": "Wizard Spires — Emerald Jungle"
+    },
+    {
+      "x": 6756,
+      "y": 1171,
+      "kind": "ring",
+      "label": "Druid Ring — Emerald Jungle"
+    },
+    {
+      "x": -15546,
+      "y": 7611,
+      "kind": "boat",
+      "label": "Translocator — The Overthere"
+    },
+    {
+      "x": -24153,
+      "y": 1069,
+      "kind": "ring",
+      "label": "Druid Ring — Skyfire Mountains"
+    },
+    {
+      "x": -22162,
+      "y": 1266,
+      "kind": "spire",
+      "label": "Wizard Spires — Skyfire Mountains"
+    }
+  ],
+  "links": [
+    {
+      "z1": "sebilis",
+      "z2": "trakanon",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "burningwood",
+      "z2": "skyfire",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "dreadlands",
+      "z2": "burningwood",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "firiona",
+      "z2": "swampofnohope",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "citymist",
+      "z2": "emeraldjungle",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "veksar",
+      "z2": "lakeofillomen",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "karnor",
+      "z2": "dreadlands",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "warslikswood",
+      "z2": "fieldofbone",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "kurn",
+      "z2": "fieldofbone",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "cabeast",
+      "z2": "fieldofbone",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "cabwest",
+      "z2": "warslikswood",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "droga",
+      "z2": "nurga",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "frontiermtns",
+      "z2": "dreadlands",
+      "deleted": true
+    },
+    {
+      "z1": "firiona",
+      "z2": "dreadlands",
+      "deleted": true
+    },
+    {
+      "z1": "warslikswood",
+      "z2": "lakeofillomen",
+      "deleted": true
+    },
+    {
+      "z1": "cabeast",
+      "z2": "cabwest",
+      "deleted": true
+    },
+    {
+      "z1": "cabeast",
+      "z2": "lakeofillomen",
+      "deleted": true
+    },
+    {
+      "z1": "cabwest",
+      "z2": "lakeofillomen",
+      "deleted": true
+    },
+    {
+      "z1": "fieldofbone",
+      "z2": "lakeofillomen",
+      "deleted": true
+    }
+  ],
+  "zoneXf": {
+    "fieldofbone": {
+      "tx": 3534,
+      "ty": 4433,
+      "s": 1,
+      "rot": 0
+    },
+    "kurn": {
+      "tx": -3445,
+      "ty": -7816,
+      "s": 1,
+      "rot": 0
+    },
+    "kaesora": {
+      "tx": 2714,
+      "ty": -11991,
+      "s": 1,
+      "rot": 0
+    },
+    "cabeast": {
+      "tx": 3508,
+      "ty": 4258,
+      "s": 1,
+      "rot": 0
+    },
+    "warslikswood": {
+      "tx": 2881,
+      "ty": 4387,
+      "s": 1,
+      "rot": 0
+    },
+    "swampofnohope": {
+      "tx": 9926,
+      "ty": 2375,
+      "s": 1,
+      "rot": 0
+    },
+    "emeraldjungle": {
+      "tx": 3874,
+      "ty": 4571,
+      "s": 1,
+      "rot": 0
+    },
+    "cabwest": {
+      "tx": 1821,
+      "ty": 5094,
+      "s": 1,
+      "rot": 0
+    },
+    "overthere": {
+      "tx": 2881,
+      "ty": 4387,
+      "s": 1,
+      "rot": 0
+    },
+    "lakeofillomen": {
+      "tx": 5308,
+      "ty": -1564,
+      "s": 1,
+      "rot": 0
+    },
+    "dalnir": {
+      "tx": -1329,
+      "ty": 4719,
+      "s": 1,
+      "rot": 0
+    },
+    "trakanon": {
+      "tx": 9926,
+      "ty": 2375,
+      "s": 1,
+      "rot": 0
+    },
+    "firiona": {
+      "tx": 9748,
+      "ty": 1552,
+      "s": 1,
+      "rot": 0
+    },
+    "citymist": {
+      "tx": 1081,
+      "ty": 4580,
+      "s": 1,
+      "rot": 0
+    },
+    "frontiermtns": {
+      "tx": 2904,
+      "ty": 4930,
+      "s": 1,
+      "rot": 0
+    },
+    "charasis": {
+      "tx": 3372,
+      "ty": -2937,
+      "s": 1,
+      "rot": 0
+    },
+    "skyfire": {
+      "tx": 2881,
+      "ty": 4387,
+      "s": 1,
+      "rot": 0
+    },
+    "veksar": {
+      "tx": 3859,
+      "ty": -22336,
+      "s": 1,
+      "rot": 0
+    },
+    "sebilis": {
+      "tx": 10567,
+      "ty": -21947,
+      "s": 1,
+      "rot": 0
+    },
+    "dreadlands": {
+      "tx": -9502,
+      "ty": 2270,
+      "s": 1,
+      "rot": 0
+    },
+    "nurga": {
+      "tx": 3082,
+      "ty": -16669,
+      "s": 1,
+      "rot": 0
+    },
+    "burningwood": {
+      "tx": 3247,
+      "ty": 4895,
+      "s": 1,
+      "rot": 0
+    },
+    "droga": {
+      "tx": 6146,
+      "ty": -14544,
+      "s": 1,
+      "rot": 0
+    },
+    "veeshan": {
+      "tx": 1929,
+      "ty": 4941,
+      "s": 1,
+      "rot": 0
+    },
+    "karnor": {
+      "tx": -16640,
+      "ty": -27313,
+      "s": 1,
+      "rot": 0
+    },
+    "chardok": {
+      "tx": 2142,
+      "ty": -13484,
+      "s": 1,
+      "rot": 0
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "connectors": [],
+  "hubs": [
+    {
+      "x": 418,
+      "y": -2092,
+      "kind": "spire",
+      "label": "Wizard Spires — Greater Faydark"
+    },
+    {
+      "x": -7788,
+      "y": -2465,
+      "kind": "ring",
+      "label": "Druid Ring — Butcherblock Mountains"
+    },
+    {
+      "x": 2592,
+      "y": -6233,
+      "kind": "ring",
+      "label": "Druid Ring — Steamfont Mountains"
+    },
+    {
+      "x": -8971,
+      "y": 1076,
+      "kind": "boat",
+      "label": "Boat → Ocean of Tears — Butcherblock Mountains"
+    },
+    {
+      "x": -8885,
+      "y": 498,
+      "kind": "boat",
+      "label": "Translocator → Timorous Deep — Butcherblock Mountains"
+    }
+  ],
+  "links": [],
+  "zoneXf": {}
+}

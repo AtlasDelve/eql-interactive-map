@@ -1,0 +1,43 @@
+{
+  "name": "Erud's Crossing",
+  "zoneOrder": [
+    "erudsxing"
+  ],
+  "placed": [
+    "erudsxing"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -4802.0,
+    -4637.0,
+    2725.0,
+    2748.0
+  ],
+  "detailZones": [
+    "erudsxing"
+  ],
+  "labels": [
+    {
+      "name": "Dock",
+      "cx": -736,
+      "cy": -1775
+    },
+    {
+      "name": "Talysra`s Paw Island",
+      "cx": -1210,
+      "cy": -1195
+    }
+  ],
+  "zones": {
+    "erudsxing": {
+      "name": "Erud's Crossing",
+      "color": "#5fb95f",
+      "cx": -1299,
+      "cy": -1143,
+      "off": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

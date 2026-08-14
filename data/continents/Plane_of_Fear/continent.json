@@ -1,0 +1,38 @@
+{
+  "name": "Plane of Fear",
+  "zoneOrder": [
+    "fearplane"
+  ],
+  "placed": [
+    "fearplane"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -1387.0,
+    -1393.0,
+    1426.0,
+    1396.0
+  ],
+  "detailZones": [
+    "fearplane"
+  ],
+  "labels": [
+    {
+      "name": "Broken Golem Tower",
+      "cx": -6,
+      "cy": -737
+    }
+  ],
+  "zones": {
+    "fearplane": {
+      "name": "Plane of Fear",
+      "color": "#5fb95f",
+      "cx": -127,
+      "cy": 149,
+      "off": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

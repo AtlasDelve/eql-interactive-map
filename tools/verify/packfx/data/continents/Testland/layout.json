@@ -1,0 +1,15 @@
+{
+  "connectors": [
+    { "a": [0, 0], "b": [10, 10], "ref": "alpha" }
+  ],
+  "hubs": [
+    { "x": 5, "y": 6, "kind": "boat", "label": "Test </script> hub" }
+  ],
+  "links": [
+    { "z1": "alpha", "z2": "beta", "locked": false },
+    { "z1": "beta", "z2": "gamma", "locked": true, "manual": true }
+  ],
+  "zoneXf": {
+    "gamma": { "tx": 3, "ty": -2, "s": 1, "rot": 0 }
+  }
+}

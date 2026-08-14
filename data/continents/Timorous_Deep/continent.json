@@ -1,0 +1,48 @@
+{
+  "name": "Timorous Deep",
+  "zoneOrder": [
+    "timorous"
+  ],
+  "placed": [
+    "timorous"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -6120.0,
+    -13092.0,
+    7721.0,
+    10032.0
+  ],
+  "detailZones": [
+    "timorous"
+  ],
+  "labels": [
+    {
+      "name": "Dock",
+      "cx": 3226,
+      "cy": -4489
+    },
+    {
+      "name": "Dock",
+      "cx": -3566,
+      "cy": 5873
+    },
+    {
+      "name": "Golra Island",
+      "cx": 5366,
+      "cy": -8976
+    }
+  ],
+  "zones": {
+    "timorous": {
+      "name": "Timorous Deep",
+      "color": "#5fb95f",
+      "cx": 1534,
+      "cy": -156,
+      "off": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

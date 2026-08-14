@@ -1,0 +1,15 @@
+{
+  "connectors": [],
+  "hubs": [
+    {
+      "x": 349,
+      "y": -372,
+      "kind": "teleport",
+      "label": "Teleport — Plane of Hate",
+      "letter": "H",
+      "note": "Alter Plane:Hate\nFuligant Soulstone of Innoruuk (consumed)"
+    }
+  ],
+  "links": [],
+  "zoneXf": {}
+}

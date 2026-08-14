@@ -1,0 +1,38 @@
+{
+  "name": "Plane of Hate",
+  "zoneOrder": [
+    "hateplane"
+  ],
+  "placed": [
+    "hateplane"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -597.0,
+    -659.0,
+    608.0,
+    657.0
+  ],
+  "detailZones": [
+    "hateplane"
+  ],
+  "labels": [
+    {
+      "name": "Maestro of Rancor",
+      "cx": 100,
+      "cy": -1700
+    }
+  ],
+  "zones": {
+    "hateplane": {
+      "name": "Plane of Hate",
+      "color": "#5fb95f",
+      "cx": 9,
+      "cy": -51,
+      "off": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "name": "Velious",
+  "zoneOrder": [
+    "eastwastes",
+    "iceclad",
+    "crystal",
+    "greatdivide",
+    "kael",
+    "sleeper",
+    "frozenshadow",
+    "thurgadina",
+    "velketor",
+    "wakening",
+    "thurgadinb",
+    "skyshrine",
+    "cobaltscar",
+    "sirens",
+    "westwastes",
+    "templeveeshan",
+    "necropolis"
+  ],
+  "placed": [
+    "eastwastes",
+    "iceclad",
+    "crystal",
+    "greatdivide",
+    "kael",
+    "sleeper",
+    "frozenshadow",
+    "thurgadina",
+    "velketor",
+    "wakening",
+    "thurgadinb",
+    "skyshrine",
+    "cobaltscar",
+    "sirens",
+    "westwastes",
+    "templeveeshan",
+    "necropolis"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -31190,
+    -16950,
+    40084,
+    13969
+  ],
+  "detailZones": [
+    "iceclad",
+    "eastwastes",
+    "westwastes",
+    "greatdivide",
+    "wakening",
+    "cobaltscar",
+    "skyshrine",
+    "thurgadina",
+    "thurgadinb",
+    "crystal",
+    "velketor",
+    "kael",
+    "sirens",
+    "templeveeshan",
+    "frozenshadow",
+    "necropolis",
+    "sleeper"
+  ],
+  "zones": {
+    "eastwastes": {
+      "name": "Eastern Wastes",
+      "color": "#5fb95f",
+      "cx": -151,
+      "cy": -4393,
+      "off": [
+        0.0,
+        -0.0
+      ]
+    },
+    "iceclad": {
+      "name": "Iceclad Ocean",
+      "color": "#c9a24b",
+      "cx": 15988,
+      "cy": 1065,
+      "off": [
+        16463.0,
+        -13.0
+      ]
+    },
+    "crystal": {
+      "name": "Crystal Caverns",
+      "color": "#9a7fd0",
+      "cx": -2595,
+      "cy": 2499,
+      "off": [
+        -2296.35,
+        2499.25
+      ]
+    },
+    "greatdivide": {
+      "name": "The Great Divide",
+      "color": "#5aa0d0",
+      "cx": -11880,
+      "cy": -4094,
+      "off": [
+        -11554.45,
+        39.55
+      ]
+    },
+    "kael": {
+      "name": "Kael Drakkel",
+      "color": "#d08080",
+      "cx": -7088,
+      "cy": -11915,
+      "off": [
+        -5823.55,
+        -12027.65
+      ]
+    },
+    "sleeper": {
+      "name": "Sleeper's Tomb",
+      "color": "#78c39a",
+      "cx": -3228,
+      "cy": -11461,
+      "off": [
+        -2676.75,
+        -10066.05
+      ]
+    },
+    "frozenshadow": {
+      "name": "Tower of Frozen Shadow",
+      "color": "#c7b24b",
+      "cx": 13563,
+      "cy": 8483,
+      "off": [
+        13765.05,
+        7739.6
+      ]
+    },
+    "thurgadina": {
+      "name": "Thurgadin",
+      "color": "#6fd0c0",
+      "cx": -11477,
+      "cy": 1076,
+      "off": [
+        -11453.35,
+        1317.55
+      ]
+    },
+    "velketor": {
+      "name": "Velketor's Labyrinth",
+      "color": "#d07fb0",
+      "cx": -17555,
+      "cy": -8246,
+      "off": [
+        -17600.35,
+        -8384.95
+      ]
+    },
+    "wakening": {
+      "name": "Wakening Land",
+      "color": "#88a6e0",
+      "cx": -13500,
+      "cy": -14000,
+      "off": [
+        -14274.55,
+        -12708.25
+      ]
+    },
+    "thurgadinb": {
+      "name": "Icewell Keep",
+      "color": "#c06fa0",
+      "cx": -11566,
+      "cy": 4086,
+      "off": [
+        -11473.65,
+        3558.35
+      ]
+    },
+    "skyshrine": {
+      "name": "Skyshrine",
+      "color": "#6fa6d8",
+      "cx": -20258,
+      "cy": -7679,
+      "off": [
+        -19966.85,
+        -8640.45
+      ]
+    },
+    "cobaltscar": {
+      "name": "Cobalt Scar",
+      "color": "#a9d060",
+      "cx": -19725,
+      "cy": -2980,
+      "off": [
+        -20179.55,
+        -2804.55
+      ]
+    },
+    "sirens": {
+      "name": "Siren's Grotto",
+      "color": "#d8b24b",
+      "cx": -21515,
+      "cy": -906,
+      "off": [
+        -21734.55,
+        -589.55
+      ]
+    },
+    "westwastes": {
+      "name": "Western Wastes",
+      "color": "#6fc79a",
+      "cx": -24009,
+      "cy": 4845,
+      "off": [
+        -25524.0,
+        4793.15
+      ]
+    },
+    "templeveeshan": {
+      "name": "Temple of Veeshan",
+      "color": "#b98fd0",
+      "cx": -29095,
+      "cy": 11382,
+      "off": [
+        -29751.75,
+        11950.75
+      ]
+    },
+    "necropolis": {
+      "name": "Dragon Necropolis",
+      "color": "#b0895f",
+      "cx": -27823,
+      "cy": -1560,
+      "off": [
+        -28386.45,
+        -2175.8
+      ]
+    }
+  }
+}

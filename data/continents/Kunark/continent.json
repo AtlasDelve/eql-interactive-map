@@ -1,0 +1,356 @@
+{
+  "name": "Kunark",
+  "zoneOrder": [
+    "fieldofbone",
+    "kurn",
+    "kaesora",
+    "cabeast",
+    "warslikswood",
+    "swampofnohope",
+    "emeraldjungle",
+    "cabwest",
+    "overthere",
+    "lakeofillomen",
+    "dalnir",
+    "trakanon",
+    "firiona",
+    "citymist",
+    "frontiermtns",
+    "charasis",
+    "skyfire",
+    "veksar",
+    "sebilis",
+    "dreadlands",
+    "nurga",
+    "burningwood",
+    "droga",
+    "veeshan",
+    "karnor",
+    "chardok"
+  ],
+  "placed": [
+    "fieldofbone",
+    "kurn",
+    "kaesora",
+    "cabeast",
+    "warslikswood",
+    "swampofnohope",
+    "emeraldjungle",
+    "cabwest",
+    "overthere",
+    "lakeofillomen",
+    "dalnir",
+    "trakanon",
+    "firiona",
+    "citymist",
+    "frontiermtns",
+    "charasis",
+    "skyfire",
+    "veksar",
+    "sebilis",
+    "dreadlands",
+    "nurga",
+    "burningwood",
+    "droga",
+    "veeshan",
+    "karnor",
+    "chardok"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -29525,
+    -26123,
+    14442,
+    14407
+  ],
+  "detailZones": [
+    "fieldofbone",
+    "warslikswood",
+    "lakeofillomen",
+    "cabeast",
+    "cabwest",
+    "swampofnohope",
+    "firiona",
+    "dreadlands",
+    "burningwood",
+    "emeraldjungle",
+    "trakanon",
+    "overthere",
+    "frontiermtns",
+    "droga",
+    "nurga",
+    "kaesora",
+    "sebilis",
+    "karnor",
+    "chardok",
+    "charasis",
+    "kurn",
+    "veksar",
+    "skyfire",
+    "citymist",
+    "dalnir",
+    "veeshan"
+  ],
+  "zones": {
+    "fieldofbone": {
+      "name": "Field of Bone",
+      "color": "#5fb95f",
+      "cx": -2048,
+      "cy": -652,
+      "off": [
+        0.0,
+        0.0
+      ]
+    },
+    "kurn": {
+      "name": "Kurn's Tower",
+      "color": "#c9a24b",
+      "cx": 6000,
+      "cy": 13000,
+      "off": [
+        5982.75,
+        12990.55
+      ]
+    },
+    "kaesora": {
+      "name": "Kaesora",
+      "color": "#9a7fd0",
+      "cx": 2000,
+      "cy": 13000,
+      "off": [
+        2112.45,
+        12944.05
+      ]
+    },
+    "cabeast": {
+      "name": "Cabilis East",
+      "color": "#5aa0d0",
+      "cx": -3903,
+      "cy": -3306,
+      "off": [
+        -4210.85,
+        -3813.85
+      ]
+    },
+    "warslikswood": {
+      "name": "Warsliks Woods",
+      "color": "#d08080",
+      "cx": -8341,
+      "cy": 597,
+      "off": [
+        -7516.65,
+        9.45
+      ]
+    },
+    "swampofnohope": {
+      "name": "Swamp of No Hope",
+      "color": "#78c39a",
+      "cx": -646,
+      "cy": -8019,
+      "off": [
+        6.65,
+        -8446.55
+      ]
+    },
+    "emeraldjungle": {
+      "name": "Emerald Jungle",
+      "color": "#c7b24b",
+      "cx": 5834,
+      "cy": 389,
+      "off": [
+        6279.85,
+        -127.75
+      ]
+    },
+    "cabwest": {
+      "name": "Cabilis West",
+      "color": "#6fd0c0",
+      "cx": -4605,
+      "cy": -3909,
+      "off": [
+        -4174.95,
+        -3808.25
+      ]
+    },
+    "overthere": {
+      "name": "The Overthere",
+      "color": "#d07fb0",
+      "cx": -16729,
+      "cy": 80,
+      "off": [
+        -15786.65,
+        -81.55
+      ]
+    },
+    "lakeofillomen": {
+      "name": "Lake of Ill Omen",
+      "color": "#88a6e0",
+      "cx": -7085,
+      "cy": -7215,
+      "off": [
+        -7568.65,
+        -7938.55
+      ]
+    },
+    "dalnir": {
+      "name": "Crypt of Dalnir",
+      "color": "#c06fa0",
+      "cx": -6399,
+      "cy": 5113,
+      "off": [
+        -6885.1,
+        5036.8
+      ]
+    },
+    "trakanon": {
+      "name": "Trakanon's Teeth",
+      "color": "#6fa6d8",
+      "cx": 9718,
+      "cy": -9105,
+      "off": [
+        8956.15,
+        -8251.65
+      ]
+    },
+    "firiona": {
+      "name": "Firiona Vie",
+      "color": "#a9d060",
+      "cx": -1524,
+      "cy": -18309,
+      "off": [
+        211.45,
+        -17150.15
+      ]
+    },
+    "citymist": {
+      "name": "City of Mist",
+      "color": "#d8b24b",
+      "cx": 10221,
+      "cy": 181,
+      "off": [
+        10040.05,
+        164.35
+      ]
+    },
+    "frontiermtns": {
+      "name": "Frontier Mountains",
+      "color": "#6fc79a",
+      "cx": -16243,
+      "cy": -12255,
+      "off": [
+        -15782.65,
+        -11966.6
+      ]
+    },
+    "charasis": {
+      "name": "Howling Stones",
+      "color": "#b98fd0",
+      "cx": -22000,
+      "cy": 13000,
+      "off": [
+        -22061.55,
+        13018.35
+      ]
+    },
+    "skyfire": {
+      "name": "Skyfire Mountains",
+      "color": "#b0895f",
+      "cx": -25186,
+      "cy": 913,
+      "off": [
+        -24280.0,
+        19.6
+      ]
+    },
+    "veksar": {
+      "name": "Veksar",
+      "color": "#7fc0d0",
+      "cx": -6000,
+      "cy": 13000,
+      "off": [
+        -6029.25,
+        13094.85
+      ]
+    },
+    "sebilis": {
+      "name": "Old Sebilis",
+      "color": "#c98fb0",
+      "cx": 13000,
+      "cy": 13000,
+      "off": [
+        13072.2,
+        13901.2
+      ]
+    },
+    "dreadlands": {
+      "name": "The Dreadlands",
+      "color": "#8fd08f",
+      "cx": -13282,
+      "cy": -16939,
+      "off": [
+        -11948.75,
+        -17176.05
+      ]
+    },
+    "nurga": {
+      "name": "Mines of Nurga",
+      "color": "#d0a06f",
+      "cx": -10000,
+      "cy": 13000,
+      "off": [
+        -10441.85,
+        14591.25
+      ]
+    },
+    "burningwood": {
+      "name": "Burning Woods",
+      "color": "#9fb0e0",
+      "cx": -24144,
+      "cy": -10944,
+      "off": [
+        -24715.65,
+        -11473.55
+      ]
+    },
+    "droga": {
+      "name": "Temple of Droga",
+      "color": "#c0d06f",
+      "cx": -14000,
+      "cy": 13000,
+      "off": [
+        -13510.95,
+        12963.25
+      ]
+    },
+    "veeshan": {
+      "name": "Veeshan's Peak",
+      "color": "#70b0c0",
+      "cx": -26165,
+      "cy": 7359,
+      "off": [
+        -25589.85,
+        6715.95
+      ]
+    },
+    "karnor": {
+      "name": "Karnor's Castle",
+      "color": "#5fb95f",
+      "cx": -2000,
+      "cy": 13000,
+      "off": [
+        -2458.0,
+        12987.3
+      ]
+    },
+    "chardok": {
+      "name": "Chardok",
+      "color": "#c9a24b",
+      "cx": -18000,
+      "cy": 13000,
+      "off": [
+        -17611.65,
+        13280.45
+      ]
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "Ocean of Tears",
+  "zoneOrder": [
+    "oot"
+  ],
+  "placed": [
+    "oot"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -11147.4,
+    -5374.0,
+    10982.6,
+    3494.3
+  ],
+  "detailZones": [
+    "oot"
+  ],
+  "labels": [],
+  "zones": {
+    "oot": {
+      "name": "Ocean of Tears",
+      "color": "#5fb95f",
+      "cx": 1473,
+      "cy": 12,
+      "off": [
+        0.0,
+        0.0
+      ],
+      "labels": [
+        [
+          -10600,
+          -2095,
+          "#ff4545",
+          3,
+          "to_East_Freeport"
+        ],
+        [
+          10400,
+          500,
+          "#ff4545",
+          3,
+          "to_Butcherblock_Mountains"
+        ]
+      ]
+    }
+  }
+}

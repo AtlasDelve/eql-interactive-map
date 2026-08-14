@@ -1,0 +1,23 @@
+{
+  "plansDirectory": "docs/internal",
+  "permissions": {
+    "allow": [
+      "Edit(docs/internal/*-plan.md)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-agent-docs.js\"",
+            "timeout": 10,
+            "statusMessage": "Checking whether AGENTS.md needs an update"
+          }
+        ]
+      }
+    ]
+  }
+}

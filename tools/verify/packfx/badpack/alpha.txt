@@ -1,0 +1,3 @@
+L 1.0, -1.0, 0.0, 2.0, -2.0, 0.0, 0, 204, 0
+X this record type is unknown and must be counted, not fatal
+L 3.0, -3.0, 0.0, 4.0

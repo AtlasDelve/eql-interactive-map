@@ -1,0 +1,126 @@
+Required Notice: Copyright (c) 2026 AtlasDelve
+
+SCOPE OF THIS LICENSE
+=====================
+
+These terms cover the CODE in this repository and nothing else:
+
+    scripts/    the build script, the pack importer, the travel-graph tooling
+    src/        the map viewer/editor template
+    tools/      the verification harness
+
+They do NOT cover the map data, which sits under two separate regimes:
+
+  - Zone geometry is traced by community map packs (such as Brewall's EverQuest
+    maps). Those traces are their authors' work, not the licensor's, and are
+    therefore not the licensor's to license. This repository does not
+    redistribute them at all — they are converted from a pack you supply into a
+    git-ignored cache on your own machine.
+
+  - The authored layer under data/ describes EverQuest content. "EverQuest" and
+    related zone and place names are trademarks of Daybreak Game Company LLC /
+    Darkpaw Games, and EverQuest game content is their copyright. This project
+    is unofficial and non-commercial, is not affiliated with or endorsed by
+    Daybreak, and operates under fan-use tolerance rather than under any
+    license granted by Daybreak.
+
+A map you BUILD with this code embeds map geometry, and these terms do not
+cover it. Where that geometry came from decides whose work it is:
+
+  - Zones taken from a community map pack are that pack's authors' work,
+    and this project claims no rights in them and passes none on.
+
+  - Zones taken from the game client's own maps/ folder are Daybreak-authored
+    files, and likewise not this project's to license.
+
+A single built map can contain a mixture, and the conversion records which
+layer supplied each zone — see rootZones and sources[].from in the generated
+cache's manifest.json.
+
+This project distributes the builder, which embeds no map geometry at all,
+and additionally offers prebuilt maps as a convenience. Each prebuilt names
+the source its geometry came from and credits that source's authors. That
+credit is an attribution and not a license: this project asserts no ownership
+of the underlying map data, and anyone redistributing a built map further
+should confirm terms with the source it names.
+
+See the "Data & attribution" section of README.md for the full picture. Not
+legal advice.
+
+The unmodified text of the license follows.
+
+- - -
+
+# PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.

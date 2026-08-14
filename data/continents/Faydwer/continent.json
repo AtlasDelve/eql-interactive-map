@@ -1,0 +1,200 @@
+{
+  "name": "Faydwer",
+  "zoneOrder": [
+    "gfaydark",
+    "butcher",
+    "crushbone",
+    "lfaydark",
+    "felwithea",
+    "cauldron",
+    "kaladima",
+    "mistmoore",
+    "steamfont",
+    "felwitheb",
+    "kedge",
+    "unrest",
+    "kaladimb",
+    "akanon"
+  ],
+  "placed": [
+    "gfaydark",
+    "butcher",
+    "crushbone",
+    "lfaydark",
+    "felwithea",
+    "cauldron",
+    "kaladima",
+    "mistmoore",
+    "steamfont",
+    "felwitheb",
+    "kedge",
+    "unrest",
+    "kaladimb",
+    "akanon"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -9402.4233,
+    -8288.855,
+    6756.1987,
+    4373.9299
+  ],
+  "detailZones": [
+    "gfaydark",
+    "lfaydark",
+    "butcher",
+    "cauldron",
+    "kaladima",
+    "kaladimb",
+    "felwithea",
+    "felwitheb",
+    "akanon",
+    "steamfont",
+    "crushbone",
+    "kedge",
+    "mistmoore",
+    "unrest"
+  ],
+  "zones": {
+    "gfaydark": {
+      "name": "Greater Faydark",
+      "color": "#5fb95f",
+      "cx": -95,
+      "cy": -368,
+      "off": [
+        0.0,
+        0.0
+      ]
+    },
+    "butcher": {
+      "name": "Butcherblock Mountains",
+      "color": "#c9a24b",
+      "cx": -5901,
+      "cy": -47,
+      "off": [
+        -5718.0,
+        -325.0
+      ]
+    },
+    "crushbone": {
+      "name": "Crushbone",
+      "color": "#9a7fd0",
+      "cx": -74,
+      "cy": 3312,
+      "off": [
+        207.0,
+        3252.8
+      ]
+    },
+    "lfaydark": {
+      "name": "Lesser Faydark",
+      "color": "#5aa0d0",
+      "cx": -235,
+      "cy": -4045,
+      "off": [
+        -71.85,
+        -4765.55
+      ]
+    },
+    "felwithea": {
+      "name": "Felwithe (North)",
+      "color": "#d08080",
+      "cx": 3173,
+      "cy": -1925,
+      "off": [
+        2793.6,
+        -1969.1
+      ]
+    },
+    "cauldron": {
+      "name": "Dagnor's Cauldron",
+      "color": "#78c39a",
+      "cx": -4474,
+      "cy": -6170,
+      "off": [
+        -5120.0,
+        -6137.0
+      ]
+    },
+    "kaladima": {
+      "name": "Kaladim (South)",
+      "color": "#c7b24b",
+      "cx": -5534,
+      "cy": 2932,
+      "off": [
+        -5506.8,
+        2845.7
+      ]
+    },
+    "mistmoore": {
+      "name": "Castle Mistmoore",
+      "color": "#6fd0c0",
+      "cx": -3434,
+      "cy": -5660,
+      "off": [
+        -3306.0,
+        -5535.8
+      ]
+    },
+    "steamfont": {
+      "name": "Steamfont Mountains",
+      "color": "#d07fb0",
+      "cx": 4229,
+      "cy": -4563,
+      "off": [
+        4308.95,
+        -4427.25
+      ]
+    },
+    "felwitheb": {
+      "name": "Felwithe (South)",
+      "color": "#88a6e0",
+      "cx": 3334,
+      "cy": -1356,
+      "off": [
+        2679.6,
+        -1869.1
+      ]
+    },
+    "kedge": {
+      "name": "Kedge Keep",
+      "color": "#c06fa0",
+      "cx": -3947,
+      "cy": -7494,
+      "off": [
+        -4078.0,
+        -7441.6
+      ]
+    },
+    "unrest": {
+      "name": "Estate of Unrest",
+      "color": "#6fa6d8",
+      "cx": -4166,
+      "cy": -7678,
+      "off": [
+        -4166.45,
+        -8239.85
+      ]
+    },
+    "kaladimb": {
+      "name": "Kaladim (North)",
+      "color": "#a9d060",
+      "cx": -6150,
+      "cy": 3678,
+      "off": [
+        -6058.8,
+        2892.95
+      ]
+    },
+    "akanon": {
+      "name": "Ak'Anon",
+      "color": "#d8b24b",
+      "cx": 4161,
+      "cy": -5415,
+      "off": [
+        3703.45,
+        -6535.9
+      ]
+    }
+  }
+}

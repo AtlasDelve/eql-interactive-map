@@ -1,0 +1,714 @@
+{
+  "connectors": [
+    {
+      "a": [
+        -21377,
+        10495
+      ],
+      "b": [
+        -19250,
+        3715
+      ]
+    },
+    {
+      "a": [
+        2507,
+        63
+      ],
+      "b": [
+        2941,
+        615
+      ]
+    },
+    {
+      "a": [
+        3031,
+        55
+      ],
+      "b": [
+        3488,
+        659
+      ]
+    },
+    {
+      "a": [
+        2681,
+        1401
+      ],
+      "b": [
+        2771,
+        1372
+      ]
+    },
+    {
+      "a": [
+        42,
+        -2603
+      ],
+      "b": [
+        807,
+        -3864
+      ]
+    },
+    {
+      "a": [
+        2539,
+        -17528
+      ],
+      "b": [
+        -13613,
+        -13941
+      ]
+    },
+    {
+      "a": [
+        -49519,
+        898
+      ],
+      "b": [
+        -51220,
+        1049
+      ]
+    },
+    {
+      "a": [
+        -33564,
+        -13494
+      ],
+      "b": [
+        -32016,
+        -13262
+      ]
+    },
+    {
+      "a": [
+        741,
+        5821
+      ],
+      "b": [
+        -49,
+        6263
+      ]
+    },
+    {
+      "a": [
+        -3101,
+        8661
+      ],
+      "b": [
+        -2409,
+        8170
+      ]
+    },
+    {
+      "a": [
+        -4182,
+        9313
+      ],
+      "b": [
+        -1596,
+        9181
+      ]
+    },
+    {
+      "a": [
+        -17115,
+        -19006
+      ],
+      "b": [
+        -17376,
+        -17940
+      ]
+    },
+    {
+      "a": [
+        -11159,
+        -16292
+      ],
+      "b": [
+        -9314,
+        -15570
+      ]
+    },
+    {
+      "a": [
+        -9047,
+        -15051
+      ],
+      "b": [
+        -10468,
+        -15768
+      ]
+    },
+    {
+      "a": [
+        -8513,
+        -15494
+      ],
+      "b": [
+        -10297,
+        -16230
+      ]
+    },
+    {
+      "a": [
+        -8623,
+        -15165
+      ],
+      "b": [
+        -10497,
+        -15925
+      ]
+    },
+    {
+      "a": [
+        -11618,
+        -16336
+      ],
+      "b": [
+        -10588,
+        -17541
+      ]
+    },
+    {
+      "a": [
+        -50499,
+        2164
+      ],
+      "b": [
+        -49346,
+        2127
+      ]
+    },
+    {
+      "a": [
+        -49091,
+        1297
+      ],
+      "b": [
+        -50487,
+        1095
+      ]
+    },
+    {
+      "a": [
+        -50605,
+        1422
+      ],
+      "b": [
+        -49326,
+        1315
+      ]
+    },
+    {
+      "a": [
+        -3917,
+        8650
+      ],
+      "b": [
+        -3080,
+        8025
+      ]
+    },
+    {
+      "a": [
+        -4003,
+        9020
+      ],
+      "b": [
+        -3166,
+        8405
+      ]
+    },
+    {
+      "a": [
+        -3068,
+        8944
+      ],
+      "b": [
+        -3857,
+        9563
+      ]
+    },
+    {
+      "a": [
+        -3115,
+        8816
+      ],
+      "b": [
+        -3885,
+        9351
+      ]
+    },
+    {
+      "a": [
+        -4038,
+        9364
+      ],
+      "b": [
+        -3223,
+        8744
+      ]
+    },
+    {
+      "a": [
+        -15049,
+        4965
+      ],
+      "b": [
+        -15352,
+        1310
+      ]
+    }
+  ],
+  "hubs": [
+    {
+      "x": -51296,
+      "y": 1254,
+      "kind": "boat",
+      "label": "Translocator — South Qeynos"
+    },
+    {
+      "x": -33303,
+      "y": 1176,
+      "kind": "spire",
+      "label": "Wizard Spires — West Karana"
+    },
+    {
+      "x": -25178,
+      "y": 6063,
+      "kind": "ring",
+      "label": "Druid Ring — East Karana"
+    },
+    {
+      "x": -7587,
+      "y": 276,
+      "kind": "ring",
+      "label": "Druid Ring — West Commonlands"
+    },
+    {
+      "x": -8043,
+      "y": -160,
+      "kind": "spire",
+      "label": "Wizard Spires — West Commonlands"
+    },
+    {
+      "x": -1895,
+      "y": 7324,
+      "kind": "ring",
+      "label": "Druid Ring — Lavastorm Mountains"
+    },
+    {
+      "x": 2879,
+      "y": -5097,
+      "kind": "spire",
+      "label": "Wizard Spires — North Desert of Ro"
+    },
+    {
+      "x": -395,
+      "y": 4421,
+      "kind": "spire",
+      "label": "Wizard Spires — Nektulos Forest"
+    },
+    {
+      "x": -20133,
+      "y": -18860,
+      "kind": "portal",
+      "label": "Plane of Fear — The Feerrott",
+      "letter": "F"
+    },
+    {
+      "x": -15667,
+      "y": -16131,
+      "kind": "ring",
+      "label": "Druid Ring — The Feerrott"
+    },
+    {
+      "x": -16801,
+      "y": -18781,
+      "kind": "spire",
+      "label": "Wizard Spires — Cazic-Thule"
+    },
+    {
+      "x": -30311,
+      "y": 1041,
+      "kind": "spire",
+      "label": "Wizard Spires — North Karana"
+    },
+    {
+      "x": -27537,
+      "y": 2011,
+      "kind": "ring",
+      "label": "Druid Ring — North Karana"
+    },
+    {
+      "x": -27634,
+      "y": -4720,
+      "kind": "spire",
+      "label": "Wizard Spires — South Karana"
+    },
+    {
+      "x": -25990,
+      "y": -8718,
+      "kind": "ring",
+      "label": "Druid Ring — South Karana"
+    },
+    {
+      "x": 3484,
+      "y": -15367,
+      "kind": "spire",
+      "label": "Wizard Spires — South Desert of Ro"
+    },
+    {
+      "x": 3331,
+      "y": -16418,
+      "kind": "ring",
+      "label": "Druid Ring — South Desert of Ro"
+    },
+    {
+      "x": -16182,
+      "y": 4329,
+      "kind": "ring",
+      "label": "Druid Ring — Misty Thicket"
+    }
+  ],
+  "links": [
+    {
+      "z1": "qeynos2",
+      "z2": "qeytoqrg",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "nro",
+      "z2": "freporte",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "highpass",
+      "z2": "kithicor",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "rivervale",
+      "z2": "misty",
+      "locked": true,
+      "manual": true
+    },
+    {
+      "z1": "lakerathe",
+      "z2": "arena",
+      "deleted": true
+    },
+    {
+      "z1": "feerrott",
+      "z2": "cazicthule",
+      "deleted": true
+    },
+    {
+      "z1": "innothule",
+      "z2": "guktop",
+      "deleted": true
+    },
+    {
+      "z1": "gukbottom",
+      "z2": "guktop",
+      "deleted": true
+    },
+    {
+      "z1": "southkarana",
+      "z2": "qey2hh1",
+      "deleted": true
+    },
+    {
+      "z1": "kithicor",
+      "z2": "highkeep",
+      "deleted": true
+    },
+    {
+      "z1": "kithicor",
+      "z2": "rivervale",
+      "deleted": true
+    }
+  ],
+  "zoneXf": {
+    "ecommons": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "commons": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "kithicor": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "highpass": {
+      "tx": 20,
+      "ty": -163,
+      "s": 1,
+      "rot": 0
+    },
+    "eastkarana": {
+      "tx": 17,
+      "ty": -155,
+      "s": 1,
+      "rot": 0
+    },
+    "northkarana": {
+      "tx": -49,
+      "ty": -149,
+      "s": 1,
+      "rot": 0
+    },
+    "southkarana": {
+      "tx": -51,
+      "ty": -345,
+      "s": 1,
+      "rot": 0
+    },
+    "lakerathe": {
+      "tx": -79,
+      "ty": -503,
+      "s": 1,
+      "rot": 0
+    },
+    "rathemtn": {
+      "tx": -79,
+      "ty": -503,
+      "s": 1,
+      "rot": 0
+    },
+    "feerrott": {
+      "tx": -97,
+      "ty": -559,
+      "s": 1,
+      "rot": 0
+    },
+    "innothule": {
+      "tx": -44,
+      "ty": -548,
+      "s": 1,
+      "rot": 0
+    },
+    "freportw": {
+      "tx": 47,
+      "ty": -222,
+      "s": 1,
+      "rot": 0
+    },
+    "freporte": {
+      "tx": 35,
+      "ty": -230,
+      "s": 1,
+      "rot": 0
+    },
+    "freportn": {
+      "tx": -522,
+      "ty": -46,
+      "s": 1,
+      "rot": 0
+    },
+    "rivervale": {
+      "tx": 327,
+      "ty": 3484,
+      "s": 1,
+      "rot": 0
+    },
+    "misty": {
+      "tx": -1944,
+      "ty": 811,
+      "s": 1,
+      "rot": 0
+    },
+    "runnyeye": {
+      "tx": -1944,
+      "ty": 811,
+      "s": 1,
+      "rot": 0
+    },
+    "beholder": {
+      "tx": 17,
+      "ty": -155,
+      "s": 1,
+      "rot": 0
+    },
+    "nro": {
+      "tx": -13,
+      "ty": -402,
+      "s": 1,
+      "rot": 0
+    },
+    "oasis": {
+      "tx": 368,
+      "ty": -575,
+      "s": 1,
+      "rot": 0
+    },
+    "sro": {
+      "tx": -74,
+      "ty": -649,
+      "s": 1,
+      "rot": 0
+    },
+    "nektulos": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "befallen": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "highkeep": {
+      "tx": 29,
+      "ty": -87,
+      "s": 1,
+      "rot": 0
+    },
+    "qey2hh1": {
+      "tx": -49,
+      "ty": -149,
+      "s": 1,
+      "rot": 0
+    },
+    "paw": {
+      "tx": -51,
+      "ty": -345,
+      "s": 1,
+      "rot": 0
+    },
+    "arena": {
+      "tx": -311,
+      "ty": 2171,
+      "s": 1,
+      "rot": 0
+    },
+    "oggok": {
+      "tx": -99,
+      "ty": -538,
+      "s": 1,
+      "rot": 0
+    },
+    "cazicthule": {
+      "tx": 152,
+      "ty": -1643,
+      "s": 1,
+      "rot": 0.00069
+    },
+    "gukbottom": {
+      "tx": 995,
+      "ty": -1774,
+      "s": 1,
+      "rot": 0
+    },
+    "grobb": {
+      "tx": -44,
+      "ty": -548,
+      "s": 1,
+      "rot": 0
+    },
+    "lavastorm": {
+      "tx": 22,
+      "ty": -176,
+      "s": 1,
+      "rot": 0
+    },
+    "qeytoqrg": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    },
+    "guktop": {
+      "tx": 3009,
+      "ty": -1350,
+      "s": 1,
+      "rot": 0
+    },
+    "soldunga": {
+      "tx": 890,
+      "ty": 934,
+      "s": 1,
+      "rot": 0
+    },
+    "soldungb": {
+      "tx": -167,
+      "ty": -947,
+      "s": 1,
+      "rot": 0
+    },
+    "soltemple": {
+      "tx": 7,
+      "ty": -158,
+      "s": 1,
+      "rot": 0
+    },
+    "najena": {
+      "tx": 75,
+      "ty": -153,
+      "s": 1,
+      "rot": 0
+    },
+    "blackburrow": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    },
+    "qrg": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    },
+    "qeynos2": {
+      "tx": 120,
+      "ty": -145,
+      "s": 1,
+      "rot": 0
+    },
+    "everfrost": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    },
+    "qeynos": {
+      "tx": 120,
+      "ty": -145,
+      "s": 1,
+      "rot": 0
+    },
+    "qcat": {
+      "tx": -11,
+      "ty": 403,
+      "s": 1,
+      "rot": 0
+    },
+    "permafrost": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    },
+    "halas": {
+      "tx": -84,
+      "ty": -102,
+      "s": 1,
+      "rot": 0
+    }
+  }
+}

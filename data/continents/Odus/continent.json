@@ -1,0 +1,122 @@
+{
+  "name": "Odus",
+  "zoneOrder": [
+    "erudnext",
+    "tox",
+    "erudnint",
+    "kerraridge",
+    "paineel",
+    "hole",
+    "warrens",
+    "stonebrunt"
+  ],
+  "placed": [
+    "erudnext",
+    "tox",
+    "erudnint",
+    "kerraridge",
+    "paineel",
+    "hole",
+    "warrens",
+    "stonebrunt"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -7745,
+    -9608,
+    6784,
+    2660
+  ],
+  "detailZones": [
+    "erudnext",
+    "erudnint",
+    "tox",
+    "paineel",
+    "warrens",
+    "hole",
+    "kerraridge",
+    "stonebrunt"
+  ],
+  "zones": {
+    "erudnext": {
+      "name": "Erudin",
+      "color": "#5fb95f",
+      "cx": -3729,
+      "cy": 991,
+      "off": [
+        -3939.0,
+        1649.0
+      ]
+    },
+    "tox": {
+      "name": "Toxxulia Forest",
+      "color": "#c9a24b",
+      "cx": -3897,
+      "cy": -2292,
+      "off": [
+        -3465.95,
+        -2450.25
+      ]
+    },
+    "erudnint": {
+      "name": "Erudin Palace",
+      "color": "#9a7fd0",
+      "cx": -4903,
+      "cy": 989,
+      "off": [
+        -4148.65,
+        292.05
+      ]
+    },
+    "kerraridge": {
+      "name": "Kerra Isle",
+      "color": "#5aa0d0",
+      "cx": -7088,
+      "cy": -3010,
+      "off": [
+        -7039.15,
+        -3380.65
+      ]
+    },
+    "paineel": {
+      "name": "Paineel",
+      "color": "#d08080",
+      "cx": 407,
+      "cy": -6652,
+      "off": [
+        1000.0,
+        -7583.3
+      ]
+    },
+    "hole": {
+      "name": "The Hole",
+      "color": "#78c39a",
+      "cx": -2058,
+      "cy": -6725,
+      "off": [
+        -1898.15,
+        -6989.05
+      ]
+    },
+    "warrens": {
+      "name": "The Warrens",
+      "color": "#c7b24b",
+      "cx": -1777,
+      "cy": -8722,
+      "off": [
+        -2027.8,
+        -9105.0
+      ]
+    },
+    "stonebrunt": {
+      "name": "Stonebrunt Mountains",
+      "color": "#6fd0c0",
+      "cx": 3961,
+      "cy": -4038,
+      "off": [
+        2761.0,
+        -3967.0
+      ]
+    }
+  }
+}

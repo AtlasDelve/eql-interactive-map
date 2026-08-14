@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EverQuest Legends Map Builder</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:#0f1620;color:#e8eef5;font:14px/1.5 system-ui,Segoe UI,Arial,sans-serif}
+  body{display:flex;justify-content:center;padding:40px 18px}
+  main{width:min(760px,100%)}
+  h1{font-size:24px;margin:0 0 4px} h2{font-size:15px;margin:24px 0 8px;color:#cfe0f0}
+  .sub,.hint{color:#9fb0c2}.hint{font-size:12px;margin:7px 0}
+  .card{background:rgba(16,22,30,.94);border:1px solid #2c3a4c;border-radius:12px;padding:20px;margin:18px 0}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+  input[type=file],select{min-width:260px;max-width:100%;background:#0f1822;border:1px solid #35485c;color:#e8eef5;border-radius:6px;padding:7px}
+  button{background:#2f5b3a;border:1px solid #4a8a5c;color:#dff5e6;border-radius:7px;padding:8px 14px;cursor:pointer;font:inherit}
+  button:hover{background:#3b7449} button:disabled{cursor:not-allowed;opacity:.5}
+  #progress{color:#8fb8d8;min-height:1.5em}
+  #error{display:none;background:#42252a;border:1px solid #8a4a4a;color:#ffd9dd;border-radius:7px;padding:9px 11px;white-space:pre-wrap}
+  #report{display:none;background:#121d29;border:1px solid #2c3a4c;border-radius:7px;padding:10px 12px}
+  #report ul{margin:5px 0 10px;padding-left:22px} #report p{margin:5px 0}
+  a{color:#7fc2ee}
+  footer{color:#7d8fa2;font-size:11px;border-top:1px solid #2c3a4c;margin-top:24px;padding-top:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>EverQuest Legends Map Builder</h1>
+  <div class="sub">Build the self-contained interactive map from map files already on your computer.</div>
+
+  <section class="card">
+    <h2>1. Choose the game's maps folder</h2>
+    <p>Select the <strong>maps</strong> folder, not a pack inside it.</p>
+    <p class="hint">A browser cannot see a selected folder's parent, so selecting maps/Brewall directly would omit the game's base layer that the command-line builder can derive.</p>
+    <div class="row"><input id="folder" type="file" webkitdirectory directory multiple></div>
+
+    <h2>2. Choose a map source</h2>
+    <div class="row">
+      <select id="pack" disabled><option>Choose a folder first</option></select>
+      <button id="build" type="button" disabled>Build and download map</button>
+    </div>
+    <div id="progress" role="status" aria-live="polite"></div>
+    <div id="error" role="alert"></div>
+    <div id="report" aria-live="polite"></div>
+  </section>
+
+  <footer id="notice">
+    <div>Version __BUILDER_VERSION__</div>
+    <div>Required Notice: Copyright (c) 2026 AtlasDelve</div>
+    <div>Code terms: <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>.</div>
+    <div>Map data is not covered by those terms. This is an unofficial non-commercial fan project and is not affiliated with or endorsed by Daybreak Game Company or Darkpaw Games.</div>
+  </footer>
+</main>
+
+<!-- Builder payloads are substituted together in one non-recursive pass. They deliberately use
+     names distinct from the placeholders inside the embedded map template; do not route this
+     page through the map injector. -->
+<script>
+__BUILDER_CONVERTER__
+</script>
+<script>
+const TPL = __BUILDER_TEMPLATE__;
+const AUTHORED = __BUILDER_AUTHORED__;
+const COLORS = __BUILDER_COLORS__;
+const BUILDER_VERSION = "__BUILDER_VERSION__";
+
+const folderInput = document.getElementById('folder');
+const packSelect = document.getElementById('pack');
+const buildButton = document.getElementById('build');
+const progressElement = document.getElementById('progress');
+const reportElement = document.getElementById('report');
+const errorElement = document.getElementById('error');
+let selectedFiles = [];
+
+const PROGRESS_ZONES = new Map();
+for (const cont of AUTHORED.world.order) {
+  const meta = AUTHORED.continents[cont].meta;
+  const roster = meta.zoneOrder.slice();
+  for (const zone of meta.detailZones || []) if (!roster.includes(zone)) roster.push(zone);
+  roster.forEach((zone, index) => PROGRESS_ZONES.set(zone.toLowerCase(), {cont, zone, index, total:roster.length}));
+}
+
+// Any iterable of File-like entries becomes the exact {keys, read} adapter the converter accepts.
+function filesFromFileList(list, onRead) {
+  const keys = [], disk = new Map();
+  for (const file of list) {
+    const key = String(file.webkitRelativePath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!key) continue;
+    keys.push(key);
+    disk.set(key, file);
+  }
+  return {
+    keys() { return keys; },
+    async read(key) {
+      const file = disk.get(key);
+      if (!file) throw new Error('Selected file is no longer available: ' + key);
+      if (onRead) onRead(key);
+      return new Uint8Array(await file.arrayBuffer());
+    },
+  };
+}
+
+// Match Python root_layer(): a pack gets a base layer only when its parent is literally maps/.
+function packChoices(list) {
+  const keys = [];
+  for (const file of list) {
+    const key = String(file.webkitRelativePath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (key) keys.push(key);
+  }
+  if (!keys.length) return {selectionName:'', packs:[]};
+  const selectionName = keys[0].split('/')[0];
+  if (keys.some(key => key.split('/')[0] !== selectionName)) throw new Error('Selected files do not share one folder');
+  const subs = new Set();
+  let hasRoot = false;
+  for (const key of keys) {
+    const parts = key.split('/');
+    if (!/\.txt$/i.test(parts[parts.length - 1])) continue;
+    if (parts.length === 2) hasRoot = true;
+    else if (parts.length === 3) subs.add(parts[1]);
+  }
+  const packs = [...subs].sort((a,b) => a.localeCompare(b, undefined, {sensitivity:'base'})).map(label => ({
+    label,
+    packDir: selectionName + '/' + label,
+    rootDir: selectionName.toLowerCase() === 'maps' ? selectionName : null,
+  }));
+  if (hasRoot) packs.push({label:selectionName + ' (root alone)', packDir:selectionName, rootDir:null});
+  return {selectionName, packs};
+}
+
+function updateProgress(key) {
+  const name = key.replace(/\\/g, '/').split('/').pop().replace(/\.txt$/i, '').replace(/_[123]$/, '').toLowerCase();
+  const item = PROGRESS_ZONES.get(name);
+  if (item) progressElement.textContent = `Converting ${item.cont}: ${item.zone} (${item.index + 1}/${item.total})`;
+}
+
+async function buildMap({files, packDir, rootDir, version = BUILDER_VERSION}) {
+  const result = await convert({authored:AUTHORED, files, colors:COLORS, packDir, rootDir});
+  return {html:buildHTML(TPL, result.data, result.credit, version), report:result.report, credit:result.credit};
+}
+
+function renderReport(report) {
+  reportElement.replaceChildren();
+  const skipped = Object.entries(report.skipped || {}).filter(([,zones]) => zones.length);
+  if (skipped.length) {
+    const heading = document.createElement('p');
+    heading.textContent = 'Some authored zones were not present in the selected source:';
+    reportElement.appendChild(heading);
+    const list = document.createElement('ul');
+    for (const [cont,zones] of skipped) {
+      const item = document.createElement('li');
+      item.textContent = `${cont}: ${zones.join(', ')}`;
+      list.appendChild(item);
+    }
+    reportElement.appendChild(list);
+    const help = document.createElement('p');
+    help.append('For fuller coverage, install a map pack from ');
+    const link = document.createElement('a');
+    link.href = 'https://www.eqmaps.info/'; link.textContent = 'eqmaps.info';
+    help.append(link, '.');
+    reportElement.appendChild(help);
+  }
+  for (const warning of report.warnings || []) {
+    const p = document.createElement('p'); p.textContent = 'Warning: ' + warning; reportElement.appendChild(p);
+  }
+  const unseen = [...(report.unseenColors || [])].sort((a,b) => {
+    const aa=a.split(',').map(Number), bb=b.split(',').map(Number);
+    return aa[0]-bb[0] || aa[1]-bb[1] || aa[2]-bb[2];
+  });
+  if (unseen.length) {
+    const p = document.createElement('p');
+    p.textContent = 'Approximate display colours were used for: ' + unseen.join('; ');
+    reportElement.appendChild(p);
+  }
+  reportElement.style.display = reportElement.childNodes.length ? 'block' : 'none';
+}
+
+function downloadHTML(html) {
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = 'eql-interactive-map.html';
+  document.body.appendChild(anchor); anchor.click();
+  setTimeout(() => {anchor.remove(); URL.revokeObjectURL(url);}, 0);
+}
+
+folderInput.addEventListener('change', () => {
+  selectedFiles = Array.from(folderInput.files || []);
+  errorElement.style.display = 'none'; reportElement.style.display = 'none'; progressElement.textContent = '';
+  try {
+    const choices = packChoices(selectedFiles);
+    packSelect.replaceChildren();
+    for (const choice of choices.packs) {
+      const option = document.createElement('option');
+      option.textContent = choice.label; option.value = choice.packDir;
+      option.dataset.rootDir = choice.rootDir == null ? '' : choice.rootDir;
+      packSelect.appendChild(option);
+    }
+    packSelect.disabled = choices.packs.length === 0;
+    buildButton.disabled = choices.packs.length === 0;
+    if (!choices.packs.length) throw new Error('No .txt map files were found in the selected folder');
+  } catch (err) {
+    packSelect.disabled = true; buildButton.disabled = true;
+    errorElement.textContent = err.message; errorElement.style.display = 'block';
+  }
+});
+
+buildButton.addEventListener('click', async () => {
+  buildButton.disabled = true; errorElement.style.display = 'none'; reportElement.style.display = 'none';
+  try {
+    const option = packSelect.selectedOptions[0];
+    const files = filesFromFileList(selectedFiles, updateProgress);
+    const result = await buildMap({files, packDir:option.value, rootDir:option.dataset.rootDir || null});
+    renderReport(result.report);
+    progressElement.textContent += ' — complete';
+    downloadHTML(result.html);
+  } catch (err) {
+    errorElement.textContent = err && err.message ? err.message : String(err);
+    errorElement.style.display = 'block';
+  } finally {
+    buildButton.disabled = false;
+  }
+});
+
+window.BUILDER_PAGE_READY = true;
+</script>
+</body>
+</html>

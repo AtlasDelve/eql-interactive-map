@@ -1,0 +1,655 @@
+{
+  "name": "Antonica",
+  "zoneOrder": [
+    "ecommons",
+    "commons",
+    "kithicor",
+    "highpass",
+    "eastkarana",
+    "northkarana",
+    "southkarana",
+    "lakerathe",
+    "rathemtn",
+    "feerrott",
+    "innothule",
+    "freportw",
+    "freporte",
+    "freportn",
+    "rivervale",
+    "misty",
+    "runnyeye",
+    "beholder",
+    "nro",
+    "oasis",
+    "sro",
+    "nektulos",
+    "befallen",
+    "highkeep",
+    "qey2hh1",
+    "paw",
+    "arena",
+    "oggok",
+    "cazicthule",
+    "gukbottom",
+    "grobb",
+    "lavastorm",
+    "neriaka",
+    "qeytoqrg",
+    "guktop",
+    "soldunga",
+    "soldungb",
+    "soltemple",
+    "najena",
+    "neriakb",
+    "blackburrow",
+    "qrg",
+    "qeynos2",
+    "neriakc",
+    "everfrost",
+    "qeynos",
+    "qcat",
+    "permafrost",
+    "halas"
+  ],
+  "placed": [
+    "ecommons",
+    "commons",
+    "kithicor",
+    "highpass",
+    "eastkarana",
+    "northkarana",
+    "southkarana",
+    "lakerathe",
+    "rathemtn",
+    "feerrott",
+    "innothule",
+    "freportw",
+    "freporte",
+    "freportn",
+    "rivervale",
+    "misty",
+    "runnyeye",
+    "beholder",
+    "nro",
+    "oasis",
+    "sro",
+    "nektulos",
+    "befallen",
+    "highkeep",
+    "qey2hh1",
+    "paw",
+    "arena",
+    "oggok",
+    "cazicthule",
+    "gukbottom",
+    "grobb",
+    "lavastorm",
+    "neriaka",
+    "qeytoqrg",
+    "guktop",
+    "soldunga",
+    "soldungb",
+    "soltemple",
+    "najena",
+    "neriakb",
+    "blackburrow",
+    "qrg",
+    "qeynos2",
+    "neriakc",
+    "everfrost",
+    "qeynos",
+    "qcat",
+    "permafrost",
+    "halas"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -52206,
+    -18887,
+    4912,
+    15549
+  ],
+  "detailZones": [
+    "qeynos",
+    "qeynos2",
+    "qeytoqrg",
+    "qrg",
+    "qcat",
+    "blackburrow",
+    "everfrost",
+    "halas",
+    "permafrost",
+    "qey2hh1",
+    "northkarana",
+    "southkarana",
+    "eastkarana",
+    "highpass",
+    "highkeep",
+    "runnyeye",
+    "kithicor",
+    "rivervale",
+    "misty",
+    "commons",
+    "ecommons",
+    "befallen",
+    "nektulos",
+    "lavastorm",
+    "soltemple",
+    "najena",
+    "soldunga",
+    "soldungb",
+    "freportw",
+    "freporte",
+    "freportn",
+    "nro",
+    "oasis",
+    "sro",
+    "rathemtn",
+    "lakerathe",
+    "feerrott",
+    "oggok",
+    "cazicthule",
+    "innothule",
+    "grobb",
+    "gukbottom",
+    "guktop",
+    "beholder",
+    "arena",
+    "neriaka",
+    "neriakb",
+    "neriakc",
+    "paw"
+  ],
+  "zones": {
+    "ecommons": {
+      "name": "East Commonlands",
+      "color": "#5fb95f",
+      "cx": -2248,
+      "cy": 80,
+      "off": [
+        0.0,
+        0.0
+      ]
+    },
+    "commons": {
+      "name": "West Commonlands",
+      "color": "#c9a24b",
+      "cx": -7776,
+      "cy": -76,
+      "off": [
+        -6252.65,
+        4.75
+      ]
+    },
+    "kithicor": {
+      "name": "Kithicor Forest",
+      "color": "#9a7fd0",
+      "cx": -13734,
+      "cy": 253,
+      "off": [
+        -11550.3,
+        -539.1
+      ]
+    },
+    "highpass": {
+      "name": "Highpass Hold",
+      "color": "#5aa0d0",
+      "cx": -16497,
+      "cy": 943,
+      "off": [
+        -16348.45,
+        990.75
+      ]
+    },
+    "eastkarana": {
+      "name": "East Karana",
+      "color": "#d08080",
+      "cx": -22435,
+      "cy": 3693,
+      "off": [
+        -24786.7,
+        4911.3
+      ]
+    },
+    "northkarana": {
+      "name": "North Karana",
+      "color": "#78c39a",
+      "cx": -29598,
+      "cy": 2091,
+      "off": [
+        -28957.45,
+        4906.55
+      ]
+    },
+    "southkarana": {
+      "name": "South Karana",
+      "color": "#c7b24b",
+      "cx": -28634,
+      "cy": -4879,
+      "off": [
+        -29260.3,
+        -2297.4
+      ]
+    },
+    "lakerathe": {
+      "name": "Lake Rathetear",
+      "color": "#6fd0c0",
+      "cx": -29782,
+      "cy": -13399,
+      "off": [
+        -29228.6,
+        -15104.05
+      ]
+    },
+    "rathemtn": {
+      "name": "Rathe Mountains",
+      "color": "#d07fb0",
+      "cx": -24171,
+      "cy": -14387,
+      "off": [
+        -23912.95,
+        -15991.75
+      ]
+    },
+    "feerrott": {
+      "name": "The Feerrott",
+      "color": "#88a6e0",
+      "cx": -17570,
+      "cy": -16138,
+      "off": [
+        -17386.45,
+        -15924.25
+      ]
+    },
+    "innothule": {
+      "name": "Innothule Swamp",
+      "color": "#c06fa0",
+      "cx": -12828,
+      "cy": -16372,
+      "off": [
+        -12391.15,
+        -15934.05
+      ]
+    },
+    "freportw": {
+      "name": "West Freeport",
+      "color": "#6fa6d8",
+      "cx": 2713,
+      "cy": 3,
+      "off": [
+        2344.45,
+        41.45
+      ]
+    },
+    "freporte": {
+      "name": "East Freeport",
+      "color": "#a9d060",
+      "cx": 3142,
+      "cy": -889,
+      "off": [
+        2626.95,
+        -791.35
+      ]
+    },
+    "freportn": {
+      "name": "North Freeport",
+      "color": "#d8b24b",
+      "cx": 3863,
+      "cy": 1078,
+      "off": [
+        4018.797,
+        1054.1409
+      ]
+    },
+    "rivervale": {
+      "name": "Rivervale",
+      "color": "#6fc79a",
+      "cx": -15428,
+      "cy": 1878,
+      "off": [
+        -15657.3,
+        1851.0
+      ]
+    },
+    "misty": {
+      "name": "Misty Thicket",
+      "color": "#b98fd0",
+      "cx": -14893,
+      "cy": 4160,
+      "off": [
+        -16074.35,
+        4035.55
+      ]
+    },
+    "runnyeye": {
+      "name": "Runnyeye Citadel",
+      "color": "#b0895f",
+      "cx": -17297,
+      "cy": 3026,
+      "off": [
+        -17312.0,
+        3004.0
+      ]
+    },
+    "beholder": {
+      "name": "Gorge of King Xorbb",
+      "color": "#7fc0d0",
+      "cx": -22591,
+      "cy": 10346,
+      "off": [
+        -23244.0,
+        9748.0
+      ]
+    },
+    "nro": {
+      "name": "North Desert of Ro",
+      "color": "#c98fb0",
+      "cx": 3205,
+      "cy": -4411,
+      "off": [
+        3711.55,
+        -6064.85
+      ]
+    },
+    "oasis": {
+      "name": "Oasis of Marr",
+      "color": "#8fd08f",
+      "cx": 3101,
+      "cy": -10474,
+      "off": [
+        3269.95,
+        -10297.95
+      ]
+    },
+    "sro": {
+      "name": "South Desert of Ro",
+      "color": "#d0a06f",
+      "cx": 3244,
+      "cy": -14253,
+      "off": [
+        3713.75,
+        -13679.35
+      ]
+    },
+    "nektulos": {
+      "name": "Nektulos Forest",
+      "color": "#9fb0e0",
+      "cx": -1296,
+      "cy": 3989,
+      "off": [
+        -1178.65,
+        4167.05
+      ]
+    },
+    "befallen": {
+      "name": "Befallen",
+      "color": "#c0d06f",
+      "cx": -6763,
+      "cy": -1560,
+      "off": [
+        -6815.15,
+        -1082.95
+      ]
+    },
+    "highkeep": {
+      "name": "High Keep",
+      "color": "#70b0c0",
+      "cx": -15892,
+      "cy": 921,
+      "off": [
+        -16141.0,
+        915.4
+      ]
+    },
+    "qey2hh1": {
+      "name": "West Karana",
+      "color": "#5fb95f",
+      "cx": -41040,
+      "cy": 3562,
+      "off": [
+        -48111.0,
+        4908.7
+      ]
+    },
+    "paw": {
+      "name": "The Lair of the Splitpaw",
+      "color": "#c9a24b",
+      "cx": -30133,
+      "cy": -4631,
+      "off": [
+        -30108.0,
+        -5335.0
+      ]
+    },
+    "arena": {
+      "name": "The Arena",
+      "color": "#9a7fd0",
+      "cx": -33207,
+      "cy": -15041,
+      "off": [
+        -33237.75,
+        -15028.35
+      ]
+    },
+    "oggok": {
+      "name": "Oggok",
+      "color": "#5aa0d0",
+      "cx": -18543,
+      "cy": -13658,
+      "off": [
+        -18291.7,
+        -13877.05
+      ]
+    },
+    "cazicthule": {
+      "name": "Cazic-Thule",
+      "color": "#d08080",
+      "cx": -17371,
+      "cy": -16927,
+      "off": [
+        -17346.3,
+        -17413.0
+      ]
+    },
+    "gukbottom": {
+      "name": "Lower Guk (Ruins of Old Guk)",
+      "color": "#78c39a",
+      "cx": -11161,
+      "cy": -14891,
+      "off": [
+        -11502.2,
+        -15650.35
+      ]
+    },
+    "grobb": {
+      "name": "Grobb",
+      "color": "#c7b24b",
+      "cx": -11383,
+      "cy": -18254,
+      "off": [
+        -11724.7,
+        -18567.55
+      ]
+    },
+    "lavastorm": {
+      "name": "Lavastorm Mountains",
+      "color": "#6fd0c0",
+      "cx": -1116,
+      "cy": 8963,
+      "off": [
+        -1500.95,
+        7046.95
+      ]
+    },
+    "neriaka": {
+      "name": "Neriak (Foreign Quarter)",
+      "color": "#d07fb0",
+      "cx": 1108,
+      "cy": 5701,
+      "off": [
+        897.0,
+        5800.2
+      ]
+    },
+    "qeytoqrg": {
+      "name": "Qeynos Hills",
+      "color": "#88a6e0",
+      "cx": -50350,
+      "cy": 5782,
+      "off": [
+        -50584.6,
+        3663.1
+      ]
+    },
+    "guktop": {
+      "name": "Upper Guk (City of Guk)",
+      "color": "#c06fa0",
+      "cx": -11756,
+      "cy": -14705,
+      "off": [
+        -11703.0,
+        -15347.0
+      ]
+    },
+    "soldunga": {
+      "name": "Solusek's Eye",
+      "color": "#6fa6d8",
+      "cx": -3814,
+      "cy": 7672,
+      "off": [
+        -4513.25,
+        8175.05
+      ]
+    },
+    "soldungb": {
+      "name": "Nagafen's Lair",
+      "color": "#a9d060",
+      "cx": -3959,
+      "cy": 9883,
+      "off": [
+        -4278.35,
+        10675.0
+      ]
+    },
+    "soltemple": {
+      "name": "Temple of Solusek Ro",
+      "color": "#d8b24b",
+      "cx": 242,
+      "cy": 8543,
+      "off": [
+        248.95,
+        8105.4
+      ]
+    },
+    "najena": {
+      "name": "Najena",
+      "color": "#6fc79a",
+      "cx": 1028,
+      "cy": 7736,
+      "off": [
+        1096.8,
+        7606.2
+      ]
+    },
+    "neriakb": {
+      "name": "Neriak (Commons)",
+      "color": "#b98fd0",
+      "cx": 1840,
+      "cy": 5788,
+      "off": [
+        890.2,
+        5799.6
+      ]
+    },
+    "blackburrow": {
+      "name": "Blackburrow",
+      "color": "#b0895f",
+      "cx": -49467,
+      "cy": 7294,
+      "off": [
+        -49421.4,
+        7256.0
+      ]
+    },
+    "qrg": {
+      "name": "Surefall Glade",
+      "color": "#7fc0d0",
+      "cx": -50301,
+      "cy": 9670,
+      "off": [
+        -50581.0,
+        9458.0
+      ]
+    },
+    "qeynos2": {
+      "name": "North Qeynos",
+      "color": "#c98fb0",
+      "cx": -50859,
+      "cy": 2156,
+      "off": [
+        -50774.8,
+        2006.4
+      ]
+    },
+    "neriakc": {
+      "name": "Neriak (Third Gate)",
+      "color": "#8fd08f",
+      "cx": 2187,
+      "cy": 6603,
+      "off": [
+        890.2,
+        5784.0
+      ]
+    },
+    "everfrost": {
+      "name": "Everfrost Peaks",
+      "color": "#d0a06f",
+      "cx": -47323,
+      "cy": 11709,
+      "off": [
+        -49608.0,
+        10401.1
+      ]
+    },
+    "qeynos": {
+      "name": "South Qeynos",
+      "color": "#9fb0e0",
+      "cx": -50920,
+      "cy": 1527,
+      "off": [
+        -51207.25,
+        1385.55
+      ]
+    },
+    "qcat": {
+      "name": "Qeynos Catacombs",
+      "color": "#c0d06f",
+      "cx": -49373,
+      "cy": 1149,
+      "off": [
+        -49380.35,
+        674.95
+      ]
+    },
+    "permafrost": {
+      "name": "Permafrost Caverns",
+      "color": "#70b0c0",
+      "cx": -42367,
+      "cy": 12939,
+      "off": [
+        -42412.69,
+        12487.905
+      ]
+    },
+    "halas": {
+      "name": "Halas",
+      "color": "#5fb95f",
+      "cx": -50070,
+      "cy": 15033,
+      "off": [
+        -50048.0,
+        14760.0
+      ]
+    }
+  }
+}

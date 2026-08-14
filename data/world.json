@@ -1,0 +1,314 @@
+{
+  "meta": {
+    "Antonica": {
+      "pos": [
+        43,
+        35
+      ],
+      "uc": -23647,
+      "vc": -1669,
+      "gscale": 0.00043769039532196507,
+      "gw": 25,
+      "gh": 15.072306453307188,
+      "alt": "Norrath",
+      "xpac": "classic"
+    },
+    "Odus": {
+      "pos": [
+        13.97,
+        33.09
+      ],
+      "uc": -480.5,
+      "vc": -2894.5,
+      "gscale": 0.000880030653820186,
+      "gw": 12.433953107825408,
+      "gh": 11.464159327315564,
+      "alt": "Norrath",
+      "xpac": "classic"
+    },
+    "Kunark": {
+      "pos": [
+        75,
+        70
+      ],
+      "uc": -7541.5,
+      "vc": -5858,
+      "gscale": 0.0004988731105201531,
+      "gw": 21.93395405023957,
+      "gh": 20.219327169381803,
+      "alt": "Norrath",
+      "xpac": "kunark"
+    },
+    "Velious": {
+      "pos": [
+        28.53,
+        58.87
+      ],
+      "uc": 4447,
+      "vc": -1490.5,
+      "gscale": 0.0003918212143368366,
+      "gw": 27.926665230643692,
+      "gh": 12.114720126080652,
+      "alt": "Norrath",
+      "xpac": "velious"
+    },
+    "Faydwer": {
+      "pos": [
+        82.49,
+        32.25
+      ],
+      "uc": -1323.1123000000002,
+      "vc": -1957.4625499999997,
+      "gscale": 0.0008229081277760333,
+      "gw": 13.297061377460622,
+      "gh": 10.420308614489624,
+      "alt": "Norrath",
+      "xpac": "classic"
+    },
+    "Ocean of Tears": {
+      "pos": [
+        65,
+        33
+      ],
+      "uc": -82.39999999999964,
+      "vc": -939.8499999999999,
+      "gscale": 0.0007031740022916312,
+      "gw": 15.561240670713797,
+      "gh": 6.235958004522872,
+      "alt": "Norrath",
+      "xpac": "classic"
+    },
+    "Erud's Crossing": {
+      "pos": [
+        25,
+        32.32
+      ],
+      "uc": -1038.5,
+      "vc": -944.5,
+      "gscale": 0.0007475396693152532,
+      "gw": 5.626731090935911,
+      "gh": 5.5205804578931446,
+      "alt": "Norrath",
+      "xpac": "classic"
+    },
+    "Timorous Deep": {
+      "pos": [
+        66.85,
+        49.32
+      ],
+      "uc": 800.5,
+      "vc": -1530,
+      "gscale": 0.00041273688547649267,
+      "gw": 5.712691231880135,
+      "gh": 9.544127739758416,
+      "alt": "Norrath",
+      "xpac": "kunark"
+    },
+    "Plane of Fear": {
+      "pos": [
+        57.76,
+        53.11
+      ],
+      "uc": 19.5,
+      "vc": 1.5,
+      "gscale": 0.0051279288947067994,
+      "gw": 14.424863980810226,
+      "gh": 14.301793687337264,
+      "alt": "The Planes",
+      "xpac": "classic"
+    },
+    "Plane of Hate": {
+      "pos": [
+        33.41,
+        52.59
+      ],
+      "uc": 5.5,
+      "vc": -1,
+      "gscale": 0.007497196882927442,
+      "gw": 9.034122243927568,
+      "gh": 9.866311097932513,
+      "alt": "The Planes",
+      "xpac": "classic"
+    },
+    "Plane of Sky": {
+      "pos": [
+        49.41,
+        28.65
+      ],
+      "uc": 203,
+      "vc": -34.5,
+      "gscale": 0.003943824996711514,
+      "gw": 12.383610489674155,
+      "gh": 13.428724113802705,
+      "alt": "The Planes",
+      "xpac": "classic"
+    }
+  },
+  "order": [
+    "Antonica",
+    "Faydwer",
+    "Odus",
+    "Kunark",
+    "Velious",
+    "Ocean of Tears",
+    "Erud's Crossing",
+    "Timorous Deep",
+    "Plane of Fear",
+    "Plane of Hate",
+    "Plane of Sky"
+  ],
+  "xpacs": {
+    "order": [
+      "classic",
+      "kunark",
+      "velious"
+    ],
+    "default": "classic",
+    "labels": {
+      "classic": "Classic",
+      "kunark": "Kunark",
+      "velious": "Velious"
+    }
+  },
+  "universe": [
+    {
+      "name": "Planes of Power",
+      "kind": "cloud",
+      "cx": 0.5,
+      "cy": 0.16,
+      "r": 0.115,
+      "active": false,
+      "note": "not in EQL (classic era)"
+    },
+    {
+      "name": "Luclin",
+      "kind": "moon",
+      "cx": 0.83,
+      "cy": 0.28,
+      "r": 0.08,
+      "active": false,
+      "note": "not in EQL (classic era)"
+    },
+    {
+      "name": "The Planes",
+      "kind": "portal",
+      "cx": 0.21,
+      "cy": 0.66,
+      "r": 0.1,
+      "active": true,
+      "alt": "The Planes",
+      "note": "Fear · Hate · Sky"
+    },
+    {
+      "name": "Norrath",
+      "kind": "globe",
+      "cx": 0.55,
+      "cy": 0.58,
+      "r": 0.185,
+      "active": true,
+      "alt": "Norrath",
+      "note": "the mapped world"
+    }
+  ],
+  "worldLinks": [
+    {
+      "a": [
+        54.725,
+        34.659
+      ],
+      "b": [
+        57.421,
+        34.081
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        72.814,
+        32.049
+      ],
+      "b": [
+        76.233,
+        30.428
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        31.063,
+        33.601
+      ],
+      "b": [
+        25.233,
+        32.736
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        24.523,
+        32.736
+      ],
+      "b": [
+        11.318,
+        29.117
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        55.417,
+        40.663
+      ],
+      "b": [
+        65.223,
+        46.013
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        76.233,
+        30.428
+      ],
+      "b": [
+        68.083,
+        50.634
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        65.376,
+        46.469
+      ],
+      "b": [
+        70.062,
+        65.169
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        68.215,
+        50.795
+      ],
+      "b": [
+        78.002,
+        76.211
+      ],
+      "alt": "Norrath"
+    },
+    {
+      "a": [
+        55.368,
+        36.737
+      ],
+      "b": [
+        33.311,
+        56.109
+      ],
+      "alt": "Norrath"
+    }
+  ]
+}

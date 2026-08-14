@@ -1,0 +1,123 @@
+{
+  "name": "Plane of Sky",
+  "zoneOrder": [
+    "airplane"
+  ],
+  "placed": [
+    "airplane"
+  ],
+  "unplaced": [],
+  "bbox": [
+    -1367.0,
+    -1737.0,
+    1773.0,
+    1668.0
+  ],
+  "detailZones": [
+    "airplane"
+  ],
+  "labels": [
+    {
+      "name": "Teleport to Island 1.5 Noble Dojorn (Key of Swords)",
+      "cx": -839,
+      "cy": 1419
+    },
+    {
+      "name": "Teleport to Island 2 Azarack (Key of the Misplaced)",
+      "cx": -370,
+      "cy": 1360
+    },
+    {
+      "name": "Teleport to Island 2 Azarack (Key of the Misplaced)",
+      "cx": -1171,
+      "cy": 454
+    },
+    {
+      "name": "Teleport to Island 3 Gorgalisk (Key of Misfortune)",
+      "cx": 580,
+      "cy": -460
+    },
+    {
+      "name": "Teleport to Island 4 Pegasus (Key of Beasts)",
+      "cx": -231,
+      "cy": 189
+    },
+    {
+      "name": "Teleport to Island 5 Spiroc (Avian Key)",
+      "cx": 344,
+      "cy": 493
+    },
+    {
+      "name": "Teleport to Island 6 Wasps (Key of the Swarm)",
+      "cx": -1075,
+      "cy": -1150
+    },
+    {
+      "name": "Teleport to Island 7 Drakes(Key of Scale)",
+      "cx": -429,
+      "cy": -1208
+    },
+    {
+      "name": "Teleport to Island 8 Veeshan (Veeshan`s Key)",
+      "cx": 1136,
+      "cy": -717
+    },
+    {
+      "name": "Island 1 Thunder Spirits",
+      "cx": -1250,
+      "cy": 1200
+    },
+    {
+      "name": "Island 1.5 Noble Dojorn",
+      "cx": -1700,
+      "cy": 300
+    },
+    {
+      "name": "Island 2 Azarack",
+      "cx": 100,
+      "cy": -350
+    },
+    {
+      "name": "Island 3 Gorgalisk",
+      "cx": -550,
+      "cy": 0
+    },
+    {
+      "name": "Island 4 Pegasus",
+      "cx": 800,
+      "cy": 1400
+    },
+    {
+      "name": "Island 5 Spiroc",
+      "cx": -1100,
+      "cy": -1100
+    },
+    {
+      "name": "Island 6 Wasps",
+      "cx": -400,
+      "cy": -1400
+    },
+    {
+      "name": "Island 7 Drakes",
+      "cx": 600,
+      "cy": -1800
+    },
+    {
+      "name": "Island 8 Veeshan",
+      "cx": 1350,
+      "cy": 0
+    }
+  ],
+  "zones": {
+    "airplane": {
+      "name": "Plane of Sky",
+      "color": "#5fb95f",
+      "cx": 41,
+      "cy": 52,
+      "off": [
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

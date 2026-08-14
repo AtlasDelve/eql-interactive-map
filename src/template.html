@@ -1,0 +1,2709 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Norrath - World / Continent / Zone Maps (EQL)</title>
+<style>
+ html,body{margin:0;height:100%;background:#0f1620;color:#e8eef5;font:14px/1.4 system-ui,Segoe UI,Arial}
+ canvas{display:block;cursor:pointer;touch-action:none}
+ canvas.pan{cursor:grab} canvas.pan.drag{cursor:grabbing} canvas.edit{cursor:default} canvas.edit.drag{cursor:grabbing}
+ #hud{position:fixed;top:12px;left:12px;background:rgba(16,22,30,.92);border:1px solid #2c3a4c;
+   border-radius:10px;padding:10px 12px;width:300px;max-height:94vh;overflow:auto;backdrop-filter:blur(3px);z-index:5}
+ #hud h1{font-size:16px;margin:0 0 2px} #hud .sub{color:#9fb0c2;font-size:11px;margin:6px 0}
+ .btn{display:inline-block;background:#22303f;border:1px solid #35485c;color:#dbe6f0;border-radius:6px;
+   padding:5px 10px;margin:3px 3px 0 0;cursor:pointer;font-size:12px;user-select:none}
+ .btn:hover{background:#2c3d50} .btn.on{background:#3a5b7a;border-color:#527aa0}
+ .btn.disabled,.btn.disabled:hover{background:#1a2430;border-color:#2c3a4c;color:#7d8fa2;cursor:not-allowed}
+ /* The initial hide is an INLINE attribute on the element, never a rule here: the code shows
+    these by clearing the inline style, which falls back to the stylesheet - so a display:none
+    rule would silently win and the panel would never appear. */
+ #legend{position:fixed;top:12px;right:12px;background:rgba(16,22,30,.9);border:1px solid #2c3a4c;
+   border-radius:10px;padding:8px 10px;max-height:88vh;overflow:auto;backdrop-filter:blur(3px);min-width:150px}
+ #legend .t{font-size:11px;color:#9fb0c2;margin:0 0 5px;text-transform:uppercase;letter-spacing:.05em}
+ #legend div.z{display:flex;align-items:center;gap:7px;padding:2px 4px;border-radius:5px;cursor:pointer;font-size:12px}
+ #legend div.z:hover{background:#22303f}
+ #legend span.sw{width:12px;height:12px;border-radius:3px;flex:none}
+ /* Travel lives INSIDE #hud, next to the button that opens it, so it needs no positioning of
+    its own - #hud already handles width, scrolling and the backdrop. */
+ #travel .row{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
+ #travel .row label{color:#9fb0c2;font-size:11px;flex:0 0 32px}
+ #travel input[type=text]{flex:1;min-width:0;background:#0f1822;border:1px solid #35485c;color:#e8eef5;
+   border-radius:5px;padding:4px 6px;font-size:12px}
+ #travel .sug{border:1px solid #2c3a4c;border-radius:6px;margin:-2px 0 5px;max-height:190px;overflow:auto}
+ #travel .sug div{padding:3px 7px;cursor:pointer;font-size:12px}
+ #travel .sug div:hover,#travel .sug div.on{background:#22303f}
+ #travel .sug .g{color:#8fb8d8;font-size:10px;margin-left:5px}
+ #travel .hint{color:#7d8fa2;font-size:11px;margin:7px 0 2px}
+ #travel .sum{color:#cfe0f0;font-size:12px;margin:8px 0 1px;border-top:1px solid #2c3a4c;padding-top:7px}
+ #travel .modes{color:#9fb0c2;font-size:11px;margin:0 0 5px}
+ #travel .leg{display:flex;gap:7px;padding:2px 0;font-size:12px;align-items:baseline}
+ #travel .leg .m{color:#9fb0c2;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+   flex:0 0 54px;text-align:right}
+ #travel .leg .b{flex:1;min-width:0}
+ #travel .leg .rt{color:#8fb8d8;font-size:11px}
+ #travel .leg .nt{color:#e0b978;font-size:11px;white-space:pre-line}
+ #travel .leg .c{color:#7d8fa2;font-size:10px;font-variant-numeric:tabular-nums;flex:none}
+ #travel .leg.nav{cursor:pointer;border-radius:5px;padding:2px 4px;margin:0 -4px}
+ #travel .leg.nav:hover{background:#22303f}
+ /* The route colour, duplicated from the script's own constant because CSS cannot read it -
+    change one, change both. #ff8f3a below is a lighter tint of it: the flat colour is fine as
+    a 3px line on navy and too dark as 11px text. */
+ #travel .leg.nav.on{background:#3a2a16;box-shadow:inset 2px 0 0 #ff5a00}
+ #travel .start{color:#9fb0c2;font-size:11px;margin:2px 0 4px}
+ #travel .sum .x{float:right;color:#7d8fa2;cursor:pointer;font-size:11px;padding:0 2px}
+ #travel .sum .x:hover{color:#e8eef5}
+ #travel .realm{color:#ff8f3a;font-size:11px;cursor:pointer;margin:6px 0 0;padding:3px 5px;
+   border:1px solid #5c4322;border-radius:5px}
+ #travel .realm:hover{background:#2a1f10}
+ #travelUnavailable{color:#e0b978;font-size:11px;margin:6px 0 1px;padding:5px 7px;
+   border:1px solid #5c4322;border-radius:5px;background:#2a1f10}
+ #tip{position:fixed;pointer-events:none;background:rgba(10,14,20,.95);border:1px solid #3a4d63;
+   border-radius:6px;padding:4px 8px;font-size:12px;display:none;white-space:nowrap;max-width:320px;z-index:6}
+ #cred{position:fixed;bottom:8px;left:12px;color:#6d7f92;font-size:11px}
+ #compass{position:fixed;bottom:12px;right:16px;color:#7d8fa2;font-size:12px;text-align:center}
+ /* ---- editor (ported from Odus POC) ---- */
+ .btn.warn{background:#5b2f2f;border-color:#8a4a4a} .btn.warn:hover{background:#743b3b}
+ .btn.go{background:#2f5b3a;border-color:#4a8a5c} .btn.go:hover{background:#3b7449}
+ .sep{height:1px;background:#2c3a4c;margin:8px 0}
+ .lbl{color:#9fb0c2;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 2px}
+ #insp{margin-top:10px;border-top:1px solid #2c3a4c;padding-top:8px;display:none}
+ #insp h2{font-size:13px;margin:0 0 6px;color:#cfe0f0}
+ #insp .row{display:flex;align-items:center;gap:6px;margin:6px 0;font-size:12px}
+ #insp label{color:#9fb0c2;font-size:11px;flex:0 0 60px}
+ #insp input[type=text],#insp select{flex:1;background:#0f1822;border:1px solid #35485c;color:#e8eef5;
+   border-radius:5px;padding:4px 6px;font-size:12px}
+ #insp textarea{flex:1;min-width:0;background:#0f1822;border:1px solid #35485c;color:#e8eef5;
+   border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;resize:vertical}
+ #insp .row.top{align-items:flex-start}
+ #insp input[type=range]{flex:1}
+ #insp .val{color:#cfe0f0;font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+ #insp .hint{color:#7d8fa2;font-size:11px;margin:4px 0}
+ #histSel{width:100%;background:#0f1822;border:1px solid #35485c;color:#e8eef5;border-radius:5px;padding:4px 6px;font-size:12px;margin-top:2px}
+ #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(20,40,28,.96);
+   border:1px solid #4a8a5c;color:#dff5e6;border-radius:8px;padding:8px 16px;font-size:13px;z-index:9;display:none}
+ .swatchbar{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+ .swatchbar .k{padding:4px 7px;border:1px solid #35485c;border-radius:6px;background:#1a2634;cursor:pointer;font-size:11px}
+ .swatchbar .k.on{background:#3a5b7a;border-color:#6c93ba}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="hud"><h1 id="title">Norrath</h1>
+ <div class="sub" id="desc">Click a landmass to zoom in.</div>
+ <span class="btn" id="bBack" style="display:none">&#8592; Back</span>
+ <span class="btn" id="bAlt" style="display:none"></span>
+ <span class="btn" id="bLabels" style="display:none">Labels: on</span>
+ <span class="btn" id="bFit" style="display:none">Fit</span>
+ <span class="btn" id="bEdit" style="display:none">&#9998; Edit: off</span>
+ <!-- Shown at EVERY level, so it is deliberately not routed through setHUD's `tools` flag:
+      that gates bLabels/bFit and is passed false by enterUniverse/enterWorld, which is where
+      planning a trip is most natural. -->
+ <span class="btn" id="bTravel">&#9992; Travel</span>
+ <div id="travelUnavailable" role="status" style="display:none">Travel unavailable: this map was built without travel data.</div>
+ <!-- Travel panel. Sits here rather than in the top-right slot so it is adjacent to the button
+      that opens it; the zone legend keeps that slot to itself. Initial hide is INLINE, because
+      the toggle shows it by clearing the inline style. -->
+ <div id="travel" style="display:none">
+  <div class="sep"></div>
+  <div class="lbl" style="margin-top:0">Plan a trip</div>
+  <div class="row"><label for="tvFrom">From</label><input type="text" id="tvFrom" autocomplete="off" spellcheck="false" placeholder="departure zone"></div>
+  <div class="sug" id="tvFromSug" style="display:none"></div>
+  <div class="row"><label for="tvTo">To</label><input type="text" id="tvTo" autocomplete="off" spellcheck="false" placeholder="destination zone"></div>
+  <div class="sug" id="tvToSug" style="display:none"></div>
+  <div class="lbl">Modes I can use</div>
+  <div id="tvCaps"></div>
+  <div id="tvOut"></div>
+  <!-- Lives OUTSIDE #tvOut, which tRender clears wholesale, so syncRealmRow can refresh it on
+       a realm change without re-planning the trip (which would drop the selected leg). -->
+  <div id="tvRealm" class="realm" style="display:none"></div>
+ </div>
+ <!-- Expansion picker. Shown at EVERY level and deliberately not routed through setHUD's
+      `tools` flag, exactly as #bTravel is: which expansion the server is running decides what
+      exists, so it is as relevant on the globe as inside a continent. No edition marker either
+      - expansion is a viewing feature both editions need, like #bLabels; only xpacLsKey() is
+      paired. Kept out of #tvCaps on purpose: a capability asks what the player IS, expansion
+      asks what the SERVER has, and the two do not belong in one row. Rows are built from the
+      authored expansion list at boot. -->
+ <div id="xpacbar">
+   <div class="lbl">Expansion</div>
+   <div class="swatchbar" id="xpacPick"></div>
+ </div>
+ <div id="editbar" style="display:none">
+   <div class="sep"></div>
+   <div class="lbl">Tool</div>
+   <span class="btn on" id="tSelect">Select / Move</span>
+   <span class="btn" id="tConn">+ Connector</span>
+   <span class="btn" id="tHub">+ Hub</span>
+   <div id="hubkinds" style="display:none">
+     <div class="lbl">New hub type</div>
+     <div class="swatchbar">
+       <span class="k on" data-kind="boat">&#9973; boat</span>
+       <span class="k" data-kind="spire">&#9650; spire</span>
+       <span class="k" data-kind="ring">&#9711; ring</span>
+       <span class="k" data-kind="portal">&#9673; portal</span>
+       <span class="k" data-kind="teleport">&#10227; teleport</span>
+     </div>
+   </div>
+   <div id="anchorBlock">
+     <div class="lbl">Anchoring</div>
+     <span class="btn on" id="bAuto">&#9875; Auto-anchor: on</span>
+     <div class="sub" id="weldHint" style="margin-top:4px">&#128274; = physically-joined zones move together. Click a padlock on the map to lock/unlock.</div>
+   </div>
+<!--__AUTHOR__-->   <div class="sep"></div>
+   <div class="lbl">Save to repo (durable)</div>
+   <span class="btn go" id="bExport">&#10515; Export layout.json</span>
+   <span class="btn" id="bExportHTML">&#10515; Export standalone HTML</span>
+<!--__END_AUTHOR__-->   <div class="sep"></div>
+   <div class="lbl">My layout (file)</div>
+   <span class="btn go" id="bOvExport">&#10515; Export my layout</span>
+   <span class="btn" id="bOvImport">&#10514; Import layout</span>
+   <input type="file" id="ovFile" accept=".json,application/json" style="display:none">
+   <div class="sub" style="margin-top:4px">Covers every continent and the world view. You can also drop the file anywhere on the map.</div>
+   <div class="sep"></div>
+   <div class="lbl">In-browser buffer (disposable)</div>
+   <span class="btn" id="bSave">&#128190; Save version</span>
+   <span class="btn" id="bRevert">&#8630; Revert last</span>
+<!--__USER__-->   <div id="hiddenBlock" style="display:none">
+     <div class="sep"></div>
+     <div class="lbl">Hidden items</div>
+     <span class="btn" id="bShowHidden">&#128065; Show hidden: off</span>
+     <span class="btn" id="bHiddenList">0 hidden</span>
+     <div id="hiddenList" style="display:none"></div>
+   </div>
+<!--__END_USER__-->   <div class="lbl">History (newest supersedes)</div>
+   <select id="histSel"></select>
+   <div style="margin-top:6px"><span class="btn warn" id="bReset">&#8634; Reset to published map</span></div>
+   <div class="sub" id="savenote"></div>
+ </div>
+ <div id="insp"><div class="lbl" style="margin-top:0">Properties</div><div id="inspBody"></div></div>
+</div>
+<div id="legend" style="display:none"></div><div id="tip"></div>
+<div id="toast"></div>
+<div id="compass">N&#9650;</div>
+<div id="cred">
+    <div>__CRED__ · Version __VERSION__</div>
+    <div>Required Notice: Copyright (c) 2026 AtlasDelve</div>
+    <div>Code terms: <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>.</div>
+    <div>Map data is not covered by those terms. This is an unofficial non-commercial fan project and is not affiliated with or endorsed by Daybreak Game Company or Darkpaw Games.</div>
+</div>
+<script>
+/*__DATA_ALL__*/const ALL=__ALL__, META=__META__, DETAIL=__DETAIL__;/*__END_ALL__*/
+const names=Object.keys(ALL);
+// Travel graph (authored in data/travel.json, never derived at build time): {version, groups,
+// capabilities, walk:[{z:[k1,k2],cost,at?}], routes:[{id,kind,capability,topology,stops,hubs,cost}]}.
+// Read-only at runtime - nothing mutates it, which is why it needs no /*__DATA_*__*/ sentinel.
+// Placement is load-bearing, between the ALL block above and the WORLDLINKS block below: it must
+// sit INSIDE the span verify.py's cmd_strip excises (the ALL declaration through the first ";" of
+// the WORLDLINKS one) so its payload is not scanned for FORBIDDEN tokens, and OUTSIDE every data
+// sentinel block, since exportStandaloneHTML rewrites the whole __DATA_ALL__ block as
+// ALL/META/DETAIL only and would drop anything sharing that line.
+const TRAVEL=__TRAVEL__;
+// Expansion declaration: {order:[...cumulative, oldest first], default, labels:{id:text}}.
+// Authored beside the rest of the global data, because the order and first-run default are facts
+// about the game rather than presentation. Read-only, so it needs no /*__DATA_*__*/ sentinel.
+// Its placement is load-bearing for exactly the two reasons the note above gives for the line
+// before it, so it remains beside that declaration and outside every data sentinel.
+const XPACS=__XPACS__;
+const TRAVEL_AVAILABLE=!!(TRAVEL&&Array.isArray(TRAVEL.walk)&&Array.isArray(TRAVEL.routes)
+ &&Array.isArray(TRAVEL.capabilities)&&TRAVEL.groups&&typeof TRAVEL.groups==='object');
+const TDATA=TRAVEL_AVAILABLE?TRAVEL:{groups:{},capabilities:[],walk:[],routes:[]};
+// world-view connectors: free 2-point lines in globe coords {a:[gx,gy],b:[gx,gy],alt}. Editable at world level.
+/*__DATA_WL__*/const WORLDLINKS=__WORLDLINKS__;/*__END_WL__*/
+// Realm -> its continents, DERIVED from each continent's own `alt` rather than restated as a
+// literal: the same fact written twice drifts, and the realm a continent belongs to is a
+// property of that continent. Iterate `names`, NEVER META: `names` follows the authored
+// continent order, while META is a raw passthrough whose own key order differs (it has Odus
+// before Faydwer; the draw order has Faydwer before Odus). Iterating META would silently
+// reorder the globe draw and label passes.
+const ALTITUDES={};for(const c of names){const a=META[c].alt;(ALTITUDES[a]=ALTITUDES[a]||[]).push(c);}
+const ENTRYHINT={"Plane of Fear":"entry: The Feerrott (Cazic-Thule temple)","Plane of Hate":"entry: wizard portal","Plane of Sky":"entry: wizard portal"};
+// ---- continent-level transport HUBS (Request 2) ----
+// coords are CONTINENT (ALL) frame, mapped from each zone's DETAIL hub label via per-zone affine fit.
+// kind: portal|teleport|spire|ring|boat. letter (<=2 chars) is overlaid on portal & teleport glyphs
+// (planes portals use F/H/S). optional multi-line `note` is hover-only (destination list, e.g. Firepots).
+/*__DATA_HUBS__*/const HUBS=__HUBS__;/*__END_HUBS__*/
+let alt="Norrath";
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),tip=document.getElementById('tip');
+let level="world", cur=null, zcur=null, showLabels=true, hover=null, focus=null;
+let view={x:0,y:0,k:1};
+let worldCache=null, worldRects={};
+let wv={x:0,y:0,k:1};
+let zgroups=null, zdata=null, zpal=null;
+let zlinks=[], zhover=null;
+let hubScreens=[];
+// ---- planned trip (travel guide phase 3): drawn at every level, written only by tRender ----
+// Declared HERE, not beside the rest of the travel module, because drawCont/drawWorld/drawZone
+// are all defined above that module: function declarations hoist, a top-level `let` does not,
+// so a module-local binding would put every draw before its line in the temporal dead zone.
+//   .on   membership, INCLUDING the departure zone     .pip  arrival leg index, excluding it
+// Two maps rather than one: with a single map holding -1 for the start, "<0" would mean both
+// "off the route" and "is the start", dimming the departure zone while the rest stayed bright.
+let TROUTE=null;
+// Route colour, picked against a census of what the map already draws, for the same reason
+// USER_ADDED_COL is: a line in a colour something else already uses is not a marker, and no
+// layer below the real-browser one can catch it. Continent-level zone outlines are all
+// desaturated pastels (no pure channel anywhere); the saturated lines are gold #ffd24a
+// (connectors AND every hub's outer ring), magenta #ff5cc8, white hover, and the glyph bodies
+// listed above markUserAdded. Green is doubly out - #5fb95f is the commonest zone outline and
+// #00ff00/#08ce08 are heavy in the detail palettes.
+// The near neighbour is the teleport glyph's #ff9d3a, and clearing it takes more than picking a
+// different orange: its ANTI-ALIASED edges blend toward the dark halo and the letter's black
+// stroke, so a fraction t of it lands at (255t, 157t, 58t). The separating predicate the browser
+// layer uses is "r>210 && g<115 && b<60", and it holds by construction rather than by tuning -
+// r>210 forces t>0.82, which forces g>129, well clear of 115. This colour's own g is 90, and
+// its blends toward ROUTE_CASE fall to ~76, so it keeps that margin at every alpha.
+// Do not lighten it back toward #ff8a1f: at g=138 the teleport's edge pixels leak in and the
+// discriminating test has to be loosened until it stops discriminating.
+const ROUTE_COL='#ff5a00', ROUTE_CASE='#0b1017';
+const DIM_FOCUS='rgba(120,140,160,0.10)', DIM_ROUTE='rgba(120,140,160,0.28)';
+const ALTOF={};for(const a in ALTITUDES)for(const c of ALTITUDES[a])ALTOF[c]=a;
+function altOf(c){return ALTOF[c]||null;}
+function tOnRoute(k){return !!(TROUTE&&TROUTE.on[k]);}
+function tPipOf(k){return (TROUTE&&(k in TROUTE.pip))?TROUTE.pip[k]:-1;}
+
+// ================= EXPANSION SELECTION ======================
+// The server runs one expansion at a time, so content from a later one is not merely clutter:
+// routing a player onto a boat to a zone that does not exist yet is a WRONG ANSWER. This filters
+// existence. Versioned per-expansion geometry is a separate, deferred thing.
+//
+// Expansions are CUMULATIVE and ORDERED. A continent shows iff rank(its xpac) <= rank(the
+// selected one), which makes "picking the first one hides three continents" and "picking the last
+// hides nothing" both true of one rule.
+//
+// Everything below reads PUBLISHED META/HUBS/WORLDLINKS/TRAVEL and never EDIT/WEDIT/contData().
+// What exists is a fact about the game; a viewer's own customization must not change it - the
+// same invariant that keeps routing off zone centroids, one layer up.
+let xpac=null;  // set during boot, once the stored value has been validated against the roster
+/*__AUTHOR__*/function xpacLsKey(){return 'eql_map_xpac_v1';}/*__END_AUTHOR__*/
+/*__USER__*/function xpacLsKey(){return 'eql_map_xpac_u1';}/*__END_USER__*/
+function xpacRank(e){const i=XPACS.order.indexOf(e);return i<0?XPACS.order.length:i;}
+// A hand-edited or stale stored value must never reach a rank lookup, so validate against the
+// authored roster rather than trusting what came back out of the browser.
+function loadXpac(){try{const v=localStorage.getItem(xpacLsKey());
+  if(v&&XPACS.order.indexOf(v)>=0)return v;}catch(e){}
+ return null;}
+function saveXpac(){try{localStorage.setItem(xpacLsKey(),xpac);}catch(e){}}
+// The four derived sets. Declared as const containers repopulated IN PLACE, for the reason
+// detectLinks clears zoneLinks in place: every reader holds this exact object, and reassigning a
+// `let` from a function defined below the draw code is the temporal-dead-zone hazard the TROUTE
+// note describes. Empty until recomputeXpac() runs - which boot does before the first draw, or
+// every continent would vanish.
+const XPAC_CONT=new Set();      // continent names in the selected expansion
+const XPAC_ROUTE=new Set();     // route ids OUT of expansion
+const XPAC_HUB={};              // continent -> Set of PUBLISHED hub indices out of expansion
+const XPAC_WL=new Set();        // published world-link indices out of expansion
+// Which continent's globe box a world-link endpoint belongs to. Scoped to the realm the link is
+// drawn in, and that is load-bearing rather than tidy: Velious' box and Plane of Hate's OVERLAP,
+// and one authored endpoint sits at distance 0 from both. The link is realm-tagged and is only
+// ever drawn on that realm's globe, so the other realm's boxes are not candidates at all.
+// Nearest-box-with-tolerance rather than strict containment, because one endpoint of the
+// Faydwer link misses its box by 0.033. Justified for links alone because WORLDLINKS have no
+// routing role - routes draw their own world lines - so the worst case is a decorative line
+// drawn or not drawn.
+// The continent's position is an explicit ARGUMENT rather than read from META here, precisely
+// so the two callers cannot share a frame. Expansion passes META[c].pos; world-link anchoring
+// passes the live edited position. A default would let the live frame leak onto that path, where a
+// viewer dragging a landmass must never change what exists.
+function wlBoxDist(c,p,pos){const m=META[c],x=pos[0],y=pos[1];
+ const dx=Math.max(x-m.gw/2-p[0],0,p[0]-(x+m.gw/2));
+ const dy=Math.max(y-m.gh/2-p[1],0,p[1]-(y+m.gh/2));
+ return Math.hypot(dx,dy);}
+function wlOwner(l,p){const cands=(l.alt&&ALTITUDES[l.alt])||names;
+ let best=null,bd=Infinity;
+ for(const c of cands){const d=wlBoxDist(c,p,META[c].pos);if(d<bd){bd=d;best=c;}}
+ return best;}
+function recomputeXpac(){
+ const rank=xpacRank(xpac);
+ XPAC_CONT.clear();
+ for(const c of names)if(xpacRank(META[c].xpac)<=rank)XPAC_CONT.add(c);
+ // Expansion hides a whole route when one of its in-build stops does not exist yet. verify.py
+ // travel permits expansion-straddling routes and instead rejects hiding one when that would
+ // remove a connection whose two ends already exist. Pack gaps are static and handled per leg.
+ XPAC_ROUTE.clear();
+ for(const r of TDATA.routes){
+  for(const s of r.stops){const z=TZONES[s];
+   if(inBuild(s)&&!XPAC_CONT.has(z.cont)){XPAC_ROUTE.add(r.id);break;}}}
+ // A hub goes when its own stop is absent, its continent does not exist yet, or every route that
+ // references it has gone. Membership of XPAC_ROUTE, deliberately NOT tRouteOn: a capability
+ // says "you cannot use this" and must not add or remove glyphs. HUBS has no host-zone key, so an
+ // unreferenced hub in a skipped zone can still float; current data exposes none outside the
+ // wholly absent Plane of Hate, whose hub set the build omits.
+ // The `>=1` guard is load-bearing and dormant: without it the vacuous "all zero referencing
+ // routes are hidden" fires and the first hub nobody routes through silently disappears.
+ for(const k in XPAC_HUB)delete XPAC_HUB[k];
+ const ref={},gone={};
+ for(const r of TDATA.routes)for(let i=0;i<(r.hubs||[]).length;i++){const a=r.hubs[i];if(!a)continue;
+  ref[a]=(ref[a]||0)+1;if(XPAC_ROUTE.has(r.id)||TABSENT[r.id].has(i))gone[a]=(gone[a]||0)+1;}
+ for(const c in HUBS){const s=new Set();
+  for(let i=0;i<HUBS[c].length;i++){const key=c+':'+i;
+   if(!XPAC_CONT.has(c)||(ref[key]>=1&&gone[key]===ref[key]))s.add(i);}
+  if(s.size)XPAC_HUB[c]=s;}
+ XPAC_WL.clear();
+ for(let i=0;i<WORLDLINKS.length;i++){const l=WORLDLINKS[i];
+  const oa=wlOwner(l,l.a),ob=wlOwner(l,l.b);
+  if((oa&&!XPAC_CONT.has(oa))||(ob&&!XPAC_CONT.has(ob)))XPAC_WL.add(i);}}
+// Expansion hiding is SEPARATE state from the user's own `hidden` flag, and the two predicates are
+// checked side by side rather than folded together: isGhost() is suppressed by "Show hidden",
+// folding expansion into it would let that toggle resurrect content the server does not have yet.
+function xpacHubHidden(cont,pi){const s=XPAC_HUB[cont];return !!(s&&s.has(pi));}
+// The PUBLISHED index of a hub in a live array. Routes anchor hubs as "<Continent>:<index>" into
+// published HUBS, but the draw loop walks contData().hubs, which becomes EDIT[c].hubs once a
+// continent has edit-state - and deleting a hub splices that array, shifting every index below
+// it. So the published index is stamped at build time and carried; the bare position is only the
+// fallback for the no-edit-state case, where the live array IS published HUBS. A user-added hub
+// carries pidx:null so it can never inherit a published index and hide the wrong glyph.
+function pubHubIdx(h,i){return ('pidx' in h)?h.pidx:i;}
+// Same story for world links, whose identity lifecycle is the longer of the two: they are
+// spliced, created, snapshotted, reconstructed from a snapshot and appended by an overlay.
+function pubWlIdx(l,i){return ('pidx' in l)?l.pidx:i;}
+function xpacWlHidden(l,i){return XPAC_WL.has(pubWlIdx(l,i));}
+function xpacZoneOn(k){const z=TZONES[k];return !!(z&&z.cont&&XPAC_CONT.has(z.cont));}
+// Continents this realm shows at the selected expansion. A continent with no drawable zones has
+// no worldRects entry, so the label pass and the pick both skip that same absence.
+function xpacConts(a){return (ALTITUDES[a]||[]).filter(c=>XPAC_CONT.has(c));}
+// ---- zone-transition marker resolver (label text -> zone with a detailed map) ----
+function znorm(s){
+ s=s.toLowerCase().replace(/`/g,"'").replace(/_/g,' ');
+ s=s.replace(/^\s*(to|from)\s+/,'').replace(/\(.*?\)/g,'').replace(/:.*$/,'');
+ s=s.replace(/\bone[- ]way\b/g,'').replace(/&/g,' ').replace(/ - /g,' ');
+ [['forrest','forest'],['excile','exile'],['cablis','cabilis'],['toxullia','toxxulia'],['feerott','feerrott'],['aquaduct','aqueduct'],['northern','north'],['southern','south'],['eastern','east'],['western','west']].forEach(p=>{s=s.split(p[0]).join(p[1]);});
+ s=s.split('plains of karana').join('karana').replace(/^(the|clan)\s+/,'');
+ return s.replace(/\s+/g,' ').replace(/^[ -]+|[ -]+$/g,'');
+}
+const ZIDX={};
+(function(){function put(k,v){k=k.trim();if(k&&!(k in ZIDX))ZIDX[k]=v;}
+ for(const cont in DETAIL){const zs=DETAIL[cont].zones;for(const key in zs){
+   const nm=zs[key].name, nl=nm.toLowerCase();
+   put(znorm(nm),{cont,key});
+   const mm=nl.match(/\((north|south|east|west)\)/);
+   if(mm){const base=znorm(nl.replace(/\s*\((north|south|east|west)\)/,'')),d=mm[1];put(d+' '+base,{cont,key});put(base+' '+d,{cont,key});}
+   const m2=nl.match(/neriak \((.*)\)/);if(m2)put('neriak '+m2[1],{cont,key});
+ }}})();
+const ZALIAS={'butcherblock':'butcherblock mountains','kerra ridge':'kerra isle','castle of mistmoore':'castle mistmoore','city of guk':'upper guk','erudin city':'erudin','erudin docks':'erudin','north ro':'north desert of ro','south ro':'south desert of ro','permafrost keep':'permafrost caverns','temple of cazic-thule':'cazic-thule','skyshrine lower level':'skyshrine','ruins of old guk':'lower guk','ruins of old paineel':'warrens','ruins of sebilis':'old sebilis','city of thurgadin':'thurgadin','qeynos aqueduct system':'qeynos catacombs','liberated citadel of runnyeye':'runnyeye citadel','valley of king xorbb':'gorge of king xorbb'};
+const LINK_OVERRIDE={'kithicor|to_The_Commonlands':{cont:'Antonica',key:'commons'},'befallen|to_The_Commonlands':{cont:'Antonica',key:'commons'}};
+function resolveZone(lab){const n=znorm(lab);if(ZIDX[n])return ZIDX[n];if(ZALIAS[n]&&ZIDX[ZALIAS[n]])return ZIDX[ZALIAS[n]];return null;}
+// Which zones a detail-map label is a doorway to, with the character span of each name inside it
+// (one label can carry two, joined by "&"). One implementation for both readers: enterZone builds
+// the clickable zlinks from it, and the travel guide asks it where a leg leaves the zone. A second
+// copy would drift on exactly the awkward cases - the "&" split and LINK_OVERRIDE.
+function transitionTargets(z,full){
+ if(!/^(to|from)_/i.test(full))return [];
+ const ov=LINK_OVERRIDE[z+'|'+full];
+ if(ov)return [{cont:ov.cont,key:ov.key,s0:0,s1:full.length}];
+ const amp=full.indexOf('&'),out=[];
+ if(amp<0){const t=resolveZone(full);return t?[{cont:t.cont,key:t.key,s0:0,s1:full.length}]:[];}
+ const a=resolveZone(full.slice(0,amp)),b=resolveZone(full.slice(amp+1));
+ if(a)out.push({cont:a.cont,key:a.key,s0:0,s1:amp+1});
+ if(b)out.push({cont:b.cont,key:b.key,s0:amp+1,s1:full.length});
+ return out;}
+// ---- detail frame -> continent frame ----
+// A zone's zoomed-in DETAIL map and its continent-frame geometry are the same traced outline under
+// a PURE TRANSLATION - no scale, no rotation, no flip - so one corresponding segment recovers it.
+// Measured across all 120 zones that ship both files: the offset taken from seg 0 holds for >99.5%
+// of index-aligned segments to within 1.5 units, every zone. DETAIL carries extra segments the
+// continent geometry dropped, which is why the lists differ in length but not in order.
+// This is what lets a detail-map label be placed on the continent map, and it is derived rather
+// than stored precisely so re-importing a zone cannot leave a stale offset behind.
+// Cached without invalidation, which is safe because both inputs are immutable: ALL and DETAIL are
+// const and a zone's `segs` are never rewritten (zoneXf is applied at render, never baked). The
+// point comes back in local coords, so tPoint() picks up the live transform at every call and a
+// viewer moving a zone still moves its doorways.
+const DOFF={};
+function detailOffset(cont,z){const k=cont+'|'+z;
+ if(k in DOFF)return DOFF[k];
+ const g=ALL[cont]&&ALL[cont].zones[z], d=DETAIL[cont]&&DETAIL[cont].zones[z];
+ let off=null;
+ if(g&&d&&g.segs.length&&d.segs.length){
+  off=[g.segs[0][0]-d.segs[0][0], g.segs[0][1]-d.segs[0][1]];
+  // Confirm against a second, well-separated segment instead of trusting index 0 alone. One pair
+  // is enough to RECOVER a translation and not enough to know it is one: a re-import that reorders
+  // or drops a segment would yield a plausible-looking offset that silently misplaces every exit in
+  // the zone. Two disagreeing means the assumption is gone, so drop to null and let the caller fall
+  // back to closest approach rather than draw somewhere invented.
+  const m=Math.floor(Math.min(g.segs.length,d.segs.length)/2), a=g.segs[m], b=d.segs[m];
+  if(Math.abs((a[0]-b[0])-off[0])>1.5||Math.abs((a[1]-b[1])-off[1])>1.5)off=null;}
+ return (DOFF[k]=off);}
+// Where zone `z` opens onto zone `target`, in z's own UNTRANSFORMED continent coords - so a caller
+// puts it through tPoint() and a viewer who moves the zone moves its doorways with it.
+// No sanity check against the outline, deliberately: the median label sits 49 units from an outline
+// segment but dungeon exits are legitimately far from any line - Rivervale's Kithicor exit is 3 488
+// units from the nearest segment because it stands in the middle of an open room. A threshold would
+// reject the correct answer on exactly the zones whose geometry is hardest to reason about.
+const DEXIT={};
+function zoneExitPoint(cont,z,target){const k=cont+'|'+z+'|'+target;
+ if(k in DEXIT)return DEXIT[k];
+ const d=DETAIL[cont]&&DETAIL[cont].zones[z], o=detailOffset(cont,z);
+ let hit=null;
+ if(d&&o)for(const l of d.labels){
+  for(const t of transitionTargets(z,l[4]))if(t.key===target){hit=[l[0]+o[0],l[1]+o[1]];break;}
+  if(hit)break;}
+ return (DEXIT[k]=hit);}
+function segBox(L){const dpr=devicePixelRatio,X=wx(L.x),Y=wy(L.y),fs=L.size*dpr;ctx.font=fs+'px system-ui';
+ const fullW=ctx.measureText(L.full).width, w0=ctx.measureText(L.full.slice(0,L.s0)).width, wseg=ctx.measureText(L.full.slice(L.s0,L.s1)).width;
+ const left=X-fullW/2+w0; return {left,right:left+wseg,top:Y-fs*0.85,bot:Y+fs*0.35,dpr};}
+function zonePickLink(mx,my){for(const L of zlinks){const b=segBox(L);
+   if(mx>=b.left-3*b.dpr&&mx<=b.right+3*b.dpr&&my>=b.top&&my<=b.bot)return L;}return null;}
+
+function resize(){cv.width=innerWidth*devicePixelRatio;cv.height=innerHeight*devicePixelRatio;
+ cv.style.width=innerWidth+'px';cv.style.height=innerHeight+'px';worldCache=null;wv={x:0,y:0,k:1};draw();}
+
+// ---- UNIVERSE (realm selector) — positions (cx,cy fractions) editable at universe level ----
+/*__DATA_UNI__*/const UNIVERSE=__UNIVERSE__;/*__END_UNI__*/
+let uRects={}, STARS=null;
+function makeStars(){STARS=[];let s=987654321;const rnd=()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};
+ for(let i=0;i<240;i++)STARS.push([rnd(),rnd(),rnd()*1.5+0.3,rnd()*0.55+0.35]);}
+function drawGlobe(cx,cy,r,dim,glow){const dpr=devicePixelRatio;
+ if(glow){ctx.shadowColor='#ffd24a';ctx.shadowBlur=30*dpr;}
+ const g=ctx.createRadialGradient(cx-r*0.32,cy-r*0.32,r*0.1,cx,cy,r);
+ if(dim){g.addColorStop(0,'#33465a');g.addColorStop(1,'#182634');}else{g.addColorStop(0,'#3a7fc0');g.addColorStop(1,'#103a63');}
+ ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle=g;ctx.fill();ctx.shadowBlur=0;
+ ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
+ ctx.fillStyle=dim?'#3c5468':'#3f9a5c';
+ const blobs=[[-0.35,-0.28,0.40],[0.30,-0.05,0.50],[-0.12,0.38,0.44],[0.42,0.42,0.30],[-0.55,0.20,0.30]];
+ for(const b of blobs){ctx.beginPath();ctx.ellipse(cx+b[0]*r,cy+b[1]*r,b[2]*r,b[2]*r*0.72,0.5,0,7);ctx.fill();}
+ ctx.restore();
+ ctx.strokeStyle=dim?'rgba(150,170,190,.4)':'rgba(185,220,255,.6)';ctx.lineWidth=1.2*dpr;
+ ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+ ctx.globalAlpha=0.30;
+ ctx.beginPath();ctx.ellipse(cx,cy,r,r*0.34,0,0,7);ctx.stroke();
+ ctx.beginPath();ctx.ellipse(cx,cy,r,r*0.68,0,0,7);ctx.stroke();
+ ctx.beginPath();ctx.ellipse(cx,cy,r*0.42,r,0,0,7);ctx.stroke();
+ ctx.globalAlpha=1;}
+function drawMoon(cx,cy,r,dim,glow){const dpr=devicePixelRatio;
+ if(glow){ctx.shadowColor='#ffd24a';ctx.shadowBlur=28*dpr;}
+ const g=ctx.createRadialGradient(cx-r*0.3,cy-r*0.3,r*0.15,cx,cy,r);
+ g.addColorStop(0,dim?'#8b93a0':'#dfe3ec');g.addColorStop(1,dim?'#3a4250':'#8b93a4');
+ ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle=g;ctx.fill();ctx.shadowBlur=0;
+ ctx.fillStyle=dim?'rgba(30,36,46,.45)':'rgba(90,100,120,.45)';
+ const cr=[[-0.22,-0.30,0.17],[0.26,0.12,0.20],[-0.08,0.36,0.14],[0.34,-0.26,0.11],[0.02,-0.02,0.10]];
+ for(const c of cr){ctx.beginPath();ctx.arc(cx+c[0]*r,cy+c[1]*r,c[2]*r,0,7);ctx.fill();}
+ ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
+ const sh=ctx.createLinearGradient(cx-r,0,cx+r,0);sh.addColorStop(0,'rgba(0,0,0,0)');sh.addColorStop(1,'rgba(0,0,12,.5)');
+ ctx.fillStyle=sh;ctx.fillRect(cx-r,cy-r,2*r,2*r);ctx.restore();}
+function drawCloud(cx,cy,r,dim,glow){const dpr=devicePixelRatio;
+ if(glow){ctx.shadowColor='#ffd24a';ctx.shadowBlur=28*dpr;}
+ const g=ctx.createLinearGradient(cx,cy-r,cx,cy+r);
+ if(dim){g.addColorStop(0,'#4a5568');g.addColorStop(1,'#2a3446');}else{g.addColorStop(0,'#eef3fd');g.addColorStop(1,'#b9c9e6');}
+ ctx.fillStyle=g;
+ const puffs=[[-0.90,0.20,0.50],[-0.50,-0.10,0.60],[-0.05,-0.28,0.66],[0.40,-0.12,0.62],[0.85,0.18,0.50],[-0.10,0.28,0.70],[0.45,0.30,0.50],[-0.55,0.32,0.45]];
+ for(const p of puffs){ctx.beginPath();ctx.arc(cx+p[0]*r,cy+p[1]*r,p[2]*r,0,7);ctx.fill();ctx.shadowBlur=0;}}
+function drawPortal(cx,cy,r,dim,glow){const dpr=devicePixelRatio;
+ if(glow){ctx.shadowColor='#ffd24a';ctx.shadowBlur=30*dpr;}
+ const g=ctx.createRadialGradient(cx,cy,r*0.1,cx,cy,r);
+ if(dim){g.addColorStop(0,'#4a4a66');g.addColorStop(1,'#1e1e2c');}else{g.addColorStop(0,'#d3aaff');g.addColorStop(0.5,'#7a4fd0');g.addColorStop(1,'#2a1550');}
+ ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle=g;ctx.fill();ctx.shadowBlur=0;
+ ctx.strokeStyle=dim?'rgba(150,140,180,.5)':'rgba(224,196,255,.75)';
+ for(let i=0;i<4;i++){ctx.globalAlpha=0.72-i*0.14;ctx.lineWidth=(2.2-i*0.35)*dpr;
+  ctx.beginPath();ctx.ellipse(cx,cy,r*(1-i*0.19),r*(0.70-i*0.12),i*0.5,0,7);ctx.stroke();}
+ ctx.globalAlpha=1;}
+// ---- small transport-hub glyphs (continent level) ----
+function hubHalo(X,Y,r){ctx.beginPath();ctx.arc(X,Y,r+3*devicePixelRatio,0,7);ctx.fillStyle='rgba(8,12,20,.72)';ctx.fill();}
+// a0: this is the only hub glyph that touches globalAlpha, so it composes with the caller's
+// alpha instead of clobbering it -- otherwise a dimmed ghost portal would draw its rings,
+// outer ring and letter at full opacity and not read as hidden at all.
+function drawHubPortal(X,Y,r,letter){const dpr=devicePixelRatio,a0=ctx.globalAlpha;hubHalo(X,Y,r);
+ const g=ctx.createRadialGradient(X,Y,r*0.1,X,Y,r);
+ g.addColorStop(0,'#d3aaff');g.addColorStop(0.5,'#7a4fd0');g.addColorStop(1,'#2a1550');
+ ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.fillStyle=g;ctx.fill();
+ ctx.strokeStyle='rgba(224,196,255,.85)';
+ for(let i=0;i<3;i++){ctx.globalAlpha=a0*(0.8-i*0.22);ctx.lineWidth=(1.5-i*0.35)*dpr;
+   ctx.beginPath();ctx.ellipse(X,Y,r*(1-i*0.22),r*(0.66-i*0.12),0.5,0,7);ctx.stroke();}
+ ctx.globalAlpha=a0;ctx.lineWidth=1.3*dpr;ctx.strokeStyle='rgba(255,210,74,.95)';
+ ctx.beginPath();ctx.arc(X,Y,r+2*dpr,0,7);ctx.stroke();
+ drawHubLetter(X,Y,r,letter);}
+function drawHubLetter(X,Y,r,letter){if(!letter)return;const dpr=devicePixelRatio;
+ ctx.font='bold '+(r*1.15)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.lineWidth=3*dpr;ctx.strokeStyle='rgba(0,0,0,.95)';ctx.fillStyle='#fff';
+ ctx.strokeText(letter,X,Y);ctx.fillText(letter,X,Y);ctx.textBaseline='alphabetic';}
+function drawHubTeleport(X,Y,r,letter){const dpr=devicePixelRatio;hubHalo(X,Y,r);
+ const g=ctx.createRadialGradient(X,Y,r*0.1,X,Y,r);
+ g.addColorStop(0,'#ffe6a6');g.addColorStop(0.45,'#ff9d3a');g.addColorStop(1,'#7a2708');
+ ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.fillStyle=g;ctx.fill();
+ ctx.strokeStyle='rgba(255,244,214,.92)';ctx.lineWidth=1.4*dpr;ctx.lineCap='round';
+ ctx.beginPath();
+ const turns=2.4,steps=48,a0=-Math.PI/2;
+ for(let i=0;i<=steps;i++){const t=i/steps,ang=a0+t*turns*Math.PI*2,rad=r*0.86*(1-t);
+   const px=X+Math.cos(ang)*rad,py=Y+Math.sin(ang)*rad;
+   if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+ ctx.stroke();ctx.lineCap='butt';
+ ctx.lineWidth=1.3*dpr;ctx.strokeStyle='rgba(255,210,74,.95)';
+ ctx.beginPath();ctx.arc(X,Y,r+2*dpr,0,7);ctx.stroke();
+ drawHubLetter(X,Y,r,letter);}
+function drawHubSpire(X,Y,r){const dpr=devicePixelRatio;hubHalo(X,Y,r);
+ ctx.fillStyle='#6fe3ff';ctx.strokeStyle='#0b3b4a';ctx.lineWidth=1*dpr;
+ const sp=[[-0.6,0.85],[0,1.3],[0.6,0.9]],by=Y+r*0.7,w=r*0.28;
+ for(const s of sp){const bx=X+s[0]*r,h=s[1]*r*1.35;
+  ctx.beginPath();ctx.moveTo(bx-w,by);ctx.lineTo(bx,by-h);ctx.lineTo(bx+w,by);ctx.closePath();ctx.fill();ctx.stroke();}
+ ctx.strokeStyle='rgba(255,210,74,.9)';ctx.lineWidth=1.2*dpr;
+ ctx.beginPath();ctx.arc(X,Y,r+2*dpr,0,7);ctx.stroke();}
+function drawHubRing(X,Y,r){const dpr=devicePixelRatio;hubHalo(X,Y,r);
+ ctx.strokeStyle='#7bd88f';ctx.lineWidth=1.5*dpr;
+ ctx.beginPath();ctx.ellipse(X,Y,r*0.92,r*0.5,0,0,7);ctx.stroke();
+ ctx.fillStyle='#d6f7df';
+ for(let i=0;i<8;i++){const a=i/8*Math.PI*2,sx=X+Math.cos(a)*r*0.92,sy=Y+Math.sin(a)*r*0.5;
+  ctx.beginPath();ctx.arc(sx,sy,1.7*dpr,0,7);ctx.fill();}
+ ctx.strokeStyle='rgba(255,210,74,.9)';ctx.lineWidth=1.2*dpr;
+ ctx.beginPath();ctx.arc(X,Y,r+2*dpr,0,7);ctx.stroke();}
+function drawHubBoat(X,Y,r){const dpr=devicePixelRatio;hubHalo(X,Y,r);
+ ctx.strokeStyle='#123a5e';ctx.lineWidth=1*dpr;ctx.fillStyle='#7fb0e6';
+ ctx.beginPath();ctx.moveTo(X-r,Y+r*0.15);ctx.quadraticCurveTo(X,Y+r*0.95,X+r,Y+r*0.15);ctx.closePath();ctx.fill();ctx.stroke();
+ ctx.beginPath();ctx.moveTo(X,Y+r*0.15);ctx.lineTo(X,Y-r*1.05);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(X+0.06*r,Y-r*1.0);ctx.lineTo(X+r*0.72,Y-r*0.35);ctx.lineTo(X+0.06*r,Y-r*0.35);ctx.closePath();
+ ctx.fillStyle='#eaf2fb';ctx.fill();
+ ctx.strokeStyle='rgba(255,210,74,.9)';ctx.lineWidth=1.2*dpr;
+ ctx.beginPath();ctx.arc(X,Y,r+3*dpr,0,7);ctx.stroke();}
+function hubHasLetter(k){return k==='portal'||k==='teleport';}
+// Items the user added themselves get a dashed magenta ring. This is the mitigation for the
+// duplicate-glyph case: when a later release adds the boat a user already placed by hand,
+// the ring is how they tell which one is theirs and can delete it.
+// Magenta specifically because it is the one hue no glyph already uses: the spire body is
+// #6fe3ff, ring welds #7bd88f/#66d68f, boat #7fb0e6, portal #d3aaff, teleport #ff9d3a, and
+// every hub's outer ring plus all connectors are gold #ffd24a. A marker drawn in a colour the
+// glyph itself uses is not a marker.
+const USER_ADDED_COL='#ff5cc8';
+function markUserAdded(X,Y,r){const dpr=devicePixelRatio;
+ ctx.save();ctx.strokeStyle=USER_ADDED_COL;ctx.lineWidth=1.4*dpr;ctx.setLineDash([2.5*dpr,2.5*dpr]);
+ ctx.beginPath();ctx.arc(X,Y,r+5.5*dpr,0,7);ctx.stroke();ctx.restore();}
+function drawHub(h,X,Y,r){if(h.kind==='portal')drawHubPortal(X,Y,r,h.letter);
+ else if(h.kind==='teleport')drawHubTeleport(X,Y,r,h.letter);
+ else if(h.kind==='spire')drawHubSpire(X,Y,r);
+ else if(h.kind==='ring')drawHubRing(X,Y,r);
+ else if(h.kind==='boat')drawHubBoat(X,Y,r);}
+function drawEntity(e,cx,cy,r,glow){const dpr=devicePixelRatio,dim=!e.active;
+ if(e.kind==='globe')drawGlobe(cx,cy,r,dim,glow);
+ else if(e.kind==='moon')drawMoon(cx,cy,r,dim,glow);
+ else if(e.kind==='cloud')drawCloud(cx,cy,r,dim,glow);
+ else drawPortal(cx,cy,r,dim,glow);
+ ctx.textAlign='center';
+ const fs=Math.max(15,r*0.24)*dpr, ly=cy+r+fs*0.95;
+ ctx.font='bold '+fs+'px system-ui';ctx.lineWidth=4*dpr;ctx.strokeStyle='rgba(0,0,0,.9)';
+ ctx.fillStyle=dim?'#7d8ea0':(glow?'#fff':'#eaf2fb');
+ ctx.strokeText(e.name,cx,ly);ctx.fillText(e.name,cx,ly);
+ if(e.note){ctx.font=(11.5*dpr)+'px system-ui';ctx.lineWidth=3*dpr;ctx.fillStyle=dim?'#5f6f80':'#9fb4c8';
+  ctx.strokeText(e.note,cx,ly+16*dpr);ctx.fillText(e.note,cx,ly+16*dpr);}}
+function drawUniverse(){const dpr=devicePixelRatio,W=cv.width,H=cv.height,S=Math.min(W,H);
+ ctx.setTransform(1,0,0,1,0,0);
+ const g=ctx.createRadialGradient(W*0.5,H*0.42,S*0.05,W*0.5,H*0.5,S*0.95);
+ g.addColorStop(0,'#16243a');g.addColorStop(1,'#080b12');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ if(!STARS)makeStars();
+ ctx.fillStyle='#cfe0f5';
+ for(const st of STARS){ctx.globalAlpha=st[3];ctx.beginPath();ctx.arc(st[0]*W,st[1]*H,st[2]*dpr,0,7);ctx.fill();}
+ ctx.globalAlpha=1;uRects={};
+ for(const e of uEntities()){const cx=e.cx*W,cy=e.cy*H,r=e.r*S,glow=(hover===e.name)&&e.active;
+  ctx.save();drawEntity(e,cx,cy,r,glow);ctx.restore();
+  const rx=(e.kind==='cloud'?1.35:1.05)*r+16*dpr, ry=(e.kind==='cloud'?0.95:1.05)*r+16*dpr;
+  uRects[e.name]={cx:cx,cy:cy,rx:rx,ry:ry,active:e.active};}
+ if(editMode&&level==='universe')drawUniEditOverlay();}
+function pickUniverse(mx,my){let best=null,bd=1e18;
+ for(const name in uRects){const r=uRects[name],dx=(mx-r.cx)/r.rx,dy=(my-r.cy)/r.ry,q=dx*dx+dy*dy;
+  if(q<=1&&q<bd){bd=q;best=name;}}return best;}
+function uEnt(name){return uEntities().find(x=>x.name===name);}
+
+// ---- WORLD ----
+function worldMap(){const side=Math.min(cv.width,cv.height)*0.94;
+ const ox=(cv.width-side)/2, oy=(cv.height-side)/2;
+ return {gx:g=>ox+g/100*side, gy:g=>oy+g/100*side, side:side};}
+function areaPt(name,u,v,wm){const m=META[name],pos=metaPos(name), gx=pos[0]+(u-m.uc)*m.gscale, gy=pos[1]-(v-m.vc)*m.gscale;
+ return [wm.gx(gx), wm.gy(gy)];}
+function buildWorldCache(){const dpr=devicePixelRatio; worldCache=document.createElement('canvas');
+ worldCache.width=cv.width; worldCache.height=cv.height;
+ const c=worldCache.getContext('2d'); c.fillStyle='#0f1620'; c.fillRect(0,0,cv.width,cv.height);
+ const wm=worldMap(); worldRects={};
+ for(const name of xpacConts(alt)){const d=ALL[name];   // world view = committed state only (ALL, not EDIT)
+   c.strokeStyle='#8fa6bd'; c.lineWidth=0.7*dpr; c.globalAlpha=0.92;
+   let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+   for(const z in d.zones){const zo=d.zones[z],s=zo.segs; c.beginPath();
+     for(let i=0;i<s.length;i++){const g=s[i],p=tPoint(zo,g[0],g[1]),q=tPoint(zo,g[2],g[3]);
+       const a=areaPt(name,p[0],p[1],wm),b=areaPt(name,q[0],q[1],wm);
+       c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);
+       minx=Math.min(minx,a[0],b[0]);maxx=Math.max(maxx,a[0],b[0]);
+       miny=Math.min(miny,a[1],b[1]);maxy=Math.max(maxy,a[1],b[1]);}
+     c.stroke();}
+   if(minx===1e9)continue;
+   worldRects[name]={x0:minx,y0:miny,x1:maxx,y1:maxy,area:(maxx-minx)*(maxy-miny)};}
+ c.globalAlpha=1;}
+function drawWorld(){if(!worldCache) buildWorldCache();
+ const dpr=devicePixelRatio;
+ ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#0f1620'; ctx.fillRect(0,0,cv.width,cv.height);
+ ctx.setTransform(wv.k,0,0,wv.k,wv.x,wv.y); ctx.imageSmoothingEnabled=true; ctx.drawImage(worldCache,0,0);
+ ctx.setTransform(1,0,0,1,0,0);
+ const TX=x=>x*wv.k+wv.x, TY=y=>y*wv.k+wv.y;
+ // world-view connectors: free 2-point lines in globe coords, realm-scoped via .alt
+ const wm=worldMap();
+ ctx.save(); ctx.setLineDash([8*dpr,6*dpr]); ctx.lineWidth=1.7*dpr; ctx.globalAlpha=0.85;
+ const wconns=worldConns();
+ for(let i=0;i<wconns.length;i++){const c=wconns[i]; if(c.alt&&c.alt!==alt) continue;
+   if(isGhost(c)||xpacWlHidden(c,i)) continue;
+   const A=wlPt(c,'a'),B=wlPt(c,'b');
+   const pa=[wm.gx(A[0]),wm.gy(A[1])], pb=[wm.gx(B[0]),wm.gy(B[1])];
+   ctx.globalAlpha=c.hidden?0.30:0.85;
+   ctx.strokeStyle=(editMode&&level==='world'&&sel&&sel.type==='wconn'&&sel.id===i)?'#ffffff':(c.userAdded?USER_ADDED_COL:'#ffd24a');
+   ctx.beginPath(); ctx.moveTo(TX(pa[0]),TY(pa[1])); ctx.lineTo(TX(pb[0]),TY(pb[1])); ctx.stroke();}
+ ctx.setLineDash([]); ctx.globalAlpha=1; ctx.restore();
+ drawRouteWorld(wm,TX,TY);   // overlay pass, never baked into worldCache
+ if(editMode&&level==='world')drawWorldEditOverlay(wm,TX,TY);
+ for(const name of xpacConts(alt)){const r=worldRects[name];if(!r)continue;const on=(name===hover);
+   if(on){ctx.strokeStyle='#ffd24a';ctx.lineWidth=2*dpr;ctx.strokeRect(TX(r.x0)-6*dpr,TY(r.y0)-6*dpr,(r.x1-r.x0)*wv.k+12*dpr,(r.y1-r.y0)*wv.k+12*dpr);}
+   const cx=TX((r.x0+r.x1)/2), cy=TY(r.y1)+17*dpr;
+   ctx.font=(on?'bold ':'')+(14*dpr)+'px system-ui'; ctx.textAlign='center';
+   ctx.lineWidth=3.4*dpr; ctx.strokeStyle='rgba(0,0,0,.9)'; ctx.fillStyle=on?'#fff':'#cfe0f0';
+   ctx.strokeText(name,cx,cy); ctx.fillText(name,cx,cy);
+   if(ENTRYHINT[name]){ctx.font=(10.5*dpr)+'px system-ui';ctx.lineWidth=2.6*dpr;ctx.fillStyle='#9fb0c2';
+     ctx.strokeText(ENTRYHINT[name],cx,cy+15*dpr);ctx.fillText(ENTRYHINT[name],cx,cy+15*dpr);}}}
+function worldPick(mx,my){let best=null,ba=1e18,dpr=devicePixelRatio;
+ const bx=(mx-wv.x)/wv.k, by=(my-wv.y)/wv.k;
+ for(const name of xpacConts(alt)){const r=worldRects[name];if(!r)continue;
+   if(bx>=r.x0-8*dpr&&bx<=r.x1+8*dpr&&by>=r.y0-8*dpr&&by<=r.y1+30*dpr){
+     if(r.area<ba){ba=r.area;best=name;}}}
+ return best;}
+
+// ---- shared view transform ----
+function wx(x){return x*view.k+view.x;} function wy(y){return -y*view.k+view.y;}
+function fitBox(b){const dpr=devicePixelRatio,W=cv.width,H=cv.height,pad=80*dpr;
+ const bw=b[2]-b[0]||1,bh=b[3]-b[1]||1;view.k=Math.min((W-2*pad)/bw,(H-2*pad)/bh);
+ const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;view.x=W/2-cx*view.k;view.y=H/2+cy*view.k;}
+function iwx(px){return (px-view.x)/view.k;} function iwy(py){return -(py-view.y)/view.k;}
+
+// ---- runtime affine (zoneXf applied at render time; shared by viewer + editor) ----
+const IDENTITY={tx:0,ty:0,s:1,rot:0};
+function isIdentity(xf){return !xf||(Math.abs(xf.tx||0)<0.5&&Math.abs(xf.ty||0)<0.5&&Math.abs((xf.s==null?1:xf.s)-1)<1e-4&&Math.abs(xf.rot||0)<1e-5);}
+function tPoint(z,x,y){const xf=z.xf||IDENTITY,dx=(x-z.cx)*xf.s,dy=(y-z.cy)*xf.s;
+ const c=Math.cos(xf.rot),si=Math.sin(xf.rot);
+ return [z.cx+(dx*c-dy*si)+xf.tx, z.cy+(dx*si+dy*c)+xf.ty];}
+function tInv(z,X,Y){const xf=z.xf||IDENTITY,dx=X-z.cx-xf.tx,dy=Y-z.cy-xf.ty;
+ const c=Math.cos(-xf.rot),si=Math.sin(-xf.rot),rx=(dx*c-dy*si)/xf.s,ry=(dx*si+dy*c)/xf.s;
+ return [z.cx+rx, z.cy+ry];}
+function zoneCentroid(z){const xf=z.xf||IDENTITY;return [z.cx+xf.tx, z.cy+xf.ty];}
+function ep(c,which,zmap){zmap=zmap||zones;const anc=which==='a'?c.anchorA:c.anchorB, loc=which==='a'?c.la:c.lb;
+ if(anc&&zmap[anc]&&loc)return tPoint(zmap[anc],loc[0],loc[1]);
+ return which==='a'?c.a:c.b;}
+function hubPos(h,zmap){zmap=zmap||zones;if(h.anchor&&zmap[h.anchor]&&h.lx!=null)return tPoint(zmap[h.anchor],h.lx,h.ly);return [h.x,h.y];}
+// World-level twin of ep(): an anchored world-connector end is stored as a globe-unit offset
+// from its continent's position, so the line follows and stretches as that landmass is dragged.
+// Plain translation with no tPoint analogue - `pos` is the only editable field in META, and a
+// continent neither rotates nor scales. If world-level scale ever becomes editable, this is the
+// function that has to grow. l.a/l.b ride along as the free fallback, exactly as c.a/c.b do.
+function wlPt(l,which){const anc=which==='a'?l.anchorA:l.anchorB, loc=which==='a'?l.la:l.lb;
+ if(anc&&META[anc]&&loc){const p=metaPos(anc);return [p[0]+loc[0],p[1]+loc[1]];}
+ return which==='a'?l.a:l.b;}
+
+// ---- edit-state cache + aliases (rebound per-continent by bindES; empty in pure-view use) ----
+const EDIT={};
+let zones={}, conns=[], hubs=[], zoneLinks=[], delLinks=[];
+let editMode=false, tool='select', newHubKind='boat', autoAnchor=true;
+let showHidden=false;   // ghost-view toggle: transient edit-mode UI state, never part of the overlay
+function isGhost(o){return !!o.hidden&&!showHidden;}   // skipped entirely: not drawn, not hoverable, not clickable
+let sel=null, hoverZone=null, pendingConn=null, hoverLink=null, linkScreens=[];
+let WEDIT=null;   // global (universe + world) edit-state, parallel to EDIT[cont]; holds realm/continent positions + world connectors
+// accessors: read live edit-state when present, else the committed injected data (so edits show with Edit off)
+function uEntities(){return WEDIT?WEDIT.universe:UNIVERSE;}
+function metaPos(c){return WEDIT?WEDIT.meta[c].pos:META[c].pos;}
+function worldConns(){return WEDIT?WEDIT.worldLinks:WORLDLINKS;}
+// contData(cur): one uniform {zones,conns,hubs,labels} so no draw/pick call site branches on edit vs view.
+function contData(c){const e=EDIT[c];
+ if(e)return {zones:e.zones,conns:e.conns,hubs:e.hubs,labels:e.labels};
+ const a=ALL[c];return {zones:a.zones,conns:a.connectors,hubs:HUBS[c]||[],labels:a.labels};}
+// live fit-bbox over transformed segs when any zone moved; else the stored continent bbox.
+function contBbox(c){const d=contData(c);let moved=false;
+ for(const k in d.zones){if(!isIdentity(d.zones[k].xf)){moved=true;break;}}
+ if(!moved)return ALL[c].bbox;
+ let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;
+ for(const k in d.zones){const z=d.zones[k];for(const s of z.segs){const a=tPoint(z,s[0],s[1]),b=tPoint(z,s[2],s[3]);
+   x0=Math.min(x0,a[0],b[0]);x1=Math.max(x1,a[0],b[0]);y0=Math.min(y0,a[1],b[1]);y1=Math.max(y1,a[1],b[1]);}}
+ return [x0,y0,x1,y1];}
+
+// ---- CONTINENT ----
+function order(){return Object.keys(contData(cur).zones);}
+// One owner for "this zone is not what the viewer is looking at", so the outline loop and the
+// label loop below cannot drift apart. Two independent reasons to dim, and focus wins: it is an
+// explicit single-zone choice, where route dimming is background for a whole trip. That
+// precedence is why tGoLeg must NOT set focus - doing so would blank the route's own labels.
+function zoneDimmed(z){return focus?focus!==z:(!!TROUTE&&!tOnRoute(z));}
+function drawCont(){const d=contData(cur),dpr=devicePixelRatio,selz=tSelZone();
+ ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0f1620';ctx.fillRect(0,0,cv.width,cv.height);
+ ctx.lineWidth=Math.max(.55,Math.min(2.2,view.k*35*dpr));
+ for(const z of order()){const zo=d.zones[z],dim=zoneDimmed(z);
+  ctx.strokeStyle=dim?(focus?DIM_FOCUS:DIM_ROUTE)
+   :((z===hover||z===selz||(editMode&&z===hoverZone))?'#ffffff':zo.color);
+  ctx.beginPath();const s=zo.segs;
+  for(let i=0;i<s.length;i++){const g=s[i],a=tPoint(zo,g[0],g[1]),b=tPoint(zo,g[2],g[3]);ctx.moveTo(wx(a[0]),wy(a[1]));ctx.lineTo(wx(b[0]),wy(b[1]));}
+  ctx.stroke();}
+ const conns=d.conns||[];
+ if(conns.length){ctx.save();ctx.setLineDash([9*dpr,6*dpr]);ctx.lineWidth=1.6*dpr;
+  for(let i=0;i<conns.length;i++){const c=conns[i];
+   if(isGhost(c))continue;                                   // hidden: pickConnEndpoint/pickConnBody skip it too
+   const A=ep(c,'a'),B=ep(c,'b');
+   ctx.globalAlpha=c.hidden?0.30:1;
+   ctx.strokeStyle=(editMode&&sel&&sel.type==='conn'&&sel.id===i)?'#ffffff':(c.userAdded?USER_ADDED_COL:'#ffd24a');
+   ctx.beginPath();ctx.moveTo(wx(A[0]),wy(A[1]));ctx.lineTo(wx(B[0]),wy(B[1]));ctx.stroke();}
+  ctx.globalAlpha=1;ctx.setLineDash([]);ctx.restore();}
+ // Route lines sit above the outlines and the connectors they run alongside, but below the zone
+ // labels. The numbered pips come after everything, at the bottom of this function.
+ drawRouteCont(d,cur);
+ if(showLabels){ctx.font=(13*dpr)+'px system-ui';ctx.textAlign='center';ctx.lineWidth=3.2*dpr;
+  for(const z of order()){const zo=d.zones[z];
+   if(zoneDimmed(z))continue;
+   const cc=zoneCentroid(zo),X=wx(cc[0]),Y=wy(cc[1]);
+   ctx.strokeStyle='rgba(0,0,0,.85)';ctx.fillStyle=(z===hover||z===focus||z===selz||(editMode&&z===hoverZone))?'#fff':'#dfeaf5';
+   ctx.strokeText(zo.name,X,Y);ctx.fillText(zo.name,X,Y);}
+  ctx.font=(11.5*dpr)+'px system-ui';ctx.fillStyle='#a9c2d8';
+  for(const l of (d.labels||[])){const X=wx(l.cx),Y=wy(l.cy);
+   ctx.strokeStyle='rgba(0,0,0,.85)';ctx.strokeText(l.name,X,Y);ctx.fillText(l.name,X,Y);}}
+ // transport-hub glyphs (Request 2) — always drawn, above zone lines & labels
+ // One skip here covers render, hover AND click: pickHub (view tips) and pickHubAt (edit
+ // selection) both read hubScreens, so a hidden hub never enters any of the three paths.
+ hubScreens=[];const harr=d.hubs||[];const hr=11*dpr;
+ for(let i=0;i<harr.length;i++){const h=harr[i];
+  // Two independent skips, never one. isGhost is the user's own hide, which "Show hidden"
+  // reveals; expansion hiding says the thing does not exist yet and no toggle may resurrect it.
+  if(isGhost(h)||xpacHubHidden(cur,pubHubIdx(h,i)))continue;
+  const P=hubPos(h),X=wx(P[0]),Y=wy(P[1]);
+  ctx.globalAlpha=h.hidden?0.32:1;
+  drawHub(h,X,Y,hr);
+  if(h.userAdded)markUserAdded(X,Y,hr);
+  ctx.globalAlpha=1;
+  hubScreens.push({X,Y,r:hr+3*dpr,h,i});}
+ drawRoutePips(d);   // last: the numbers tie the map to the itinerary rows, so nothing covers them
+ if(editMode&&level==='continent')drawEditOverlay(dpr,hr);
+}
+function pickHub(mx,my){for(const s of hubScreens){const dx=mx-s.X,dy=my-s.Y;if(dx*dx+dy*dy<=(s.r+5*devicePixelRatio)*(s.r+5*devicePixelRatio))return s.h;}return null;}
+function pickCont(mx,my){let best=null,bd=1e18;const d=contData(cur);
+ for(const z of order()){const zo=d.zones[z],cc=zoneCentroid(zo),dx=wx(cc[0])-mx,dy=wy(cc[1])-my,q=dx*dx+dy*dy;
+  if(q<bd){bd=q;best=z;}}return Math.sqrt(bd)<95*devicePixelRatio?best:null;}
+function hasDetail(cont,z){return DETAIL[cont]&&DETAIL[cont].zones[z];}
+
+// ---- ZONE DETAIL ----
+// Exit emphasis comes from zlinks, NOT from the walk edge's `at`. `at` is in continent-frame
+// coords and this view is a different frame with no recorded offset between them, so it cannot
+// be projected here at all. zlinks is already resolved to {cont,key} by enterZone, which is
+// exactly the comparison this needs.
+function drawZone(){const dpr=devicePixelRatio,exit=tNextFrom(zcur);
+ ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0f1620';ctx.fillRect(0,0,cv.width,cv.height);
+ ctx.lineWidth=Math.max(.7,Math.min(2.4,view.k*3*dpr));
+ for(const ci in zgroups){ctx.strokeStyle=zpal[ci];ctx.beginPath();
+   const arr=zgroups[ci];
+   for(let i=0;i<arr.length;i++){const s=arr[i];ctx.moveTo(wx(s[0]),wy(s[1]));ctx.lineTo(wx(s[2]),wy(s[3]));}
+   ctx.stroke();}
+ if(showLabels){ctx.textAlign='center';
+  for(const l of zdata.labels){const X=wx(l[0]),Y=wy(l[1]);
+   const fs=(9+ (l[3]||2)*1.6)*dpr; ctx.font=fs+'px system-ui';
+   const segs=zlinks.filter(z=>z.l===l);
+   const isExit=!!exit&&segs.some(S=>S.key===exit);
+   ctx.lineWidth=2.6*dpr;ctx.strokeStyle='rgba(0,0,0,.9)';
+   ctx.fillStyle=segs.length?(isExit?ROUTE_COL:'#79d2ff'):zpal[l[2]];
+   ctx.strokeText(l[4],X,Y);ctx.fillText(l[4],X,Y);
+   if(segs.length){const fullW=ctx.measureText(l[4]).width;
+    for(const S of segs){const w0=ctx.measureText(l[4].slice(0,S.s0)).width, wseg=ctx.measureText(l[4].slice(S.s0,S.s1)).width, left=X-fullW/2+w0, on=(zhover===S);
+     const hot=!!exit&&S.key===exit;
+     ctx.strokeStyle=on?'#d6f2ff':(hot?ROUTE_COL:'#79d2ff');ctx.lineWidth=(hot?2.4:1.1)*dpr;
+     ctx.beginPath();ctx.moveTo(left+1.5*dpr,Y+fs*0.16);ctx.lineTo(left+wseg-1.5*dpr,Y+fs*0.16);ctx.stroke();
+     if(on){ctx.textAlign='left';ctx.lineWidth=2.6*dpr;ctx.strokeStyle='rgba(0,0,0,.9)';ctx.fillStyle='#d6f2ff';
+      const sub=l[4].slice(S.s0,S.s1);ctx.strokeText(sub,left,Y);ctx.fillText(sub,left,Y);ctx.textAlign='center';}}}}}}
+
+// ---- shared ----
+function draw(){ if(level==="universe")drawUniverse(); else if(level==="world")drawWorld(); else if(level==="zone")drawZone(); else drawCont(); }
+function setHUD(title,desc,back,tools){
+ document.getElementById('title').textContent=title;
+ document.getElementById('desc').textContent=desc;
+ document.getElementById('bBack').style.display=back?'':'none';
+ document.getElementById('bBack').textContent=back||'';
+ document.getElementById('bLabels').style.display=tools?'':'none';
+ document.getElementById('bFit').style.display=tools?'':'none';}
+// One owner for when the zone legend is on screen: continent level, and nowhere else. Every
+// enterX calls this instead of poking legend.style itself, so the four sites cannot drift apart.
+function syncLegend(){document.getElementById('legend').style.display=
+ (level==='continent')?'':'none';}
+function enterUniverse(){level="universe";cur=null;zcur=null;hover=null;focus=null;
+ /*__USER__*/applyStoredWorld();/*__END_USER__*/
+ setHUD('Norrath — Universe','Choose a realm. Norrath and The Planes are mapped; others await EQL data.',null,false);
+ document.getElementById('bAlt').style.display='none';
+ document.getElementById('bFit').style.display='none';
+ syncLegend();
+ suspendEdit();document.getElementById('bEdit').style.display='';
+ cv.classList.remove('pan');tip.style.display='none';draw();}
+function enterWorld(){level="world";cur=null;zcur=null;hover=null;focus=null;wv={x:0,y:0,k:1};worldCache=null;
+ /*__USER__*/applyStoredWorld();/*__END_USER__*/
+ setHUD(alt, alt==="Norrath"?'Click a landmass to zoom in. Scroll = zoom, drag = pan.':'The Outer Planes - portal realms beyond Norrath. Click a plane to zoom in.','↑ Universe',false);
+ document.getElementById('bAlt').style.display='none';
+ const bf=document.getElementById('bFit'); bf.style.display=''; bf.textContent='Reset';
+ syncLegend();
+ syncRealmRow();   // `alt` may just have changed, and the panel's count is scoped to it
+ suspendEdit();document.getElementById('bEdit').style.display='';
+ cv.classList.add('pan');draw();}
+// The expansion guard lives on the ENTRY POINTS, not just the globe. worldPick already filters, but
+// the zone-detail transition click calls enterZone(L.cont,L.key) straight from a label and never
+// goes near it. Latent today - no classic detail label points into expansion content - but the
+// guard belongs where the transition happens rather than on each caller that must remember it.
+function enterCont(name){if(!XPAC_CONT.has(name))return;
+ level="continent";cur=name;zcur=null;hover=null;focus=null;zhover=null;cv.style.cursor='';document.getElementById('bAlt').style.display='none';
+ // Rebind the global zones/conns/hubs aliases whenever this continent already has live
+ // edit-state. drawCont() calls ep() and hubPos() without a zone map, so they read the
+ // GLOBAL `zones`; leaving it pointed at another continent makes anchored hubs render at
+ // their published spot and anchored connectors snap back to canonical.
+ if(EDIT[name])bindES(name);
+ /*__USER__*/else applyStoredCont(name);/*__END_USER__*/
+ const dt=DETAIL[name]?' - click a zone for full detail':'';
+ setHUD(name,Object.keys(ALL[name].zones).length+' zones'+dt,'← World',true);
+ buildLegend();syncLegend();document.getElementById('bFit').textContent='Fit';cv.classList.add('pan');
+ suspendEdit();document.getElementById('bEdit').style.display='';
+ fitBox(contBbox(name));draw();}
+function enterZone(cont,z){if(!XPAC_CONT.has(cont))return;
+ level="zone";cur=cont;zcur=z;hover=null;focus=null;zhover=null;cv.style.cursor='';document.getElementById('bAlt').style.display='none';
+ zdata=DETAIL[cont].zones[z]; zpal=DETAIL[cont].palette; zgroups={};
+ for(const s of zdata.segs){(zgroups[s[4]]=zgroups[s[4]]||[]).push(s);}
+ zlinks=[];
+ for(const l of zdata.labels){
+  for(const t of transitionTargets(z,l[4]))
+   zlinks.push({l,x:l[0],y:l[1],size:(9+(l[3]||2)*1.6),full:l[4],s0:t.s0,s1:t.s1,cont:t.cont,key:t.key});
+ }
+ const nlinks=new Set(zlinks.map(z=>z.l)).size;
+ setHUD(zdata.name, zdata.labels.length+' labeled locations'+(nlinks?' · '+nlinks+' zone links':'')+tRouteHint(z),'← '+cont,true);
+ document.getElementById('bFit').textContent='Fit';syncLegend();cv.classList.add('pan');
+ suspendEdit();document.getElementById('bEdit').style.display='none';
+ fitBox(zdata.bbox);draw();}
+
+let drag=null, suppressClick=false;
+cv.addEventListener('mousedown',e=>{
+ if(editMode&&level!=="zone"){editMouseDown(e);return;}   // edit drives universe/world/continent
+ if(level==="universe")return;
+ const src=(level==="world")?wv:view;
+ drag={x:e.clientX,y:e.clientY,vx:src.x,vy:src.y,moved:false};cv.classList.add('drag');});
+addEventListener('mouseup',e=>{
+ if(editMode&&level!=="zone"){editMouseUp(e);return;}
+ suppressClick=!!(drag&&drag.moved);drag=null;cv.classList.remove('drag');});
+cv.addEventListener('click',e=>{const dpr=devicePixelRatio,mx=e.clientX*dpr,my=e.clientY*dpr;
+ if(editMode&&level!=="zone")return;   // edit mode drives select/move via mousedown, not click
+ if(suppressClick){suppressClick=false;return;}
+ if(level==="zone"){const L=zonePickLink(mx,my); if(L) enterZone(L.cont,L.key); return;}
+ if(level==="universe"){const a=pickUniverse(mx,my); if(a){const en=uEnt(a); if(en&&en.active){alt=en.alt;enterWorld();}} return;}
+ if(level==="world"){const a=worldPick(mx,my); if(a) enterCont(a);}
+ else if(level==="continent"){const z=pickCont(mx,my); if(z&&hasDetail(cur,z)) enterZone(cur,z);}});
+addEventListener('mousemove',e=>{const dpr=devicePixelRatio,mx=e.clientX*dpr,my=e.clientY*dpr;
+ if(editMode&&level!=="zone"){editMouseMove(e);return;}
+ if(drag){drag.moved=true;const t=(level==="world")?wv:view;t.x=drag.vx+(e.clientX-drag.x)*dpr;t.y=drag.vy+(e.clientY-drag.y)*dpr;draw();return;}
+ if(level==="zone"){const L=zonePickLink(mx,my); if(L!==zhover){zhover=L;draw();}
+  if(L){cv.style.cursor='pointer';showTip(e,'Open '+DETAIL[L.cont].zones[L.key].name+' →');}
+  else{cv.style.cursor='';tip.style.display='none';} return;}
+ let h=null;
+ if(level==="universe"){h=pickUniverse(mx,my);} else if(level==="world"){h=worldPick(mx,my);} else if(level==="continent"){h=pickCont(mx,my);}
+ if(level!=="zone"&&h!==hover){hover=h;draw();}
+ if(level==="universe"&&h){const en=uEnt(h);showTip(e,en.active?en.name+' — click to enter':en.name+' — '+(en.note||'not available'));}
+ else if(level==="world"&&h){showTip(e,h);}
+ else if(level==="continent"){const hb=pickHub(mx,my);
+   if(hb){showTip(e,hb.label+(hb.note?'\n'+hb.note:''));}
+   else if(h){showTip(e,ALL[cur].zones[h].name+(hasDetail(cur,h)?'  (click for detail)':''));}
+   else tip.style.display='none';}
+ else tip.style.display='none';});
+function showTip(e,t){tip.style.whiteSpace=(t.indexOf('\n')>=0)?'pre-line':'nowrap';
+ tip.textContent=t;tip.style.display='block';                    // content+display first so offset* can measure
+ const pad=6,tw=tip.offsetWidth,th=tip.offsetHeight;let x=e.clientX+13,y=e.clientY+13;
+ if(x+tw+pad>innerWidth)x=Math.max(pad,e.clientX-13-tw);         // flip left of cursor when it would clip
+ if(y+th+pad>innerHeight)y=Math.max(pad,e.clientY-13-th);        // flip above cursor when it would clip
+ tip.style.left=x+'px';tip.style.top=y+'px';}
+cv.addEventListener('wheel',e=>{e.preventDefault();if(level==="universe")return;
+ const dpr=devicePixelRatio,mx=e.clientX*dpr,my=e.clientY*dpr;
+ const f=Math.exp(-e.deltaY*0.0012),t=(level==="world")?wv:view;
+ const wxp=(mx-t.x)/t.k,wyp=(my-t.y)/t.k;
+ t.k*=f;t.x=mx-wxp*t.k;t.y=my-wyp*t.k;draw();},{passive:false});
+addEventListener('keydown',e=>{
+ if(!(editMode&&level!=="zone"))return;
+ if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA'))return;
+ if(e.key==='Escape'){sel=null;pendingConn=null;refreshInspector();draw();}
+ else if(e.key==='Delete'||e.key==='Backspace'){if(sel){
+   if(sel.type==='conn'){conns.splice(sel.id,1);sel=null;}
+   else if(sel.type==='hub'){hubs.splice(sel.id,1);sel=null;}
+   else if(sel.type==='wconn'){worldConns().splice(sel.id,1);sel=null;}
+   refreshInspector();draw();}}});
+document.getElementById('bAlt').onclick=()=>{alt=(alt==="Norrath")?"The Planes":"Norrath";enterWorld();};
+document.getElementById('bBack').onclick=()=>{ if(level==="zone")enterCont(cur); else if(level==="continent")enterWorld(); else enterUniverse(); };
+document.getElementById('bFit').onclick=()=>{focus=null;hover=null;
+ if(level==="world"){wv={x:0,y:0,k:1};}
+ else if(level==="zone"){fitBox(zdata.bbox);}
+ else {buildLegend();fitBox(contBbox(cur));} draw();};
+const bl=document.getElementById('bLabels');
+bl.onclick=()=>{showLabels=!showLabels;bl.textContent='Labels: '+(showLabels?'on':'off');bl.classList.toggle('on',!showLabels);draw();};
+// Centre the view on a zone without changing the zoom. zoneCentroid() already accounts for the
+// transform (rotation and scale are about the centroid, so only tx/ty can move it), and the
+// y term is ADDED because the viewer draws with a Y-flip: wy = -y*k + view.y.
+function centreOnZone(z){const d=contData(cur),zo=d.zones[z];if(!zo)return;
+ const c=zoneCentroid(zo);view.x=cv.width/2-c[0]*view.k;view.y=cv.height/2+c[1]*view.k;}
+function buildLegend(){const L=document.getElementById('legend'),d=contData(cur);
+ L.innerHTML='<div class="t">'+cur+'</div>';
+ // Sorted by display name for scanning. Deliberately a sorted COPY, never order() itself:
+ // that returns the zone draw order, which affects rendering and which datacmp compares.
+ const rows=order().slice().sort((a,b)=>d.zones[a].name.localeCompare(d.zones[b].name));
+ for(const z of rows){const zo=d.zones[z],row=document.createElement('div');row.className='z';
+  row.innerHTML='<span class="sw" style="background:'+zo.color+'"></span>'+zo.name;
+  row.onclick=(ev)=>{ev.stopPropagation();focus=(focus===z)?null:z;hover=focus;
+   if(focus)centreOnZone(focus);buildLegend();draw();};
+  if(z===focus)row.style.background='#2c3d50';L.appendChild(row);}}
+
+// ================= TRAVEL GUIDE (search, pathfinder, itinerary) =================
+// Everything here reads TRAVEL and published ALL/HUBS only. It never touches contData() or a
+// zone centroid: routing must be a fact about the game, so neither an author nudging a zone for
+// looks nor a viewer's own customization may change what trip comes back.
+
+// --- zone roster -------------------------------------------------------------------------
+// Only zones the graph actually references, and names come from ALL rather than DETAIL: DETAIL
+// is empty in the synthetic test fixtures, and a global sweep of ALL would trip over their stub
+// continents, which all reuse the same zone key.
+const TZONES={};
+(function(){const want={},from={};
+ for(const w of TDATA.walk){want[w.z[0]]=1;want[w.z[1]]=1;}
+ for(const r of TDATA.routes)for(const s of r.stops)want[s]=1;
+ for(const g in TDATA.groups)for(const k of TDATA.groups[g])want[k]=1;
+ for(const c in ALL){const zs=ALL[c].zones;for(const k in zs)if(want[k]&&!from[k])from[k]={cont:c,name:zs[k].name};}
+ for(const k in want)TZONES[k]=from[k]||{cont:null,name:k};})();
+function inBuild(k){const z=TZONES[k];return !!(z&&z.cont);}
+const TABSENT={};
+for(const r of TDATA.routes){const s=new Set();for(let i=0;i<r.stops.length;i++)if(!inBuild(r.stops[i]))s.add(i);TABSENT[r.id]=s;}
+function tzName(k){const z=TZONES[k];return z?z.name:k;}
+
+// --- search index ------------------------------------------------------------------------
+// Entries are keyed records, never display strings resolved again on selection: znorm() drops
+// parentheticals and ZIDX's put() is first-wins, so all three Neriak quarters normalise to
+// "neriak" and re-resolving a chosen label would silently land on whichever one was indexed
+// first. That collision set is exactly the groups list, which is what makes the group the right
+// suggestion for a bare "Neriak" while the quarters stay reachable by their fuller names.
+const TSEARCH=[];
+(function(){const byKey={};
+ for(const g in TDATA.groups)TSEARCH.push({kind:'group',key:g,name:g,terms:[znorm(g)]});
+ for(const k in TZONES){const e={kind:'zone',key:k,name:tzName(k),terms:[znorm(tzName(k))]};byKey[k]=e;TSEARCH.push(e);}
+ const term=(k,t)=>{const e=byKey[k];if(e&&t&&e.terms.indexOf(t)<0)e.terms.push(t);};
+ // ZIDX already indexes the "(North)" suffix forms both ways and the Neriak quarters, and
+ // ZALIAS carries the hand-written spellings ("North Ro"). Both are consulted only by
+ // resolveZone()'s exact lookup, so neither would ever surface as a suggestion on its own.
+ for(const n in ZIDX)term(ZIDX[n].key,n);
+ for(const a in ZALIAS){const t=ZIDX[ZALIAS[a]];if(t)term(t.key,znorm(a));}})();
+// Exact, then prefix, then substring. There is deliberately no separate "the"-folded prefix
+// tier: znorm() already strips a leading "the" from query and term alike, so it would be dead.
+function tFind(q,limit){const n=znorm(q);if(!n)return [];
+ const hits=[];
+ for(const e of TSEARCH){let best=9;
+  for(const t of e.terms){const r=(t===n)?0:(t.indexOf(n)===0?1:(t.indexOf(n)>=0?3:9));if(r<best)best=r;}
+  if(best<9)hits.push({e,r:best});}
+ hits.sort((a,b)=>a.r-b.r
+  ||(a.e.kind==='group'?0:1)-(b.e.kind==='group'?0:1)
+  ||a.e.name.length-b.e.name.length
+  ||(a.e.name<b.e.name?-1:1));
+ return hits.slice(0,limit||9).map(h=>h.e);}
+// A group resolves to its IN-EXPANSION members. Defined rather than left to fall out: every
+// authored group is wholly within the first expansion today, so the split is latent, and "Neriak"
+// meaning different zone sets at different points is the honest reading of a city gaining a
+// quarter. A group with no in-expansion member left is not an empty trip, it is an out-of-range
+// destination, and tRenderBody rejects it with the message a single out-of-range zone gets.
+function tNodes(sel){if(!sel)return null;
+ return sel.kind==='group'?(TDATA.groups[sel.key]||[]).filter(xpacZoneOn):[sel.key];}
+
+// --- capabilities ------------------------------------------------------------------------
+// A capability asks what the user IS, never what they are carrying. Consumed components stay
+// out of this on purpose and ride the hub note onto the leg instead - informing rather than
+// interrogating the player's inventory before it will plan anything.
+const TCAPS={};
+for(const c of TDATA.capabilities)TCAPS[c.id]=false;
+/*__AUTHOR__*/function travelLsKey(){return 'eql_travel_caps_v1';}/*__END_AUTHOR__*/
+/*__USER__*/function travelLsKey(){return 'eql_travel_caps_u1';}/*__END_USER__*/
+function tLoadCaps(){try{const o=JSON.parse(localStorage.getItem(travelLsKey()));
+  if(o&&typeof o==='object')for(const c of TDATA.capabilities)if(c.id in o)TCAPS[c.id]=!!o[c.id];}catch(e){}}
+function tSaveCaps(){try{localStorage.setItem(travelLsKey(),JSON.stringify(TCAPS));}catch(e){}}
+
+// --- edge assembly -----------------------------------------------------------------------
+let TADJ=null, TARR=null;
+// Two independent gates answering different questions: expansion asks whether the route exists
+// on this server yet, the capability asks whether this player can use one that does.
+function tRouteOn(r){return !XPAC_ROUTE.has(r.id)&&(!r.capability||!!TCAPS[r.capability]);}
+// A route's hubs[] entry indexes PUBLISHED HUBS. Reading it through contData() would return
+// EDIT[c].hubs once a continent has live edit-state, so the same trip would describe itself
+// differently depending on where the viewer had browsed - and the author edition's hub delete
+// splices the array, shifting every index below it.
+function tHubAnchor(r,i){return (r.hubs&&r.hubs[i])||null;}
+function tPubHub(anchor){const p=anchor?anchor.lastIndexOf(':'):-1;if(p<0)return null;
+ const list=HUBS[anchor.slice(0,p)];return (list&&list[+anchor.slice(p+1)])||null;}
+function tHubNote(r,i){const h=tPubHub(tHubAnchor(r,i));return (h&&h.note)||'';}
+// Edges are a LIST per node, not a neighbour-keyed map. Two routes can reach the same
+// neighbour and a route can duplicate a walk edge; a last-wins map keeps a worse cost paired
+// with the other edge's step metadata, i.e. a non-shortest path under a misleading itinerary.
+// Relaxing the parallel edges independently keeps cost and step together by construction.
+// A step carries BOTH of its hub anchors, as published "<Continent>:<index>" strings and never
+// as live indices - turning one into a glyph position is a drawing concern, handled by
+// tHubScreen. Two rather than one because the two consumers want opposite ends: `note` belongs
+// to the stop you ARRIVE at (the reagent is spent on the way in), while the glyph a continent
+// view should ring is the dock you BOARD at, which is the departure end. Carrying only the
+// arrival left Antonica un-ringed on a boat out of South Qeynos, whose own dock is Antonica:0.
+// An `anywhere` port has no departure stop at all - you cast from wherever you stand.
+// `access[i]` is the in-zone walk between stop i's centroid and the hub you board or leave at.
+// A vehicle does not pick you up in the middle of the zone: the dock, ring or spire sits somewhere
+// in it, and on current data that walk runs 1.1 to 32.4 cost units - West Karana's wizard spire
+// alone is 8 097 units from its centroid, more than a whole port. A flat vehicle cost priced none
+// of it, so a port to the zone next door looked cheaper than it is and, worse, arriving somewhere
+// by ring cost the same whether the ring was at your feet or across the zone.
+//
+// Authored, never measured here, for the same reason walk cost is: a user can drag a hub in their
+// own copy, so a runtime hub-to-centroid distance would let their customisation reprice their
+// routing. Derived by derive_travel_graph.py --recost.
+//
+// A `line` or `clique` leg pays both ends - you walk to the vehicle and away from it. An
+// `anywhere` port pays only the arrival: it is self-cast from wherever you stand, which is exactly
+// why its hubA is null. A portal you must physically walk to is not `anywhere`; model it as a
+// `line` with a hub on the origin stop and this prices the walk to it.
+function tAccess(r,i){const a=r.access;
+ return (a&&i!=null&&typeof a[i]==='number')?a[i]:0;}
+function tBuild(){TADJ={};TARR=[];
+ const link=(a,b,step)=>{(TADJ[a]=TADJ[a]||[]).push({to:b,cost:step.cost,step});};
+ const step=(r,i,j)=>({kind:r.kind,label:r.name,
+   cost:r.cost+tAccess(r,i)+tAccess(r,j),cap:r.capability||null,
+   note:tHubNote(r,j),hubA:(i==null?null:tHubAnchor(r,i)),hubB:tHubAnchor(r,j)});
+ for(const w of TDATA.walk){
+  // One gate handles both causes without conflating their state: expansion is dynamic, while a
+  // pack gap is static. Root-only drops 12 of the 74 authored walk edges here.
+  if(!xpacZoneOn(w.z[0])||!xpacZoneOn(w.z[1]))continue;
+  const s={kind:'walk',label:'',cost:w.cost,cap:null,note:'',hubA:null,hubB:null};
+  link(w.z[0],w.z[1],s);link(w.z[1],w.z[0],s);}
+ for(const r of TDATA.routes){if(!tRouteOn(r))continue;
+  const S=r.stops;
+  if(r.topology==='anywhere'){
+   // cost from the STEP, never from r.cost: the step is where access is folded in, and an arrival
+   // relaxed on the bare route cost would silently price the walk out of the ring at zero. Same
+   // invariant as link() above - one number, carried with the step that explains it.
+   for(let i=0;i<S.length;i++){if(TABSENT[r.id].has(i))continue;
+    const s=step(r,null,i);TARR.push({to:S[i],cost:s.cost,step:s});}
+   continue;}
+  const pairs=[];
+  if(r.topology==='clique'){for(let i=0;i<S.length;i++)for(let j=i+1;j<S.length;j++)pairs.push([i,j]);}
+  else for(let i=0;i+1<S.length;i++)pairs.push([i,i+1]);
+  for(const p of pairs){const i=p[0],j=p[1];
+   if(TABSENT[r.id].has(i)||TABSENT[r.id].has(j))continue;
+   link(S[i],S[j],step(r,i,j));link(S[j],S[i],step(r,j,i));}}}
+
+// --- pathfinder --------------------------------------------------------------------------
+// Plain O(V^2) Dijkstra over an array: 77 nodes is 5.9k comparisons worst case, and a heap
+// would not fit cleanly anyway because the `anywhere` union below makes the neighbour set
+// depend on the node being settled rather than on a static adjacency.
+function tPlan(starts,ends){if(!TADJ)tBuild();
+ // The in-expansion node set, computed here rather than by filtering TZONES: TZONES is the
+ // naming and lookup table search needs, and it counts the AUTHORED roster. A zone the server
+ // does not have yet must still be findable and nameable - it just cannot be walked through.
+ const nodes=Object.keys(TZONES).filter(xpacZoneOn),dist={},prev={},done={},endSet={};
+ for(const e of ends)endSet[e]=1;
+ for(const k of nodes)dist[k]=Infinity;
+ let seeded=0;
+ for(const s of starts)if(s in dist){if(endSet[s])return {legs:[],total:0};dist[s]=0;seeded++;}
+ if(!seeded)return null;
+ for(;;){
+  let u=null,best=Infinity;
+  for(const k of nodes)if(!done[k]&&dist[k]<best){best=dist[k];u=k;}
+  if(u===null)break;
+  done[u]=true;
+  if(endSet[u])return tTrace(prev,u);
+  const du=dist[u];
+  const relax=(to,cost,step)=>{if(done[to]||!(to in dist))return;
+   const nd=du+cost;if(nd<dist[to]){dist[to]=nd;prev[to]={from:u,step};}};
+  for(const e of (TADJ[u]||[]))relax(e.to,e.cost,e.step);
+  // `anywhere` destinations are unioned in per hop instead of being baked into TADJ, because
+  // the edge runs u -> stop for every u and does NOT run backwards. Modelling it as an
+  // undirected clique would imply you can travel between two arbitrary zones by bouncing off
+  // a shared destination. This stays correct for Dijkstra and not merely for BFS: costs are
+  // non-negative and the unioned arrivals are ordinary outgoing edges of the node being
+  // settled, so the settled-node invariant holds.
+  for(const a of TARR)relax(a.to,a.cost,a.step);}
+ return null;}
+function tTrace(prev,end){const legs=[];let at=end,total=0;
+ while(prev[at]){const p=prev[at];
+  legs.unshift({from:p.from,to:at,kind:p.step.kind,label:p.step.label,cost:p.step.cost,
+    cap:p.step.cap,note:p.step.note||'',hubA:p.step.hubA||null,hubB:p.step.hubB||null});
+  total+=p.step.cost;at=p.from;}
+ return {legs,total};}
+
+// --- drawing -----------------------------------------------------------------------------
+// The route is drawn at every level that can show it honestly, and only ever as far as that
+// level reaches: the itinerary in the panel is the one continuous record. Nothing here feeds
+// back into cost or adjacency - the graph is a fact about the game, this is a picture of it.
+//
+// Positions come from a DIFFERENT source per level, on purpose:
+//   continent  contData() -> a viewer's own rearrangement moves the drawn line with the map
+//   world      published ALL -> buildWorldCache draws published outlines by design, so a line
+//              from customised zone positions would float off the shapes it claims to follow
+// Not a contradiction: areaPt() reads metaPos(), which does go through WEDIT, so a world route
+// follows a continent the viewer has MOVED while correctly not following a zone they moved
+// inside it. Each half matches the drawing it sits on top of.
+function tSelZone(){if(!TROUTE||TROUTE.sel<0)return null;
+ const l=TROUTE.legs[TROUTE.sel];return l?l.to:null;}
+function tNextFrom(k){if(!TROUTE)return null;
+ for(const l of TROUTE.legs)if(l.from===k)return l.to;return null;}
+// Text fallback for the zone view, where the zlinks emphasis cannot always fire: a community
+// map may simply never have drawn the transition label, and a boat or port leg has no label to
+// draw at all. Computed at entry, so re-planning while already standing in a zone leaves the
+// line as it was - navigating in again refreshes it. A route zone with nothing departing it is
+// the final arrival, since every other one has a leg leaving.
+function tRouteHint(k){if(!TROUTE||!tOnRoute(k))return '';
+ const nx=tNextFrom(k);
+ return nx?(' · route continues → '+tzName(nx)):' · journey ends here';}
+// Dark casing under a bright core, the same contrast trick hubHalo() uses, so the line stays
+// legible over any zone colour rather than relying on its hue alone. The casing is always solid:
+// dashing it too would let the map show through the gaps and lose the contrast it exists for.
+function tStroke(A,B,dashed,w){const dpr=devicePixelRatio;
+ ctx.save();ctx.lineCap='round';
+ for(const core of [0,1]){
+  ctx.setLineDash((core&&dashed)?[9*dpr,6*dpr]:[]);
+  ctx.strokeStyle=core?ROUTE_COL:ROUTE_CASE;ctx.lineWidth=(core?w:w+3)*dpr;
+  ctx.beginPath();ctx.moveTo(A[0],A[1]);ctx.lineTo(B[0],B[1]);ctx.stroke();}
+ ctx.restore();}
+function tChevron(a,b){const dpr=devicePixelRatio;
+ const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);if(L<26*dpr)return;   // no room: skip it
+ const ux=dx/L,uy=dy/L,s=5.5*dpr,mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+ ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+ for(const core of [0,1]){ctx.strokeStyle=core?'#ffe0c2':ROUTE_CASE;ctx.lineWidth=(core?1.8:4)*dpr;
+  ctx.beginPath();
+  ctx.moveTo(mx-ux*s-uy*s,my-uy*s+ux*s);ctx.lineTo(mx+ux*s*0.7,my+uy*s*0.7);
+  ctx.lineTo(mx-ux*s+uy*s,my-uy*s-ux*s);ctx.stroke();}
+ ctx.restore();}
+// n===null is the departure marker: same disc, no number, nothing arrives there. The number is
+// drawn in a light tint rather than in ROUTE_COL itself - orange on a near-black disc at 11px is
+// legible in theory and not on screen.
+function tPip(X,Y,n,filled){const dpr=devicePixelRatio,r=(n==null?6:10)*dpr;
+ ctx.save();
+ ctx.beginPath();ctx.arc(X,Y,r,0,7);
+ ctx.fillStyle=filled?ROUTE_COL:'rgba(11,16,23,.95)';ctx.fill();
+ ctx.strokeStyle=ROUTE_COL;ctx.lineWidth=2.2*dpr;ctx.stroke();
+ if(n!=null){ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold '+(11*dpr)+'px system-ui';
+  ctx.fillStyle=filled?'#1a0d00':'#ffe0c2';
+  ctx.fillText(String(n),X,Y);}
+ ctx.restore();}
+// A leg boarding in this continent rings its hub glyph - "get on here". The note is published
+// data and reads through HUBS, but the POSITION has to follow the viewer's map, and both
+// collections are index-keyed with no name to compare. So identity comes from the published
+// content hint and resolveRef re-finds it: a bare index would ring a neighbouring glyph the
+// moment one is removed from the live array above it (the author edition's hub delete splices).
+// With no live edit-state the array IS published HUBS, and those entries carry no ref at all,
+// so that case indexes straight through instead of asking resolveRef about a missing hint.
+function tHubScreen(anchor,cont){if(!anchor)return null;
+ const p=anchor.lastIndexOf(':');if(p<0||anchor.slice(0,p)!==cont)return null;
+ const i=+anchor.slice(p+1),pub=tPubHub(anchor);if(!pub)return null;
+ if(xpacHubHidden(cont,i))return null;   // `i` IS the published index here, straight off the anchor
+ const e=EDIT[cont];let h=pub;
+ if(e){const j=resolveRef(e.hubs,hubRefOf(pub),i);if(j<0)return null;h=e.hubs[j];}
+ if(isGhost(h))return null;
+ return hubPos(h,e?e.zones:ALL[cont].zones);}
+function tHubRing(X,Y){const dpr=devicePixelRatio,r=11*dpr+7*dpr;
+ ctx.save();
+ ctx.strokeStyle=ROUTE_CASE;ctx.lineWidth=3.4*dpr;
+ ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.stroke();
+ ctx.strokeStyle=ROUTE_COL;ctx.lineWidth=1.8*dpr;
+ ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.stroke();ctx.restore();}
+function tContScr(d,k){const zo=d.zones[k];if(!zo)return null;
+ const c=zoneCentroid(zo);return [wx(c[0]),wy(c[1])];}
+// Lines and pips are two passes with two call sites in drawCont, not one call drawing both.
+// The reason is z-order and it was found by looking at the render: zone labels are centred on
+// the same centroid the pip sits on and are drawn after the lines, so a single pass put the
+// number for every intermediate stop underneath a zone name. The numbers are what tie the map
+// to the itinerary rows, so they go last, above everything including the hub glyphs.
+// `cont` is passed rather than read from the global `cur` so the zone map and the hub lookup
+// cannot disagree about which continent is being drawn. They always agree today - drawCont is
+// the only caller and passes contData(cur) - but this is the shape that bit the editor once
+// already, where drawCont read a stale global zone map after visiting a second continent.
+// Sampling cap for the zone-line scan. The bootstrap script uses the same 200 for the cost it
+// computes from these very points, on the grounds that a few units of imprecision vanish after
+// dividing by UNITS_PER_COST; a few units is likewise invisible in a drawn line, and this runs
+// on every frame of an edit-mode drag where the welder's 700 would not.
+const ROUTE_SAMPLE=200;
+// The waypoints a leg passes through between the two zone centroids.
+//
+// A walk leg goes centroid -> the doorway each zone names -> centroid. The primary source is the
+// zone's OWN detail map: its `to_X`/`from_X` labels mark where that exit physically is, and
+// detailOffset() places them on the continent map. On current data 70 of 74 walk edges have such a
+// label on both sides, 4 on one side, and none on neither.
+//
+// Geometric closest approach is only the FALLBACK, because it is only a valid proxy for a zone line
+// where the outlines actually touch. Where a stitch void separates them it just returns whichever
+// flanks happen to face each other: South Ro sits ~16 000 units east of Innothule, so it picked
+// Innothule's east side beside the Guk and Grobb city entrances, 3 096 units from the northern
+// entrance the zone itself names. With only one label, the other end is the point on that outline
+// nearest the known doorway - still anchored to a real exit rather than to relative box placement.
+//
+// A transport leg's exit is not a zone line at all, it is the dock or spire you use, so it routes
+// through whichever of its two hubs is in this continent. A stop with no hub - the boat waypoints
+// carry none - simply contributes no waypoint.
+function tLegWaypoints(d,cont,l){
+ const out=[];
+ if(l.kind==='walk'){
+  const za=d.zones[l.from],zb=d.zones[l.to];
+  if(!za||!zb)return out;
+  let a=zoneExitPoint(cont,l.from,l.to), b=zoneExitPoint(cont,l.to,l.from);
+  if(a&&!b){const T=tPoint(za,a[0],a[1]);b=nearestOutlinePointTo(zb,T[0],T[1]);}
+  else if(b&&!a){const T=tPoint(zb,b[0],b[1]);a=nearestOutlinePointTo(za,T[0],T[1]);}
+  else if(!a&&!b){const w=nearestOutlinePair(za,zb,ROUTE_SAMPLE);a=w.p1;b=w.p2;}
+  out.push(tPoint(za,a[0],a[1]));
+  const q=tPoint(zb,b[0],b[1]);
+  if(q[0]!==out[0][0]||q[1]!==out[0][1])out.push(q);   // one shared doorway, not two
+  return out;}
+ for(const anc of [l.hubA,l.hubB]){const P=tHubScreen(anc,cont);if(P)out.push(P);}
+ return out;}
+// `focus` suppresses the route entirely, because focus dimming is not route dimming: it drops
+// every other zone to DIM_FOCUS and makes drawCont's label loop skip them, so a route drawn over
+// it is a bright line across a near-black map. That is the display tGoLeg avoids by not setting
+// focus - but the legend row sets it directly, so the guard belongs here rather than at the one
+// call site that was careful. Focus means "show me this one zone"; honour it.
+function drawRouteCont(d,cont){if(!TROUTE||focus)return;
+ const legs=TROUTE.legs;
+ const scr=k=>tContScr(d,k);
+ // Every position of this leg that exists in THIS continent, in travel order: the departure
+ // centroid, its hub, the arrival hub, the arrival centroid. Whatever survives gets joined up.
+ //
+ // Deliberately not gated on both centroids resolving. A leg that leaves the continent still has
+ // an in-continent half - the walk between the dock or spire and the zone centroid - and that walk
+ // is now priced in routes[].access, so leaving it undrawn showed a ringed dock floating
+ // unconnected beside a route that appeared to start in the middle of the zone. A hub can only
+ // resolve here when its own stop is here, so there is no way to join two points that are not
+ // both genuinely on this map.
+ for(let i=0;i<legs.length;i++){const l=legs[i],A=scr(l.from),B=scr(l.to),pts=[];
+  if(A)pts.push(A);
+  for(const p of tLegWaypoints(d,cont,l))pts.push([wx(p[0]),wy(p[1])]);
+  if(B)pts.push(B);
+  if(pts.length>1){
+   const dash=l.kind!=='walk',w=(i===TROUTE.sel)?5:3;
+   for(let s=0;s+1<pts.length;s++)tStroke(pts[s],pts[s+1],dash,w);
+   // One chevron for the leg, on its longest segment: per-segment would crowd the doorway,
+   // where two of the three segments are a few pixels long.
+   let bi=0,bl=-1;
+   for(let s=0;s+1<pts.length;s++){const dx=pts[s+1][0]-pts[s][0],dy=pts[s+1][1]-pts[s][1];
+    const q=dx*dx+dy*dy;if(q>bl){bl=q;bi=s;}}
+   tChevron(pts[bi],pts[bi+1]);}
+  // No stub aimed off the edge of the continent for the part that is elsewhere: the itinerary
+  // names where it goes, and aiming one would mean inverting the globe projection's gscale and
+  // its Y-flip for less than that sentence buys.
+  for(const anc of [l.hubA,l.hubB]){const P=tHubScreen(anc,cont);
+   if(P)tHubRing(wx(P[0]),wy(P[1]));}}}
+function drawRoutePips(d){if(!TROUTE||focus)return;   // same reason as drawRouteCont
+ for(const k in TROUTE.on){const S=tContScr(d,k);if(!S)continue;
+  const n=tPipOf(k);
+  tPip(S[0],S[1],n<0?null:n+1,n>=0&&n===TROUTE.sel);}}
+// The world view is a single realm at a time, so draw the legs this realm holds and let
+// syncRealmRow account for the rest. Never called from buildWorldCache: that canvas persists
+// until worldCache=null, and a route baked into it would not follow the next trip.
+function drawRouteWorld(wm,TX,TY){if(!TROUTE)return;
+ const here=k=>{const z=TZONES[k];
+  if(!z||!z.cont||altOf(z.cont)!==alt||!ALL[z.cont])return null;
+  const zo=ALL[z.cont].zones[k];if(!zo)return null;
+  const c=zoneCentroid(zo),g=areaPt(z.cont,c[0],c[1],wm);
+  return [TX(g[0]),TY(g[1])];};
+ const legs=TROUTE.legs;
+ // Straight centroid to centroid here, with no zone-line waypoints. At globe scale a doorway is
+ // sub-pixel - Antonica's 57 118 continent units land inside about 20 globe units - so the
+ // detour would cost an outline scan per leg and change nothing anyone could see.
+ for(let i=0;i<legs.length;i++){const l=legs[i],A=here(l.from),B=here(l.to);
+  if(!A||!B)continue;
+  tStroke(A,B,l.kind!=='walk',(i===TROUTE.sel)?4:2.4);tChevron(A,B);}
+ // Only the two ends and the selected stop get a pip here, unlike the continent view. Pips are
+ // a fixed screen size, and at globe scale a seven-zone chain inside one continent stacks seven
+ // 18px discs into an unreadable blob - the chain itself is the information at this level.
+ const last=legs[legs.length-1];
+ const S0=here(legs[0].from);if(S0)tPip(S0[0],S0[1],null,false);
+ const S1=here(last.to);if(S1)tPip(S1[0],S1[1],legs.length,TROUTE.sel===legs.length-1);
+ if(TROUTE.sel>=0&&TROUTE.sel<legs.length-1){const S=here(legs[TROUTE.sel].to);
+  if(S)tPip(S[0],S[1],TROUTE.sel+1,true);}}
+
+// --- panel -------------------------------------------------------------------------------
+const TSEL={from:null,to:null};
+function tCapLabel(id){for(const c of TDATA.capabilities)if(c.id===id)return c.label;return id;}
+function tEl(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;
+ if(text!=null)e.textContent=text;return e;}
+function tBuildCaps(){const box=document.getElementById('tvCaps');box.innerHTML='';
+ for(const c of TDATA.capabilities){const b=tEl('span','btn',c.label);
+  b.dataset.cap=c.id;b.classList.toggle('on',!!TCAPS[c.id]);
+  b.onclick=()=>{TCAPS[c.id]=!TCAPS[c.id];b.classList.toggle('on',TCAPS[c.id]);
+   TADJ=null;tSaveCaps();tRender();};
+  box.appendChild(b);}}
+// Which expansion a search hit or selection first becomes reachable in. For a group that is the
+// EARLIEST of its members': a city gaining a quarter later is still a place you can go now.
+function xpacOfKey(k){const z=TZONES[k];return (z&&z.cont&&META[z.cont])?META[z.cont].xpac:null;}
+function tSelKeys(s){return s?(s.kind==='group'?(TDATA.groups[s.key]||[]):[s.key]):[];}
+function tSelName(s){return s?(s.kind==='group'?s.key:tzName(s.key)):'';}
+function tSelXpac(s){let best=null;
+ for(const k of tSelKeys(s)){const e=xpacOfKey(k);
+  if(e&&(best===null||xpacRank(e)<xpacRank(best)))best=e;}
+ return best;}
+function tSelInXpac(s){return tSelKeys(s).some(xpacZoneOn);}
+function tSelInBuild(s){return tSelKeys(s).some(inBuild);}
+function tSugBox(side){return document.getElementById(side==='from'?'tvFromSug':'tvToSug');}
+function tInput(side){return document.getElementById(side==='from'?'tvFrom':'tvTo');}
+function tPick(side,e){TSEL[side]=e?{kind:e.kind,key:e.key}:null;
+ if(e)tInput(side).value=e.name;
+ tSugBox(side).style.display='none';tRender();}
+function tSuggest(side){const box=tSugBox(side),q=tInput(side).value,hits=tFind(q,9);
+ box.innerHTML='';
+ if(!hits.length||!q.trim()){box.style.display='none';return;}
+ // Out-of-range zones stay in results and are LABELLED with the expansion they arrive in. A query
+ // a direct question, and silence on "Sebilis" is indistinguishable from a broken search - the
+ // useful answer is "it exists, later", not nothing.
+ for(const h of hits){const row=tEl('div',null,h.name);
+  if(h.kind==='group')row.appendChild(tEl('span','g','all '+(TDATA.groups[h.key]||[]).length+' zones'));
+  if(!tSelInXpac(h)){const e=tSelXpac(h);row.appendChild(tEl('span','g',
+    !tSelInBuild(h)?'not in this build':(e?xpacLabel(e):'later')));}
+  row.onmousedown=ev=>{ev.preventDefault();tPick(side,h);};   // mousedown: blur would close the list first
+  box.appendChild(row);}
+ box.style.display='';}
+function tWire(side){const inp=tInput(side);
+ inp.oninput=()=>{TSEL[side]=null;tSuggest(side);tRender();};
+ inp.onfocus=()=>{if(inp.value.trim())tSuggest(side);};
+ inp.onblur=()=>{setTimeout(()=>{tSugBox(side).style.display='none';},120);};
+ inp.onkeydown=ev=>{
+  if(ev.key==='Enter'){const hits=tFind(inp.value,1);if(hits.length){ev.preventDefault();tPick(side,hits[0]);}}
+  else if(ev.key==='Escape'){tSugBox(side).style.display='none';}};}
+tWire('from');tWire('to');
+const TMODE={walk:'walk',boat:'boat',ring:'ring',spire:'spire',portal:'portal',teleport:'teleport'};
+function tModeWord(k){return TMODE[k]||k;}
+// tRender is the ONLY writer of TROUTE, and the discipline is: clear here, assign only on the
+// success path, redraw once. The body below has four early returns; letting any of them skip
+// the clear leaves the previous trip drawn under a panel that no longer describes it.
+let TROWS=[];
+function tRender(){TROUTE=null;TROWS=[];tRenderBody();syncRealmRow();draw();}
+function tRenderBody(){const out=document.getElementById('tvOut');out.innerHTML='';
+ const A=tNodes(TSEL.from),B=tNodes(TSEL.to);
+ if(!A||!B){out.appendChild(tEl('div','hint',
+   'Pick a departure and a destination. Type a zone name, or a city name for all of its zones.'));return;}
+ // BEFORE tPlan, never after. Once tPlan restricts its node set, a later endpoint simply
+ // returns null - which drops into the "no route with the modes you have enabled" branch below
+ // and then runs the capability probe, toggling every capability one at a time and finding
+ // nothing. That is a wrong answer to a question the user did not ask. Name the real reason and
+ // return, and leave the probe to answer the question it was written for.
+ const oo=[TSEL.from,TSEL.to].filter(s=>{const n=tNodes(s);return !n.length||!n.some(xpacZoneOn);});
+ const absent=oo.find(s=>!tSelInBuild(s));
+ if(absent){out.appendChild(tEl('div','hint',tSelName(absent)+' is not in this build because the map pack has no file for it.'));return;}
+ if(oo.length){const e=tSelXpac(oo[0]);
+  out.appendChild(tEl('div','hint',tSelName(oo[0])+' is '+(e?xpacLabel(e):'later')
+    +' content, not on the map at the '+xpacLabel(xpac)+' expansion.'));return;}
+ const res=tPlan(A,B);
+ if(res&&!res.legs.length){out.appendChild(tEl('div','hint','You are already there.'));return;}
+ if(!res){out.appendChild(tEl('div','hint','No route with the modes you have enabled.'));
+  // Informative, not a gate: name what would open a way through instead of just returning
+  // nothing. Which capability is REQUIRED cannot be read off the all-enabled route -- that
+  // route also uses whatever merely made it cheaper, so listing its capabilities with "or"
+  // claims any one of them suffices, which is false. Probe the off capabilities one at a
+  // time; only those that work alone are genuine alternatives.
+  const off=[];for(const c of TDATA.capabilities)if(!TCAPS[c.id])off.push(c.id);
+  const solo=[];
+  for(const id of off){TCAPS[id]=true;TADJ=null;if(tPlan(A,B))solo.push(id);TCAPS[id]=false;}
+  let need=solo;
+  if(!need.length){for(const id of off)TCAPS[id]=true;
+   TADJ=null;if(tPlan(A,B))need=off;
+   for(const id of off)TCAPS[id]=false;}
+  TADJ=null;
+  if(need.length)out.appendChild(tEl('div','hint','Enabling '+need.map(tCapLabel).join(
+    need===solo?' or ':' and ')+' would find one.'));
+  return;}
+ const first=res.legs[0];
+ // The two lookups the draw layer needs. `on` seeds with the departure zone, which has no
+ // arriving leg and so never appears in `pip`; the pip numbers are exactly the row numbers.
+ const on={},pip={};on[first.from]=1;
+ for(let i=0;i<res.legs.length;i++){const l=res.legs[i];on[l.to]=1;if(!(l.to in pip))pip[l.to]=i;}
+ TROUTE={legs:res.legs,total:res.total,on:on,pip:pip,sel:-1};
+ out.appendChild(tEl('div','start','from '+tzName(first.from)));
+ const byMode={},seq=[];   // `seq`, not `order`: order() is a global that returns the zone roster
+ for(const l of res.legs){const m=tModeWord(l.kind);
+  if(!(m in byMode)){byMode[m]=0;seq.push(m);}byMode[m]++;}
+ const sum=tEl('div','sum',res.legs.length+(res.legs.length===1?' leg':' legs'));
+ const clr=tEl('span','x','✕');clr.title='Clear this trip';
+ clr.onclick=()=>{TSEL.from=null;TSEL.to=null;tInput('from').value='';tInput('to').value='';tRender();};
+ sum.appendChild(clr);out.appendChild(sum);
+ out.appendChild(tEl('div','modes',seq.map(m=>byMode[m]+' '+m).join(' · ')));
+ for(let i=0;i<res.legs.length;i++){const l=res.legs[i],row=tEl('div','leg nav');
+  row.appendChild(tEl('span','m',tModeWord(l.kind)));
+  const b=tEl('span','b');
+  b.appendChild(tEl('div',null,(i+1)+'. → '+tzName(l.to)));
+  if(l.label)b.appendChild(tEl('div','rt',l.label));
+  if(l.note)b.appendChild(tEl('div','nt',l.note));
+  row.appendChild(b);
+  /*__AUTHOR__*/row.appendChild(tEl('span','c',(Math.round(l.cost*10)/10).toFixed(1)));/*__END_AUTHOR__*/
+  row.onclick=()=>tGoLeg(i);
+  TROWS.push(row);out.appendChild(row);}
+ /*__AUTHOR__*/out.appendChild(tEl('div','modes','total '+(Math.round(res.total*10)/10).toFixed(1)));/*__END_AUTHOR__*/}
+// Selecting a leg repaints the row list in place rather than re-rendering the panel: tRender
+// re-plans and builds a fresh TROUTE, which would drop the selection it was asked to make.
+function tSelLeg(i){if(TROUTE)TROUTE.sel=i;
+ for(let j=0;j<TROWS.length;j++)TROWS[j].classList.toggle('on',j===i);}
+// Clicking a leg goes to the zone it ARRIVES at. Deliberately does not touch `focus`: focus
+// dimming wins over route dimming in zoneDimmed(), so setting it here would collapse the map
+// to one bright zone and hide the route's own labels. Selection emphasis rides TROUTE.sel.
+// `alt` has to move first - Back from a continent runs enterWorld(), which reads it.
+function tGoLeg(i){if(!TROUTE)return;const l=TROUTE.legs[i];if(!l)return;
+ const z=TZONES[l.to];if(!z||!z.cont)return;
+ tSelLeg(i);
+ const a=altOf(z.cont);if(a&&a!==alt){alt=a;worldCache=null;}
+ if(level!=='continent'||cur!==z.cont)enterCont(z.cont);
+ centreOnZone(l.to);syncRealmRow();draw();}
+// How much of the trip this realm cannot show. The world view is scoped by `alt`, so a
+// Norrath -> plane trip is not drawable in one pass; rather than inventing dual-realm
+// navigation state, name the gap and offer the flip. Recomputed by syncRealmRow on every
+// render AND on every world entry, so flipping realms cannot leave the count describing the
+// realm you just left.
+function tRealmNote(){if(!TROUTE)return null;
+ let n=0,other=null;
+ for(const l of TROUTE.legs){const a=TZONES[l.from],b=TZONES[l.to];
+  const ia=a&&a.cont&&altOf(a.cont)===alt, ib=b&&b.cont&&altOf(b.cont)===alt;
+  if(ia&&ib)continue;
+  n++;const o=ia?b:a;if(o&&o.cont&&!other)other=altOf(o.cont);}
+ return (n&&other&&other!==alt)?{n:n,realm:other}:null;}
+function syncRealmRow(){const el=document.getElementById('tvRealm');if(!el)return;
+ const r=tRealmNote();
+ if(!r){el.style.display='none';el.textContent='';return;}
+ el.textContent=r.n+(r.n===1?' leg continues in ':' legs continue in ')+r.realm+' ▸';
+ el.style.display='';
+ el.onclick=()=>{alt=r.realm;enterWorld();};}
+let travelOpen=false;
+function setTravel(on){travelOpen=on;
+ if(!TRAVEL_AVAILABLE)on=travelOpen=false;
+ document.getElementById('travel').style.display=on?'':'none';
+ document.getElementById('bTravel').classList.toggle('on',on);
+ // Closing the panel takes the drawn route and its dimming with it. Dimming that outlives the
+ // panel explaining it reads as a rendering fault rather than as a planned trip.
+ if(!on){TROUTE=null;TROWS=[];syncRealmRow();draw();return;}
+ // Prefill only when From is still empty, and only on open. The panel survives level changes
+ // on purpose, so re-prefilling on every navigation would overwrite a trip in progress.
+ if(!TSEL.from&&!tInput('from').value&&level==='zone'&&TZONES[zcur])
+   tPick('from',{kind:'zone',key:zcur,name:tzName(zcur)});
+ else tRender();}
+const bTravel=document.getElementById('bTravel');
+if(TRAVEL_AVAILABLE)bTravel.onclick=()=>setTravel(!travelOpen);
+else{bTravel.classList.add('disabled');bTravel.setAttribute('aria-disabled','true');
+ bTravel.title='Travel data is missing';document.getElementById('travelUnavailable').style.display='';}
+
+// --- expansion picker ---------------------------------------------------------------------
+// Rows come from the authored list, and each button's text from the authored labels - that
+// field's only consumer. Built once at boot; only the `on` class moves after that.
+function xpacLabel(id){return (XPACS.labels&&XPACS.labels[id])||id;}
+function xpacBuildPicker(){const box=document.getElementById('xpacPick');if(!box)return;
+ box.innerHTML='';
+ for(const id of XPACS.order){const b=tEl('span','k',xpacLabel(id));
+  b.dataset.xpac=id;b.classList.toggle('on',id===xpac);
+  b.onclick=()=>setXpac(id);
+  box.appendChild(b);}}
+function setXpac(e){if(e===xpac||XPACS.order.indexOf(e)<0)return;
+ xpac=e;saveXpac();recomputeXpac();
+ document.querySelectorAll('#xpacPick .k').forEach(x=>x.classList.toggle('on',x.dataset.xpac===e));
+ worldCache=null;              // the globe caches a bitmap of whichever continents existed
+ TADJ=null;TARR=null;          // memoised once and never rebuilt otherwise, as with capabilities
+ // Hiding an item in a draw loop does NOT retract a selection made while it still existed: a
+ // selected hub keeps drawing its edit ring and stays deletable from the inspector, and a
+ // selected world link stays deletable by keyboard. Without this an author can mutate - or
+ // delete - an object the map is simultaneously saying does not exist.
+ sel=null;pendingConn=null;
+ // "You are standing in a continent that just stopped existing." Back out to the globe, which
+ // is the nearest level that can still show something true.
+ if((level==='continent'||level==='zone')&&!XPAC_CONT.has(cur))enterWorld();
+ refreshInspector();
+ // Counted within the realm being viewed, not across all of XPAC_CONT: the planes are continents
+ // too, so a global count says "8 of 11" while the Norrath globe in front of you shows 5.
+ toast(xpacLabel(e)+' — '+xpacConts(alt).length+' of '+(ALTITUDES[alt]||[]).length+' in '+alt+'.');
+ // Re-plan only when the panel is open. tRender() rebuilds TROUTE from TSEL, which survives a
+ // close, so calling it unconditionally would redraw a route under no panel explaining it.
+ if(travelOpen)tRender();else draw();}
+
+xpac=loadXpac()||XPACS.default;
+recomputeXpac();                // MUST precede the first draw: the globe iterates XPAC_CONT, and
+xpacBuildPicker();              // an empty one is every continent vanishing, not a filter
+tLoadCaps();tBuildCaps();
+// ================= EDIT MODULE (ported from Odus POC, continent-scoped) =================
+const insp=document.getElementById('insp'), toastEl=document.getElementById('toast');
+// ANCHOR_THRESH/LINK_THRESH are continent-frame units; WL_ANCHOR_THRESH is globe units, which is
+// why it looks tiny beside them. Measured over all authored world links: the worst genuine
+// attachment misses its landmass box by 0.033 and the nearest false candidate is 1.921, so 1.0
+// leaves ~30x margin one way and ~2x the other.
+const ANCHOR_THRESH=1200, LINK_THRESH=120, WL_ANCHOR_THRESH=1.0, MAXVER=40;
+function contDirJS(name){return name.replace(/ /g,'_').replace(/'/g,'');}
+function evPt(e){const dpr=devicePixelRatio;return [e.clientX*dpr,e.clientY*dpr];}
+function toast(msg){toastEl.textContent=msg;toastEl.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.style.display='none',2800);}
+function hesc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');}   // inspector innerHTML interpolation
+
+/* ---- build mutable edit-state from committed ALL/HUBS (never mutate const ALL/HUBS) ---- */
+function segAABB(segs){let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;
+ for(const s of segs){x0=Math.min(x0,s[0],s[2]);x1=Math.max(x1,s[0],s[2]);y0=Math.min(y0,s[1],s[3]);y1=Math.max(y1,s[1],s[3]);}return [x0,y0,x1,y1];}
+function bindES(cont){const e=EDIT[cont];zones=e.zones;conns=e.conns;hubs=e.hubs;zoneLinks=e.zoneLinks;delLinks=e.deletedLinks;}
+// Content hints, used to re-find a published item after an update changes the collection's
+// shape. Captured ONCE from published data at build time: dragging a connector overwrites its
+// own a/b, so recomputing the hint later would no longer match what was shipped.
+function hubRefOf(h){return h.kind+'|'+(h.label||'');}
+function connRefOf(c){const R=Math.round,a=c.a||[0,0],b=c.b||[0,0];
+ return R(a[0])+','+R(a[1])+'|'+R(b[0])+','+R(b[1]);}
+// Weld pair keys are order-independent: detectLinks emits z1/z2 in zoneOrder while
+// addManualLink writes whichever zone was selected first, so the same weld can arrive as
+// A|B or B|A. Normalize at every write AND read of a pair-keyed map.
+function weldKey(a,b){return a<b?(a+'|'+b):(b+'|'+a);}
+function buildEditState(cont){const a=ALL[cont];const zs={};
+ for(const k in a.zones){const z=a.zones[k];
+   zs[k]={name:z.name,color:z.color,segs:z.segs,cx:z.cx,cy:z.cy,aabb:segAABB(z.segs),
+     xf:z.xf?{tx:z.xf.tx||0,ty:z.xf.ty||0,s:(z.xf.s==null?1:z.xf.s),rot:z.xf.rot||0}:{tx:0,ty:0,s:1,rot:0}};}
+ const es={zones:zs,
+   conns:(a.connectors||[]).map(c=>({a:c.a?c.a.slice():[0,0],b:c.b?c.b.slice():[0,0],anchorA:null,anchorB:null,la:null,lb:null,
+     ref:connRefOf(c),touched:false,hidden:false,userAdded:false})),
+   // pidx is the PUBLISHED index, captured here alongside the content hint and for the same
+   // reason: this array is about to be spliced and appended to, and nothing else in the entry
+   // can say where it came from.
+   hubs:(HUBS[cont]||[]).map((h,i)=>({x:h.x,y:h.y,kind:h.kind,label:h.label,letter:h.letter||'',note:h.note||'',anchor:null,lx:null,ly:null,
+     ref:hubRefOf(h),pidx:i,touched:false,hidden:false,userAdded:false})),
+   labels:a.labels, zoneLinks:[], linksReady:false, pendingLinks:null,
+   deletedLinks:(a.links||[]).filter(l=>l.deleted).map(l=>({z1:l.z1,z2:l.z2}))};   // auto pairs the user removed
+ EDIT[cont]=es; bindES(cont);
+ // Welds are deliberately NOT detected here. detectLinks() samples up to 700 points per zone
+ // and compares every zone pair (Antonica's 49 zones = 1,176 pairs), and nothing on the
+ // view-mode draw path reads zoneLinks - contData() returns only {zones,conns,hubs,labels}
+ // and welds draw solely inside drawEditOverlay. ensureLinks() finishes the job when Edit
+ // actually opens, so applying a customization on plain continent view stays cheap.
+ // Anchoring, by contrast, is cheap and stays eager - and it must run BEFORE any user
+ // transform is applied, so anchors resolve against published positions (see applyContOverlay).
+ for(const c of conns){anchorConnEnd(c,'a',false);anchorConnEnd(c,'b',false);}   // auto-anchor as POC baseline
+ for(const h of hubs)anchorHub(h,false);
+ return es;}
+// Deferred second half of buildEditState. Idempotent; safe to call on every edit entry.
+function ensureLinks(cont){cont=cont||cur;const e=EDIT[cont];if(!e||e.linksReady)return;
+ bindES(cont);const a=ALL[cont];
+ detectLinks();                                   // fills zoneLinks in place (kept === es.zoneLinks)
+ for(const d of delLinks){const idx=zoneLinks.findIndex(x=>(x.z1===d.z1&&x.z2===d.z2)||(x.z1===d.z2&&x.z2===d.z1));if(idx>=0)zoneLinks.splice(idx,1);}   // drop deleted auto pairs
+ const seed={};for(const l of (a.links||[])){if(l.deleted)continue;seed[weldKey(l.z1,l.z2)]=l.locked;}   // N4: honor published lock state
+ for(const L of zoneLinks){const k=weldKey(L.z1,L.z2);if(k in seed)L.locked=seed[k];}
+ for(const l of (a.links||[])){ if(!l.manual||l.deleted)continue;   // re-create manual links (detector can't find them: gap > LINK_THRESH)
+   const ex=zoneLinks.find(x=>(x.z1===l.z1&&x.z2===l.z2)||(x.z1===l.z2&&x.z2===l.z1));
+   if(ex){ex.manual=true;continue;}   // geometry may have drifted the pair inside LINK_THRESH since it was declared manual; keep the declaration so it round-trips
+   if(zones[l.z1]&&zones[l.z2]){const w=weldPoints(l.z1,l.z2);
+     zoneLinks.push({z1:l.z1,z2:l.z2,p1:w.p1,p2:w.p2,locked:l.locked!==false,manual:true});}}
+ e.linksReady=true;
+ if(e.pendingLinks){applyLinkOverlay(e.pendingLinks);e.pendingLinks=null;}}
+
+/* ---- auto-anchoring ---- */
+function distSegW2(px,py,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
+ let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+ const qx=ax+t*dx,qy=ay+t*dy;return (px-qx)*(px-qx)+(py-qy)*(py-qy);}
+function distToZone(z,px,py){let m=1e18;
+ for(const s of z.segs){const a=tPoint(z,s[0],s[1]),b=tPoint(z,s[2],s[3]);
+  const d=distSegW2(px,py,a[0],a[1],b[0],b[1]);if(d<m)m=d;}return Math.sqrt(m);}
+function nearestZoneForPoint(px,py){let best=null,bd=1e18;
+ for(const k in zones){const d=distToZone(zones[k],px,py);if(d<bd){bd=d;best=k;}}return {key:best,dist:bd};}
+function anchorConnEnd(c,which,force){const P=ep(c,which);const n=nearestZoneForPoint(P[0],P[1]);
+ if(n.key&&(force||n.dist<=ANCHOR_THRESH)){const loc=tInv(zones[n.key],P[0],P[1]);
+   if(which==='a'){c.anchorA=n.key;c.la=loc;}else{c.anchorB=n.key;c.lb=loc;}return true;}
+ return false;}
+function anchorHub(h,force){const P=hubPos(h);const n=nearestZoneForPoint(P[0],P[1]);
+ if(n.key&&(force||n.dist<=ANCHOR_THRESH)){const loc=tInv(zones[n.key],P[0],P[1]);
+   h.anchor=n.key;h.lx=loc[0];h.ly=loc[1];h.x=Math.round(P[0]);h.y=Math.round(P[1]);return true;}
+ return false;}
+// The world-level pair. Candidates are the realm's landmasses, matching wlOwner - and the list is
+// deliberately expansion-INDEPENDENT: WEDIT is built once and the selection can change afterwards
+// without rebuilding it, so a scoped candidate list would leave stale anchors behind.
+function nearestContForPoint(p,a){const cands=(a&&ALTITUDES[a])||names;
+ let best=null,bd=Infinity;
+ for(const c of cands){const d=wlBoxDist(c,p,metaPos(c));if(d<bd){bd=d;best=c;}}
+ return {cont:best,dist:bd};}
+function anchorWlEnd(l,which,force){const P=wlPt(l,which);const n=nearestContForPoint(P,l.alt);
+ if(n.cont&&(force||n.dist<=WL_ANCHOR_THRESH)){const q=metaPos(n.cont),loc=[P[0]-q[0],P[1]-q[1]];
+   if(which==='a'){l.anchorA=n.cont;l.la=loc;}else{l.anchorB=n.cont;l.lb=loc;}return true;}
+ return false;}
+
+/* ---- zone-to-zone physical links ---- */
+function detectLinks(){const keys=Object.keys(zones),V={};
+ for(const k of keys){const pts=[];for(const s of zones[k].segs){pts.push([s[0],s[1]]);pts.push([s[2],s[3]]);}
+   let a=pts;if(a.length>700){const b=[],step=a.length/700;for(let i=0;i<700;i++)b.push(a[Math.floor(i*step)]);a=b;}V[k]=a;}
+ zoneLinks.length=0;                              // clear in place -> preserve EDIT[cont].zoneLinks reference (N2)
+ for(let i=0;i<keys.length;i++)for(let j=i+1;j<keys.length;j++){
+   const A=V[keys[i]],B=V[keys[j]];let md=1e18,pa=null,pb=null;
+   for(const p of A)for(const q of B){const d=(p[0]-q[0])*(p[0]-q[0])+(p[1]-q[1])*(p[1]-q[1]);if(d<md){md=d;pa=p;pb=q;}}
+   if(Math.sqrt(md)<=LINK_THRESH)zoneLinks.push({z1:keys[i],z2:keys[j],p1:pa.slice(),p2:pb.slice(),locked:true});}}
+function linkedGroup(k){const seen=new Set([k]),stack=[k];
+ while(stack.length){const cur=stack.pop();
+  for(const l of zoneLinks){if(!l.locked)continue;let o=l.z1===cur?l.z2:(l.z2===cur?l.z1:null);
+    if(o&&!seen.has(o)){seen.add(o);stack.push(o);}}}
+ return [...seen];}
+function linkWeld(L){const a=tPoint(zones[L.z1],L.p1[0],L.p1[1]),b=tPoint(zones[L.z2],L.p2[0],L.p2[1]);
+ return {a,b,mx:(a[0]+b[0])/2,my:(a[1]+b[1])/2};}
+function pickLink(mx,my){for(const s of linkScreens){const dx=mx-s.X,dy=my-s.Y,r=s.r+4*devicePixelRatio;
+  if(dx*dx+dy*dy<=r*r)return s.i;}return null;}
+// nearest-approach points between two zones' (transformed) outlines, returned in each zone's LOCAL frame
+// Closest approach between two zone outlines: the pair of points, one per zone, that come
+// nearest each other. Distance is measured TRANSFORMED (a moved zone really is nearer or
+// further) while the returned points are LOCAL, because that is what survives a later move.
+// `samples` caps the O(n*m) scan; the welder wants precision, the route drawer wants speed.
+function nearestOutlinePair(z1,z2,samples){
+ const samp=z=>{const p=[];for(const s of z.segs){p.push([s[0],s[1]]);p.push([s[2],s[3]]);}
+   if(p.length>samples){const b=[],st=p.length/samples;
+     for(let i=0;i<samples;i++)b.push(p[Math.floor(i*st)]);return b;}return p;};
+ const A=samp(z1),B=samp(z2),TB=B.map(q=>tPoint(z2,q[0],q[1]));
+ let md=1e18,pa=A[0]||[0,0],pb=B[0]||[0,0];
+ for(const p of A){const tp=tPoint(z1,p[0],p[1]);
+   for(let j=0;j<TB.length;j++){const tq=TB[j],d=(tp[0]-tq[0])*(tp[0]-tq[0])+(tp[1]-tq[1])*(tp[1]-tq[1]);
+     if(d<md){md=d;pa=p;pb=B[j];}}}
+ return {p1:pa.slice(),p2:pb.slice()};}
+function weldPoints(k1,k2){return nearestOutlinePair(zones[k1],zones[k2],700);}
+// The point of z's outline nearest a given TRANSFORMED point, returned in z's local coords. Used
+// when only one side of a zone line names its exit: the other end is pinned to that real doorway
+// rather than to wherever the two bounding boxes happen to face each other.
+function nearestOutlinePointTo(z,X,Y){let md=1e18,best=[z.cx,z.cy];
+ for(const s of z.segs){
+  for(const p of [[s[0],s[1]],[s[2],s[3]]]){const t=tPoint(z,p[0],p[1]);
+   const d=(t[0]-X)*(t[0]-X)+(t[1]-Y)*(t[1]-Y);
+   if(d<md){md=d;best=p;}}}
+ return best.slice();}
+// manually link two zones regardless of distance (the detector only finds pairs within LINK_THRESH)
+function addManualLink(k1,k2){if(!k1||!k2||k1===k2||!zones[k1]||!zones[k2])return;
+ for(let i=delLinks.length-1;i>=0;i--){const d=delLinks[i];if((d.z1===k1&&d.z2===k2)||(d.z1===k2&&d.z2===k1))delLinks.splice(i,1);}   // un-delete if it was removed
+ for(const l of zoneLinks){if((l.z1===k1&&l.z2===k2)||(l.z1===k2&&l.z2===k1)){l.locked=true;
+   toast(zones[k1].name+' & '+zones[k2].name+' already linked (locked).');refreshInspector();draw();return;}}
+ const w=weldPoints(k1,k2);
+ zoneLinks.push({z1:k1,z2:k2,p1:w.p1,p2:w.p2,locked:true,manual:true});
+ toast('Linked '+zones[k1].name+' ⇄ '+zones[k2].name+'.');refreshInspector();draw();}
+/*__AUTHOR__*/// remove a link entirely: manual ones just vanish; auto ones get a persisted deleted-marker so the detector won't re-add them
+function deleteLink(i){const L=zoneLinks[i];if(!L)return;
+ zoneLinks.splice(i,1);
+ if(!L.manual)delLinks.push({z1:L.z1,z2:L.z2});
+ toast('Removed link '+zones[L.z1].name+' ⇄ '+zones[L.z2].name+'.');refreshInspector();draw();}
+/*__END_AUTHOR__*/
+
+/* ---- edit overlay (drawn atop drawCont only when editMode) ---- */
+function drawEditOverlay(dpr,hr){
+ ctx.lineWidth=1.4*dpr;
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;
+  const A=ep(c,'a'),B=ep(c,'b'),strong=sel&&sel.type==='conn'&&sel.id===i;
+  drawEndpoint(wx(A[0]),wy(A[1]),c.anchorA,strong);drawEndpoint(wx(B[0]),wy(B[1]),c.anchorB,strong);}
+ if(sel&&sel.type==='zone'&&zones[sel.id])drawZoneGizmo(zones[sel.id]);
+ if(sel&&sel.type==='hub'&&hubs[sel.id]){const h=hubs[sel.id],P=hubPos(h);
+  ctx.strokeStyle=h.anchor?'#66d68f':'#ffd24a';ctx.lineWidth=2*dpr;ctx.beginPath();ctx.arc(wx(P[0]),wy(P[1]),hr+9*dpr,0,7);ctx.stroke();}
+ if(pendingConn){const X=wx(pendingConn[0]),Y=wy(pendingConn[1]);
+  ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(X,Y,5*dpr,0,7);ctx.fill();}
+ linkScreens=[];
+ for(let i=0;i<zoneLinks.length;i++){const L=zoneLinks[i];if(!zones[L.z1]||!zones[L.z2])continue;
+  const w=linkWeld(L);const ax=wx(w.a[0]),ay=wy(w.a[1]),bx=wx(w.b[0]),by=wy(w.b[1]);
+  ctx.save();ctx.lineWidth=1.3*dpr;
+  if(L.locked){ctx.strokeStyle='rgba(102,214,143,.55)';ctx.setLineDash([]);}
+  else{ctx.strokeStyle='rgba(160,180,200,.35)';ctx.setLineDash([3*dpr,4*dpr]);}
+  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();ctx.restore();
+  const X=(ax+bx)/2,Y=(ay+by)/2;drawLock(X,Y,L.locked,hoverLink===i);
+  linkScreens.push({X,Y,r:12*dpr,i});}}
+function drawLock(X,Y,locked,hot){const dpr=devicePixelRatio,w=10*dpr,h=8*dpr;
+ ctx.beginPath();ctx.arc(X,Y,13*dpr,0,7);ctx.fillStyle='rgba(8,12,20,.82)';ctx.fill();
+ if(hot){ctx.strokeStyle='#fff';ctx.lineWidth=1.6*dpr;ctx.beginPath();ctx.arc(X,Y,13*dpr,0,7);ctx.stroke();}
+ const col=locked?'#66d68f':'#ffd24a';ctx.strokeStyle=col;ctx.lineWidth=2*dpr;const bodyTop=Y-h*0.10;
+ ctx.beginPath();
+ if(locked)ctx.arc(X,bodyTop-1*dpr,w*0.34,Math.PI,2*Math.PI);
+ else ctx.arc(X-w*0.34,bodyTop-1*dpr,w*0.34,Math.PI,2*Math.PI-0.9);
+ ctx.stroke();
+ ctx.fillStyle=col;ctx.fillRect(X-w/2,bodyTop,w,h);
+ ctx.fillStyle='#0b1018';ctx.beginPath();ctx.arc(X,bodyTop+h*0.5,1.6*dpr,0,7);ctx.fill();}
+function drawEndpoint(X,Y,anchored,strong){const dpr=devicePixelRatio,s=(strong?5.5:4)*dpr;
+ ctx.beginPath();ctx.rect(X-s,Y-s,2*s,2*s);
+ ctx.fillStyle=anchored?'#66d68f':'#ffd24a';ctx.globalAlpha=strong?1:0.85;ctx.fill();
+ ctx.globalAlpha=1;ctx.strokeStyle='#0b1018';ctx.lineWidth=1.2*dpr;ctx.stroke();}
+function zoneBoxCorners(z){const [x0,y0,x1,y1]=z.aabb;
+ return [tPoint(z,x0,y0),tPoint(z,x1,y0),tPoint(z,x1,y1),tPoint(z,x0,y1)];}
+function zoneHandlePts(z){const [x0,y0,x1,y1]=z.aabb;
+ return {scaleP:tPoint(z,x1,y1),rotP:tPoint(z,(x0+x1)/2, y1+(y1-y0)*0.16)};}
+function drawZoneGizmo(z){const dpr=devicePixelRatio;const c=zoneBoxCorners(z);
+ ctx.strokeStyle='#ffd24a';ctx.lineWidth=1.4*dpr;ctx.setLineDash([5*dpr,4*dpr]);
+ ctx.beginPath();ctx.moveTo(wx(c[0][0]),wy(c[0][1]));
+ for(let i=1;i<4;i++)ctx.lineTo(wx(c[i][0]),wy(c[i][1]));ctx.closePath();ctx.stroke();ctx.setLineDash([]);
+ const {scaleP,rotP}=zoneHandlePts(z),cc=zoneCentroid(z);
+ dot(wx(cc[0]),wy(cc[1]),4.5*dpr,'#ffd24a');
+ const sx=wx(scaleP[0]),sy=wy(scaleP[1]),hs=5*dpr;
+ ctx.fillStyle='#7fb0e6';ctx.beginPath();ctx.rect(sx-hs,sy-hs,2*hs,2*hs);ctx.fill();
+ ctx.strokeStyle='#0b1018';ctx.lineWidth=1.2*dpr;ctx.stroke();
+ const rxp=wx(rotP[0]),ryp=wy(rotP[1]);
+ ctx.strokeStyle='#ffd24a';ctx.lineWidth=1.2*dpr;ctx.beginPath();ctx.moveTo(wx(cc[0]),wy(cc[1]));ctx.lineTo(rxp,ryp);ctx.stroke();
+ dot(rxp,ryp,5*dpr,'#66d68f');}
+function dot(X,Y,r,fill){ctx.beginPath();ctx.arc(X,Y,r,0,7);ctx.fillStyle=fill;ctx.fill();
+ ctx.strokeStyle='#0b1018';ctx.lineWidth=1.2*devicePixelRatio;ctx.stroke();}
+
+/* ---- picking (edit) ---- */
+function pickZone(worldx,worldy){let best=null,ba=1e18;
+ for(const k in zones){const z=zones[k];const inv=tInv(z,worldx,worldy);const [x0,y0,x1,y1]=z.aabb;
+  if(inv[0]>=x0&&inv[0]<=x1&&inv[1]>=y0&&inv[1]<=y1){const a=(x1-x0)*(y1-y0);if(a<ba){ba=a;best=k;}}}
+ return best;}
+function pickHubAt(mx,my){for(const s of hubScreens){const dx=mx-s.X,dy=my-s.Y,rr=(s.r+6*devicePixelRatio);
+  if(dx*dx+dy*dy<=rr*rr)return s.i;}return null;}
+function distSegPx(mx,my,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
+ let t=l2?((mx-ax)*dx+(my-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+ return Math.hypot(mx-(ax+t*dx),my-(ay+t*dy));}
+// Connectors are iterated directly rather than through a screen-space cache, so each of these
+// needs its own hidden guard (unlike hubs, where the single hubScreens skip covers everything).
+function pickConnEndpoint(mx,my){const R=9*devicePixelRatio;
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;const A=ep(c,'a'),B=ep(c,'b');
+  if(Math.hypot(mx-wx(A[0]),my-wy(A[1]))<=R)return {i,which:'a'};
+  if(Math.hypot(mx-wx(B[0]),my-wy(B[1]))<=R)return {i,which:'b'};}
+ return null;}
+function pickConnBody(mx,my){const R=7*devicePixelRatio;
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;const A=ep(c,'a'),B=ep(c,'b');
+  if(distSegPx(mx,my,wx(A[0]),wy(A[1]),wx(B[0]),wy(B[1]))<=R)return i;}
+ return null;}
+
+/* ---- interaction (invoked from the shared handlers only when editMode && continent) ---- */
+function editMouseDown(e){
+ if(level==='universe')return uniMouseDown(e);
+ if(level==='world')return worldMouseDown(e);
+ const [mx,my]=evPt(e);
+ if(tool==='hub'){const wxp=iwx(mx),wyp=iwy(my);
+   const nh={x:Math.round(wxp),y:Math.round(wyp),kind:newHubKind,
+     label:(newHubKind[0].toUpperCase()+newHubKind.slice(1))+' — (new)',letter:hubHasLetter(newHubKind)?'?':'',note:'',anchor:null,lx:null,ly:null,
+     ref:'',pidx:null,touched:true,hidden:false,userAdded:true};   // pidx null: nothing published to inherit
+   nh.ref=hubRefOf(nh);
+   hubs.push(nh);if(autoAnchor)anchorHub(nh,false);
+   sel={type:'hub',id:hubs.length-1};setTool('select');refreshInspector();draw();return;}
+ if(tool==='conn'){const wxp=iwx(mx),wyp=iwy(my);
+   if(!pendingConn){pendingConn=[Math.round(wxp),Math.round(wyp)];draw();return;}
+   const nc={a:pendingConn.slice(),b:[Math.round(wxp),Math.round(wyp)],anchorA:null,anchorB:null,la:null,lb:null,
+     ref:'',touched:true,hidden:false,userAdded:true};
+   nc.ref=connRefOf(nc);
+   conns.push(nc);if(autoAnchor){anchorConnEnd(nc,'a',false);anchorConnEnd(nc,'b',false);}
+   pendingConn=null;sel={type:'conn',id:conns.length-1};setTool('select');refreshInspector();draw();return;}
+ const li=pickLink(mx,my);
+ if(li!==null){zoneLinks[li].locked=!zoneLinks[li].locked;
+   toast((zoneLinks[li].locked?'🔒 Linked: ':'🔓 Unlinked: ')+zones[zoneLinks[li].z1].name+' ⇄ '+zones[zoneLinks[li].z2].name);
+   draw();return;}
+ if(sel&&sel.type==='zone'&&zones[sel.id]){const z=zones[sel.id];const {scaleP,rotP}=zoneHandlePts(z);
+   const cc=zoneCentroid(z);const R=11*devicePixelRatio;
+   if(Math.hypot(mx-wx(rotP[0]),my-wy(rotP[1]))<=R){
+     drag={mode:'zrot',key:sel.id,startRot:z.xf.rot,startAng:Math.atan2(iwy(my)-cc[1],iwx(mx)-cc[0]),moved:false};return;}
+   if(Math.hypot(mx-wx(scaleP[0]),my-wy(scaleP[1]))<=R){
+     drag={mode:'zscale',key:sel.id,startS:z.xf.s,d0:(Math.hypot(iwx(mx)-cc[0],iwy(my)-cc[1])||1),moved:false};return;}}
+ const pe=pickConnEndpoint(mx,my);
+ if(pe){if(conns[pe.i].hidden)return restoreItem('conn',pe.i);   // ghost visible via Show hidden: click restores
+   sel={type:'conn',id:pe.i};drag={mode:'cend',i:pe.i,which:pe.which,moved:false};refreshInspector();return;}
+ const hi=pickHubAt(mx,my);
+ if(hi!==null){if(hubs[hi].hidden)return restoreItem('hub',hi);
+   sel={type:'hub',id:hi};const P=hubPos(hubs[hi]);
+   drag={mode:'hub',i:hi,ox:P[0]-iwx(mx),oy:P[1]-iwy(my),anchorCleared:false,moved:false};   // N8: defer unanchor to first move
+   refreshInspector();return;}
+ const cb=pickConnBody(mx,my);
+ if(cb!==null){if(conns[cb].hidden)return restoreItem('conn',cb);
+   sel={type:'conn',id:cb};const c=conns[cb];const A=ep(c,'a'),B=ep(c,'b');
+   drag={mode:'cbody',i:cb,mwx:iwx(mx),mwy:iwy(my),A0:A.slice(),B0:B.slice(),moved:false};refreshInspector();return;}
+ const zk=pickZone(iwx(mx),iwy(my));
+ if(zk){sel={type:'zone',id:zk};const grp=linkedGroup(zk);const base={};
+   for(const g of grp)base[g]={tx:zones[g].xf.tx,ty:zones[g].xf.ty};
+   drag={mode:'zmove',key:zk,grp,base,mwx:iwx(mx),mwy:iwy(my),moved:false};refreshInspector();return;}
+ sel=null;refreshInspector();
+ drag={mode:'pan',sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y,moved:false};cv.classList.add('drag');}
+function editMouseMove(e){
+ if(level==='universe')return uniMouseMove(e);
+ if(level==='world')return worldMouseMove(e);
+ const [mx,my]=evPt(e);
+ if(drag){drag.moved=true;const dpr=devicePixelRatio;
+  if(drag.mode==='pan'){view.x=drag.vx+(e.clientX-drag.sx)*dpr;view.y=drag.vy+(e.clientY-drag.sy)*dpr;draw();return;}
+  if(drag.mode==='zmove'){const ddx=iwx(mx)-drag.mwx,ddy=iwy(my)-drag.mwy;
+    for(const g of drag.grp){zones[g].xf.tx=drag.base[g].tx+ddx;zones[g].xf.ty=drag.base[g].ty+ddy;}draw();return;}
+  if(drag.mode==='zscale'){const z=zones[drag.key];const cc=zoneCentroid(z);
+    z.xf.s=Math.max(0.15,Math.min(6,drag.startS*Math.hypot(iwx(mx)-cc[0],iwy(my)-cc[1])/drag.d0));refreshInspector();draw();return;}
+  if(drag.mode==='zrot'){const z=zones[drag.key];const cc=zoneCentroid(z);
+    z.xf.rot=drag.startRot+(Math.atan2(iwy(my)-cc[1],iwx(mx)-cc[0])-drag.startAng);refreshInspector();draw();return;}
+  if(drag.mode==='cend'){const c=conns[drag.i];const P=[Math.round(iwx(mx)),Math.round(iwy(my))];
+    if(drag.which==='a'){c.a=P;c.anchorA=null;c.la=null;}else{c.b=P;c.anchorB=null;c.lb=null;}refreshInspector();draw();return;}
+  if(drag.mode==='cbody'){const c=conns[drag.i];const ddx=iwx(mx)-drag.mwx,ddy=iwy(my)-drag.mwy;
+    c.a=[Math.round(drag.A0[0]+ddx),Math.round(drag.A0[1]+ddy)];c.b=[Math.round(drag.B0[0]+ddx),Math.round(drag.B0[1]+ddy)];
+    c.anchorA=null;c.anchorB=null;c.la=null;c.lb=null;draw();return;}
+  if(drag.mode==='hub'){const h=hubs[drag.i];
+    if(!drag.anchorCleared){h.anchor=null;h.lx=null;h.ly=null;drag.anchorCleared=true;}
+    h.x=Math.round(iwx(mx)+drag.ox);h.y=Math.round(iwy(my)+drag.oy);draw();return;}
+  return;}
+ if(tool==='select'){const li=pickLink(mx,my);
+   if(li!==hoverLink){hoverLink=li;draw();}
+   if(li!==null){const L=zoneLinks[li];showTip(e,(L.locked?'🔒 Linked — click to unlink: ':'🔓 Click to link: ')+zones[L.z1].name+' ⇄ '+zones[L.z2].name);return;}
+   const zk=pickZone(iwx(mx),iwy(my));
+   if(zk!==hoverZone){hoverZone=zk;draw();}
+   const hb=pickHubAt(mx,my);
+   if(hb!==null)showTip(e,hubs[hb].hidden?'Hidden — click to restore.':(hubs[hb].label+(hubs[hb].note?'\n'+hubs[hb].note:'')));
+   else{const cbh=pickConnBody(mx,my);
+     if(cbh!==null&&conns[cbh].hidden)showTip(e,'Hidden connector — click to restore.');
+     else if(zk)showTip(e,zones[zk].name);else tip.style.display='none';}}
+ else if(tool==='hub')showTip(e,'Click to place a '+newHubKind);
+ else if(tool==='conn')showTip(e,pendingConn?'Click for connector END point':'Click for connector START point');
+ else tip.style.display='none';}
+function editMouseUp(e){
+ if(level==='universe')return uniMouseUp(e);
+ if(level==='world')return worldMouseUp(e);
+ if(drag){
+  if(drag.mode==='pan')cv.classList.remove('drag');
+  // Gated on drag.moved as well: a bare click must not re-anchor an end the user deliberately
+  // freed. The hub branch already had that guard through anchorCleared, so this was an omission
+  // on cend/cbody rather than new behaviour; anchorCleared implies moved and is now redundant.
+  if(autoAnchor&&drag.moved){
+   if(drag.mode==='cend')anchorConnEnd(conns[drag.i],drag.which,false);
+   else if(drag.mode==='cbody'){anchorConnEnd(conns[drag.i],'a',false);anchorConnEnd(conns[drag.i],'b',false);}
+   else if(drag.mode==='hub'&&drag.anchorCleared)anchorHub(hubs[drag.i],false);}
+  // Hubs and connectors are index-keyed, so the overlay records them by a `touched` flag rather
+  // than by comparing against published values. Gate on drag.moved: a bare click selects an
+  // item without changing it, and must not make it show up in the customization.
+  if(drag.moved){
+   if(drag.mode==='hub'&&hubs[drag.i])hubs[drag.i].touched=true;
+   else if((drag.mode==='cend'||drag.mode==='cbody')&&conns[drag.i])conns[drag.i].touched=true;
+   else if(drag.mode==='zmove')for(const g of drag.grp)unseed(g);
+   else if(drag.mode==='zscale'||drag.mode==='zrot')unseed(drag.key);}
+  if(drag.mode==='cend'||drag.mode==='cbody'||drag.mode==='hub'){refreshInspector();draw();}}
+ drag=null;}
+
+/* ---- hide / restore ----
+   Published items HIDE (reversibly, recorded as a ref list in the overlay); items the user
+   added themselves DELETE outright. That split follows the shipped precedent in deleteLink:
+   manual links just vanish, auto ones get a persisted deleted-marker so the detector will not
+   re-add them. Hiding has no meaning in the author edition - the durable per-continent file
+   cannot express it - so canHide() is paired and the author keeps today's Delete. */
+/*__AUTHOR__*/function canHide(){return false;}/*__END_AUTHOR__*/
+/*__USER__*/function canHide(){return true;}/*__END_USER__*/
+function hideItem(kind,i){const arr=(kind==='hub')?hubs:conns;if(!arr[i])return;
+ arr[i].hidden=true;sel=null;
+ toast('Hidden. Restore it from “Hidden items”, or tick Show hidden and click it.');
+ refreshHiddenUI();refreshInspector();draw();}
+function restoreItem(kind,i){const arr=(kind==='hub')?hubs:conns;
+ if(arr[i]){arr[i].hidden=false;toast('Restored.');}
+ refreshHiddenUI();refreshInspector();draw();}
+function restoreAllHidden(){let n=0;
+ for(const h of hubs)if(h.hidden){h.hidden=false;n++;}
+ for(const c of conns)if(c.hidden){c.hidden=false;n++;}
+ toast(n?('Restored '+n+' item'+(n>1?'s':'')+'.'):'Nothing was hidden.');
+ refreshHiddenUI();refreshInspector();draw();}
+function hiddenItems(){const e=EDIT[cur];if(!e)return [];const out=[];
+ for(let i=0;i<e.hubs.length;i++)if(e.hubs[i].hidden)out.push({kind:'hub',i:i,label:(e.hubs[i].label||e.hubs[i].kind)});
+ for(let i=0;i<e.conns.length;i++)if(e.conns[i].hidden)out.push({kind:'conn',i:i,label:'Connector #'+(i+1)});
+ return out;}
+// Feature-detects its own container, so this is a no-op in the author edition rather than
+// needing a marker around every call site.
+function refreshHiddenUI(){const blk=document.getElementById('hiddenBlock');if(!blk)return;
+ const on=editMode&&level==='continent'&&!!EDIT[cur];
+ blk.style.display=on?'':'none';
+ if(!on)return;
+ const items=hiddenItems();
+ const badge=document.getElementById('bHiddenList');
+ badge.textContent=items.length+' hidden';badge.classList.toggle('on',items.length>0);
+ const sh=document.getElementById('bShowHidden');
+ sh.innerHTML='&#128065; Show hidden: '+(showHidden?'on':'off');sh.classList.toggle('on',showHidden);
+ const list=document.getElementById('hiddenList');
+ if(list.style.display==='none')return;       // badge stays current even while the list is closed
+ if(!items.length){list.innerHTML='<div class="hint">Nothing hidden on this continent.</div>';return;}
+ let h='';
+ for(const it of items)h+=`<div class="row"><span class="val" style="min-width:auto;text-align:left;flex:1">${hesc(it.label)}</span><span class="btn restorebtn" data-kind="${it.kind}" data-i="${it.i}">Restore</span></div>`;
+ h+='<div class="row"><span class="btn go" id="bRestoreAll">Restore all</span></div>';
+ list.innerHTML=h;
+ list.querySelectorAll('.restorebtn').forEach(b=>b.onclick=()=>restoreItem(b.dataset.kind,+b.dataset.i));
+ const ra=list.querySelector('#bRestoreAll');if(ra)ra.onclick=restoreAllHidden;}
+
+/* ---- inspector ---- */
+// Paired by edition. Users lock/unlock and snap welds but never delete one: deletion persists a
+// {z1,z2,deleted:true} marker, which is authoring machinery. So the ✕ exists only in the author build.
+/*__AUTHOR__*/function delLinkBtn(i){return `<span class="btn warn dellink" data-link="${i}" title="Remove this link entirely">✕</span>`;}/*__END_AUTHOR__*/
+/*__USER__*/function delLinkBtn(i){return '';}/*__END_USER__*/
+// Paired by edition. Canonical hub text is either present as shipped or hidden, never silently
+// rewritten - so users edit only hubs they added themselves. The author edits every hub.
+/*__AUTHOR__*/function canEditHubContent(h){return true;}/*__END_AUTHOR__*/
+/*__USER__*/function canEditHubContent(h){return !!h.userAdded;}/*__END_USER__*/
+function linkRowsFor(zk){const rel=zoneLinks.map((l,i)=>({l,i})).filter(o=>o.l.z1===zk||o.l.z2===zk);
+ if(!rel.length)return '<div class="hint">No physically-adjacent zones.</div>';
+ let h='<div class="lbl">Physical links</div>';
+ for(const o of rel){const other=o.l.z1===zk?o.l.z2:o.l.z1;
+   h+=`<div class="row"><label>${o.l.locked?'🔒':'🔓'}</label><span class="btn linkbtn ${o.l.locked?'on':''}" data-link="${o.i}">${o.l.locked?'Linked':'Link'} · ${zones[other].name}</span><span class="btn snapbtn" data-link="${o.i}" title="Move this zone so the join lines back up">⇲ Snap</span>${delLinkBtn(o.i)}</div>`;}
+ return h;}
+function snapLink(i,moveKey){const L=zoneLinks[i];if(!zones[L.z1]||!zones[L.z2])return;
+ const fixed=(L.z1===moveKey)?L.z2:L.z1, zm=zones[moveKey], zf=zones[fixed];
+ const pm=(L.z1===moveKey)?L.p1:L.p2, pf=(L.z1===moveKey)?L.p2:L.p1;
+ const wm=tPoint(zm,pm[0],pm[1]), wf=tPoint(zf,pf[0],pf[1]);
+ zm.xf.tx+=wf[0]-wm[0]; zm.xf.ty+=wf[1]-wm[1];
+ unseed(moveKey);
+ toast('Snapped '+zm.name+' back to '+zf.name+'.');refreshInspector();draw();}
+function refreshInspector(){
+ const body=document.getElementById('inspBody');
+ if(!editMode){insp.style.display='none';return;}
+ insp.style.display='block';   // explicit block (never clear inline style — the #insp{display:none} cascade bug)
+ if(!sel){body.innerHTML='<div class="hint">Click a zone, connector, or hub on the map to edit it here. Click a 🔒 padlock to lock/unlock joined zones.</div>';return;}
+ if(sel.type==='zone'){const z=zones[sel.id];
+  const linkedSet=new Set();for(const l of zoneLinks){if(l.z1===sel.id)linkedSet.add(l.z2);else if(l.z2===sel.id)linkedSet.add(l.z1);}
+  const linkOpts=Object.keys(zones).filter(k=>k!==sel.id&&!linkedSet.has(k))
+    .sort((a,b)=>zones[a].name.localeCompare(zones[b].name))
+    .map(k=>`<option value="${k}">${zones[k].name}</option>`).join('');
+  body.innerHTML=`<h2>Zone · ${z.name}</h2>
+   <div class="hint">Drag box = move · blue corner = scale · green knob = rotate.</div>
+   <div class="row"><label>Scale</label><input type="range" id="rScale" min="0.15" max="4" step="0.01" value="${z.xf.s}"><span class="val" id="vScale">${z.xf.s.toFixed(2)}×</span></div>
+   <div class="row"><label>Rotate</label><input type="range" id="rRot" min="-180" max="180" step="1" value="${(z.xf.rot*180/Math.PI).toFixed(0)}"><span class="val" id="vRot">${(z.xf.rot*180/Math.PI).toFixed(0)}°</span></div>
+   <div class="row"><label>Offset</label><span class="val" style="min-width:auto">${Math.round(z.xf.tx)}, ${Math.round(z.xf.ty)}</span></div>
+   ${linkRowsFor(sel.id)}
+   <div class="row"><label>+ Link</label><select id="addLinkSel"><option value="">Link to zone…</option>${linkOpts}</select></div>
+   <div class="row"><span class="btn" id="bZoneReset">Reset this zone</span></div>`;
+  body.querySelector('#rScale').oninput=ev=>{z.xf.s=+ev.target.value;unseed(sel.id);body.querySelector('#vScale').textContent=z.xf.s.toFixed(2)+'×';draw();};
+  body.querySelector('#rRot').oninput=ev=>{z.xf.rot=(+ev.target.value)*Math.PI/180;unseed(sel.id);body.querySelector('#vRot').textContent=(+ev.target.value)+'°';draw();};
+  body.querySelector('#bZoneReset').onclick=()=>{z.xf={tx:0,ty:0,s:1,rot:0};unseed(sel.id);refreshInspector();draw();};
+  body.querySelectorAll('.linkbtn').forEach(b=>b.onclick=()=>{zoneLinks[+b.dataset.link].locked=!zoneLinks[+b.dataset.link].locked;refreshInspector();draw();});
+  body.querySelectorAll('.snapbtn').forEach(b=>b.onclick=()=>{snapLink(+b.dataset.link,sel.id);});
+  /*__AUTHOR__*/body.querySelectorAll('.dellink').forEach(b=>b.onclick=()=>{deleteLink(+b.dataset.link);});/*__END_AUTHOR__*/
+  const als=body.querySelector('#addLinkSel');if(als)als.onchange=ev=>{if(ev.target.value)addManualLink(sel.id,ev.target.value);};
+ } else if(sel.type==='conn'){const c=conns[sel.id];
+  body.innerHTML=`<h2>Connector #${sel.id+1}</h2>
+   <div class="hint">Ends auto-anchor to the nearest zone, so the line stretches/retracts as zones move. Drag a square handle onto another zone to re-anchor it, or use the buttons to bind/free each end.</div>
+   <div class="row"><label>End A</label><span class="btn" id="bAncA">${(c.anchorA&&zones[c.anchorA])?('⚓ '+zones[c.anchorA].name):'Anchor to nearest'}</span></div>
+   <div class="row"><label>End B</label><span class="btn" id="bAncB">${(c.anchorB&&zones[c.anchorB])?('⚓ '+zones[c.anchorB].name):'Anchor to nearest'}</span></div>
+   <div class="row">${(canHide()&&!c.userAdded)?'<span class="btn warn" id="bConnHide">Hide this connector</span>':'<span class="btn warn" id="bConnDel">Delete connector</span>'}</div>`;
+  body.querySelector('#bAncA').onclick=()=>toggleAnchor(sel.id,'a');
+  body.querySelector('#bAncB').onclick=()=>toggleAnchor(sel.id,'b');
+  const cdel=body.querySelector('#bConnDel');
+  if(cdel)cdel.onclick=()=>{conns.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  const chide=body.querySelector('#bConnHide');
+  if(chide)chide.onclick=()=>hideItem('conn',sel.id);
+ } else if(sel.type==='hub'){const h=hubs[sel.id];
+  // Content rows render only when this hub's text is editable (canEditHubContent, paired by
+  // edition). When it is not, show the same facts read-only so the selection is still legible.
+  const editable=canEditHubContent(h);
+  const contentRows=editable?`
+   <div class="row"><label>Type</label><select id="hKind">
+     <option value="boat">boat</option><option value="spire">spire</option>
+     <option value="ring">ring</option><option value="portal">portal</option>
+     <option value="teleport">teleport</option></select></div>
+   <div class="row" id="letterRow" style="${hubHasLetter(h.kind)?'':'display:none'}"><label>Letter</label><input type="text" id="hLetter" maxlength="2" value="${h.letter||''}"></div>
+   <div class="row"><label>Label</label><input type="text" id="hLabel" value="${(h.label||'').replace(/"/g,'&quot;')}"></div>
+   <div class="row top"><label>Note</label><textarea id="hNote" rows="3" placeholder="hover text, e.g. destination list">${hesc(h.note)}</textarea></div>`
+   :`<div class="row"><label>${h.kind}${h.letter?' '+hesc(h.letter):''}</label><span class="val" style="min-width:auto;text-align:left">${hesc(h.label)}</span></div>`;
+  body.innerHTML=`<h2>Transport hub</h2>
+   <div class="hint">Drag glyph to move.</div>${contentRows}
+   <div class="row"><label>Anchor</label><span class="btn" id="hAnc">${(h.anchor&&zones[h.anchor])?('⚓ '+zones[h.anchor].name):'Free — anchor to nearest'}</span></div>
+   <div class="hint">${(h.anchor&&zones[h.anchor])?('Moves with '+zones[h.anchor].name+'.'):'Drag onto a zone to anchor it.'}</div>
+   <div class="row">${(canHide()&&!h.userAdded)?'<span class="btn warn" id="bHubHide">Hide this hub</span>':'<span class="btn warn" id="bHubDel">Delete hub</span>'}</div>`;
+  if(editable){
+   const sk=body.querySelector('#hKind');sk.value=h.kind;
+   sk.onchange=ev=>{h.kind=ev.target.value;if(hubHasLetter(h.kind)&&!h.letter)h.letter='?';refreshInspector();draw();};
+   const hl=body.querySelector('#hLetter');if(hl)hl.oninput=ev=>{h.letter=ev.target.value;draw();};
+   body.querySelector('#hLabel').oninput=ev=>{h.label=ev.target.value;};
+   body.querySelector('#hNote').oninput=ev=>{h.note=ev.target.value;draw();};}
+  body.querySelector('#hAnc').onclick=()=>{if(h.anchor){h.anchor=null;h.lx=null;h.ly=null;}else{anchorHub(h,true);}
+   h.touched=true;refreshInspector();draw();};   // anchor/free moves the hub without any drag
+  const hdel=body.querySelector('#bHubDel');
+  if(hdel)hdel.onclick=()=>{hubs.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  const hhide=body.querySelector('#bHubHide');
+  if(hhide)hhide.onclick=()=>hideItem('hub',sel.id);
+ } else if(sel.type==='uni'){const en=uEntities()[sel.id];
+  body.innerHTML=`<h2>Realm · ${en?en.name:''}</h2>
+   <div class="hint">Drag the realm on the map to reposition it. Save a version or export your layout to keep it.</div>
+   <div class="row"><label>Pos</label><span class="val" style="min-width:auto">${en?(en.cx.toFixed(3)+', '+en.cy.toFixed(3)):''}</span></div>`;
+ } else if(sel.type==='cont'){const p=metaPos(sel.id);
+  body.innerHTML=`<h2>Continent · ${sel.id}</h2>
+   <div class="hint">Drag on the world map to reposition. Save a version or export your layout to keep it.</div>
+   <div class="row"><label>Pos</label><span class="val" style="min-width:auto">${p[0].toFixed(1)}, ${p[1].toFixed(1)}</span></div>`;
+ } else if(sel.type==='wconn'){const l=worldConns()[sel.id];
+  body.innerHTML=`<h2>World connector #${sel.id+1}</h2>
+   <div class="hint">Ends auto-anchor to the nearest landmass, so the line stretches/retracts as continents move. Drag a square handle onto another landmass to re-anchor it, or use the buttons to bind/free each end.</div>
+   <div class="row"><label>End A</label><span class="btn" id="bWAncA">${(l.anchorA&&META[l.anchorA])?('⚓ '+hesc(l.anchorA)):'Anchor to nearest'}</span></div>
+   <div class="row"><label>End B</label><span class="btn" id="bWAncB">${(l.anchorB&&META[l.anchorB])?('⚓ '+hesc(l.anchorB)):'Anchor to nearest'}</span></div>
+   <div class="row"><span class="btn warn" id="bWCDel">Delete connector</span></div>`;
+  body.querySelector('#bWAncA').onclick=()=>toggleWlAnchor(sel.id,'a');
+  body.querySelector('#bWAncB').onclick=()=>toggleWlAnchor(sel.id,'b');
+  body.querySelector('#bWCDel').onclick=()=>{worldConns().splice(sel.id,1);sel=null;refreshInspector();draw();};
+ }}
+// Freeing captures the RESOLVED point into the raw fallback first. Without that, freeing an end
+// after its anchor zone moved teleports it back to the published coordinate, because a/b were
+// never refreshed. anchorHub does the equivalent on the anchoring side; this is the other half.
+function toggleAnchor(idx,which){const c=conns[idx];const anc=which==='a'?c.anchorA:c.anchorB;
+ if(anc){const p=ep(c,which);
+   if(which==='a'){c.a=p.slice();c.anchorA=null;c.la=null;}else{c.b=p.slice();c.anchorB=null;c.lb=null;}}
+ else{anchorConnEnd(c,which,true);}
+ c.touched=true;   // anchor/free changes where the end lands without any drag having happened
+ refreshInspector();draw();}
+function toggleWlAnchor(idx,which){const l=worldConns()[idx];if(!l)return;
+ const anc=which==='a'?l.anchorA:l.anchorB;
+ if(anc){const p=wlPt(l,which);   // same fallback capture, for the same reason
+   if(which==='a'){l.a=p.slice();l.anchorA=null;l.la=null;}else{l.b=p.slice();l.anchorB=null;l.lb=null;}}
+ else{anchorWlEnd(l,which,true);}
+ l.touched=true;
+ refreshInspector();draw();}
+
+/* ---- persistence: localStorage version history (per continent) + customization file export ---- */
+// Keys are suffixed per edition. The author build stores full snapshots and the user build
+// stores sparse overlays, so a shared key would have each misparse the other's buffer when
+// both are opened from the same origin. Nothing has shipped, so no migration is needed.
+/*__AUTHOR__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_v1';}
+function worldLsKey(){return 'eql_editor_world_v1';}/*__END_AUTHOR__*/
+/*__USER__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_u1';}
+function worldLsKey(){return 'eql_editor_world_u1';}/*__END_USER__*/
+function lsKey(){return lsKeyFor(cur);}
+// Latest stored state for a continent/world, or null. Used by the view-mode apply hook to
+// decide whether to build edit-state at all, so an uncustomized viewer pays nothing.
+function storedState(k){const o=readStoreK(k);return o.versions.length?o.versions[o.versions.length-1].state:null;}
+function editScope(){return (level==='universe'||level==='world')?'world':'continent';}
+function curStoreKey(){return editScope()==='world'?worldLsKey():lsKey();}
+function readStoreK(k){try{return JSON.parse(localStorage.getItem(k))||{versions:[]};}catch(e){return {versions:[]};}}
+function writeStoreK(k,o){try{localStorage.setItem(k,JSON.stringify(o));return true;}catch(e){toast('Save failed: '+e.message);return false;}}
+function readStore(){return readStoreK(lsKey());}
+function writeStore(o){return writeStoreK(lsKey(),o);}
+/*__AUTHOR__*/
+function refusePartialAuthor(){for(const c in ALL)if((ALL[c].skipped||[]).length){
+ toast('Cannot save or export authored data from this partial build — the map pack is missing roster zones.');return true;}
+ return false;}
+// Author edition: full snapshots. A sparse overlay cannot express "I added this hub" or
+// "I deleted that one" against a layout.json the author is themselves rewriting.
+function snapshot(){ensureLinks(cur);
+ const z={};for(const k in zones)z[k]={tx:zones[k].xf.tx,ty:zones[k].xf.ty,s:zones[k].xf.s,rot:zones[k].xf.rot};
+ return {zones:z,conns:JSON.parse(JSON.stringify(conns)),hubs:JSON.parse(JSON.stringify(hubs)),
+   links:zoneLinks.map(l=>({z1:l.z1,z2:l.z2,locked:l.locked,manual:!!l.manual})),
+   deletedLinks:(delLinks||[]).map(d=>({z1:d.z1,z2:d.z2}))};}
+function applyState(st){
+ buildEditState(cur);   // N6: rebuild from the published layout (with lock-seeding), then overlay
+ if(st.zones)for(const k in st.zones){if(zones[k])zones[k].xf={tx:st.zones[k].tx||0,ty:st.zones[k].ty||0,s:st.zones[k].s||1,rot:st.zones[k].rot||0};}
+ if(Array.isArray(st.conns)){conns.length=0;for(const c of st.conns)conns.push({a:c.a?c.a.slice():[0,0],b:c.b?c.b.slice():[0,0],
+   anchorA:c.anchorA||null,anchorB:c.anchorB||null,la:c.la||null,lb:c.lb||null,
+   ref:connRefOf(c),touched:false,hidden:false,userAdded:false});}
+ if(Array.isArray(st.hubs)){hubs.length=0;
+   // A snapshot is the author's whole hub array, adds and deletes already folded in, so its
+   // positions no longer line up with published HUBS. Carry the recorded pidx where the buffer
+   // has one and null otherwise - guessing the position would hide the wrong glyph.
+   for(const h of st.hubs){
+     hubs.push({x:h.x,y:h.y,kind:h.kind,label:h.label,letter:h.letter||'',note:h.note||'',
+       anchor:h.anchor||null,lx:(h.lx!=null?h.lx:null),ly:(h.ly!=null?h.ly:null),
+       ref:hubRefOf(h),pidx:(h.pidx==null?null:h.pidx),touched:false,hidden:false,userAdded:false});}}
+ // rebuild links exactly from the snapshot (restores manual adds; weld recomputed from restored geometry+xf)
+ if(Array.isArray(st.links)){zoneLinks.length=0;
+   for(const l of st.links){if(!zones[l.z1]||!zones[l.z2])continue;const w=weldPoints(l.z1,l.z2);
+     zoneLinks.push({z1:l.z1,z2:l.z2,p1:w.p1,p2:w.p2,locked:l.locked!==false,manual:!!l.manual});}
+   EDIT[cur].linksReady=true;}   // the snapshot IS the complete weld set; don't let ensureLinks clear it
+ delLinks.length=0;
+ if(Array.isArray(st.deletedLinks))for(const d of st.deletedLinks)delLinks.push({z1:d.z1,z2:d.z2});
+ if(editMode)ensureLinks(cur);}
+/*__END_AUTHOR__*/
+/*__USER__*/
+// User edition: each stored version is the sparse overlay for this continent. This is what
+// makes the DEFAULT reopen path additive - the old full-array form cleared conns/hubs and
+// replaced them wholesale, silently discarding every hub and connector added by an update.
+// saveVersion, revertLast, buildHist, markSaved, MAXVER and the history dropdown are
+// untouched; only the stored representation changes, so buffer restore and file import
+// collapse into one code path.
+function snapshot(){return contOverlay(cur)||{};}
+function applyState(st){
+ buildEditState(cur);
+ reportDrops(applyContOverlay(cur,st));
+ if(editMode)ensureLinks(cur);}
+/*__END_USER__*/
+function saveVersion(){/*__AUTHOR__*/if(refusePartialAuthor())return;/*__END_AUTHOR__*/const o=readStore();o.versions.push({ts:Date.now(),state:snapshot()});
+ if(o.versions.length>MAXVER)o.versions=o.versions.slice(-MAXVER);
+ writeStore(o);buildHist();markSaved();toast('Saved v'+o.versions.length+' in this browser — export your layout for a file copy.');}
+function revertLast(){const o=readStore();
+ if(!o.versions.length){toast('No saved versions to revert.');return;}
+ o.versions.pop();writeStore(o);
+ if(o.versions.length)applyState(o.versions[o.versions.length-1].state);else {buildEditState(cur);if(editMode)ensureLinks(cur);}
+ sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
+ toast(o.versions.length?('Reverted to v'+o.versions.length):'Reverted to the published map.');}
+function loadLatest(){const o=readStore();if(o.versions.length){applyState(o.versions[o.versions.length-1].state);return true;}return false;}
+function buildHist(){const sel2=document.getElementById('histSel');const o=readStoreK(curStoreKey());
+ sel2.innerHTML='';
+ if(!o.versions.length){const op=document.createElement('option');op.textContent='(no saved versions)';op.value='-1';sel2.appendChild(op);sel2.disabled=true;return;}
+ sel2.disabled=false;
+ o.versions.forEach((v,i)=>{const op=document.createElement('option');op.value=i;
+   const d=new Date(v.ts),t=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+   op.textContent='v'+(i+1)+' · '+t+(i===o.versions.length-1?'  (latest)':'');sel2.appendChild(op);});
+ sel2.value=o.versions.length-1;}
+function markSaved(){const el=document.getElementById('savenote');const o=readStoreK(curStoreKey());
+ el.textContent=o.versions.length?(o.versions.length+' saved version'+(o.versions.length>1?'s':'')+' in this browser · latest loads on reopen.'):'No saved versions yet. Export your layout for a file copy.';}
+
+/* ================= CUSTOMIZATION OVERLAY =================
+   A sparse record of what the user changed. Anything they did NOT touch is read from the
+   published data at load time, which is what lets new zones, hubs, connectors and world
+   links from a later update appear inside an existing customization.
+
+   Sparseness test, per collection:
+     zoneXf, links, contPos, realmPos  ->  compare against the PUBLISHED value.
+         Not against identity: continents ship non-identity zoneXf and lock exceptions
+         today (Antonica 46 and 11, Kunark 26 and 19), so an identity test would re-emit
+         every one of them as a user override on the first save and pin the map to this
+         release forever - the exact failure the overlay exists to avoid.
+     hubs, conns, worldConns           ->  a `touched` flag set at drag-end, because these
+         are index-keyed and have no name to compare against.
+*/
+/* v2 because a world-link endpoint changed from a bare [x,y] array to an {xy,anchor,lx,ly}
+   object. Both halves of that bump are load-bearing: the version check REJECTS rather than
+   migrates, so leaving it at 1 lets an older viewer accept a v2 file and then throw inside
+   applyWorldOverlay on an object, half-applying the map; bumping without also accepting 1 rejects
+   every file already exported. So the reader takes either, and wlEndIn's array branch migrates.
+   The continent half has always used endOut's objects, so nothing there changes. */
+const OVERLAY_V=2;
+function rnd2(v){return Math.round(v*100)/100;}
+function rnd3(v){return Math.round(v*1e3)/1e3;}
+function rnd4(v){return Math.round(v*1e4)/1e4;}
+function rnd5(v){return Math.round(v*1e5)/1e5;}
+function xfIn(x){return {tx:(x&&x.tx)||0,ty:(x&&x.ty)||0,s:(x&&x.s!=null)?x.s:1,rot:(x&&x.rot)||0};}
+function xfOut(xf){return {tx:Math.round(xf.tx),ty:Math.round(xf.ty),s:rnd4(xf.s),rot:rnd5(xf.rot)};}
+function sameXf(p,q){return Math.abs(p.tx-q.tx)<0.5&&Math.abs(p.ty-q.ty)<0.5
+ &&Math.abs(p.s-q.s)<1e-4&&Math.abs(p.rot-q.rot)<1e-5;}
+function publishedXf(cont,k){const z=ALL[cont].zones[k];return xfIn(z&&z.xf);}
+const LINK_DEFAULT={locked:true,manual:false,deleted:false};
+function publishedLinks(cont){const m={};
+ for(const l of (ALL[cont].links||[]))m[weldKey(l.z1,l.z2)]={locked:l.locked!==false,manual:!!l.manual,deleted:!!l.deleted};
+ return m;}
+function sameLink(p,q){return p.locked===q.locked&&p.manual===q.manual&&p.deleted===q.deleted;}
+
+/* Position forms. An anchored hub or connector end is stored in its anchor zone's LOCAL
+   frame, which is what makes it both honour the user's drag and follow the zone when that
+   zone is moved later. Free coordinates ride along as a fallback for when the anchor zone
+   is gone from a later release. */
+function hubPosOut(h){const o={x:Math.round(h.x),y:Math.round(h.y)};
+ if(h.anchor&&h.lx!=null){o.anchor=h.anchor;o.lx=rnd4(h.lx);o.ly=rnd4(h.ly);}
+ return o;}
+function hubPosIn(h,p){if(!p)return;
+ if(p.x!=null)h.x=p.x; if(p.y!=null)h.y=p.y;
+ if(p.anchor){h.anchor=p.anchor;h.lx=p.lx;h.ly=p.ly;}else{h.anchor=null;h.lx=null;h.ly=null;}}
+function endOut(c,which){const anc=which==='a'?c.anchorA:c.anchorB,loc=which==='a'?c.la:c.lb;
+ const p=(which==='a'?c.a:c.b)||[0,0],o={xy:[Math.round(p[0]),Math.round(p[1])]};
+ if(anc&&loc){o.anchor=anc;o.lx=rnd4(loc[0]);o.ly=rnd4(loc[1]);}
+ return o;}
+function endIn(c,which,p){if(!p)return;const xy=p.xy?p.xy.slice():null;
+ if(which==='a'){if(xy)c.a=xy;if(p.anchor){c.anchorA=p.anchor;c.la=[p.lx,p.ly];}else{c.anchorA=null;c.la=null;}}
+ else{if(xy)c.b=xy;if(p.anchor){c.anchorB=p.anchor;c.lb=[p.lx,p.ly];}else{c.anchorB=null;c.lb=null;}}}
+/* The world-link twin. Anchor state has to persist for one reason: a MANUAL free or bind would
+   otherwise be silently undone by the next auto-anchor pass at edit-state build time - which is
+   also why the else branches below must stay. Writing only `if(p.anchor){...}` leaves the derived
+   anchor in place and discards the user's deliberate free. */
+function wlEndOut(l,which){const anc=which==='a'?l.anchorA:l.anchorB,loc=which==='a'?l.la:l.lb;
+ const p=(which==='a'?l.a:l.b)||[0,0],o={xy:[rnd3(p[0]),rnd3(p[1])]};
+ if(anc&&loc){o.anchor=anc;o.lx=rnd4(loc[0]);o.ly=rnd4(loc[1]);}
+ return o;}
+// A bare [x,y] is the v1 form, and loading it as free coords IS the migration: that file recorded
+// absolute positions and no anchor intent, and only links the user dragged were written at all.
+function wlEndIn(l,which,p){if(!p)return;
+ const arr=Array.isArray(p),xy=arr?p.slice():(p.xy?p.xy.slice():null),anc=arr?null:p.anchor;
+ if(which==='a'){if(xy)l.a=xy;if(anc){l.anchorA=anc;l.la=[p.lx,p.ly];}else{l.anchorA=null;l.la=null;}}
+ else{if(xy)l.b=xy;if(anc){l.anchorB=anc;l.lb=[p.lx,p.ly];}else{l.anchorB=null;l.lb=null;}}}
+
+/* Resolve a saved entry back onto the rebuilt collection:
+     1. index fast-path - the item still sits at its saved index with a matching hint. This
+        is the append-only case (additions are pushed, so old indices keep their meaning).
+     2. otherwise a UNIQUE hint match anywhere, which self-heals deletions and reordering.
+     3. zero matches, or two or more -> drop and count, so an ambiguous hint can never
+        silently misapply to the wrong glyph. */
+function resolveRef(arr,ref,i){
+ if(i!=null&&i>=0&&i<arr.length&&!arr[i].userAdded&&arr[i].ref===ref)return i;
+ let found=-1,n=0;
+ for(let j=0;j<arr.length;j++){if(arr[j].userAdded)continue;
+  if(arr[j].ref===ref){found=j;n++;if(n>1)break;}}
+ return n===1?found:-1;}
+
+/* ---- serialize ---- */
+function contOverlay(cont){const e=EDIT[cont];if(!e)return null;const o={};
+ const zx={};for(const k in e.zones){const xf=e.zones[k].xf;
+   if(e.zones[k].seeded)continue;                  // a seeded position is inferred, not chosen
+   if(!sameXf(xf,publishedXf(cont,k)))zx[k]=xfOut(xf);}
+ if(Object.keys(zx).length)o.zoneXf=zx;
+ if(!e.linksReady){   // welds never got detected this session; pass the stored entries straight through
+   if(e.pendingLinks&&Object.keys(e.pendingLinks).length)o.links=e.pendingLinks;
+ }else{const pub=publishedLinks(cont),live={},links={};
+   for(const l of e.zoneLinks)live[weldKey(l.z1,l.z2)]={locked:l.locked!==false,manual:!!l.manual,deleted:false};
+   for(const d of (e.deletedLinks||[]))live[weldKey(d.z1,d.z2)]={locked:true,manual:false,deleted:true};
+   for(const k in live)if(!sameLink(live[k],pub[k]||LINK_DEFAULT))links[k]=live[k];
+   for(const k in pub)if(!(k in live))links[k]={locked:true,manual:false,deleted:true};   // a published weld that is gone
+   if(Object.keys(links).length)o.links=links;}
+ const ht=[],hh=[],ha=[];
+ for(let i=0;i<e.hubs.length;i++){const h=e.hubs[i];
+   if(h.userAdded){const x=hubPosOut(h);x.kind=h.kind;x.label=h.label||'';
+     if(h.letter)x.letter=h.letter; if(h.note)x.note=h.note; ha.push(x);continue;}
+   if(h.hidden){hh.push(h.ref);continue;}
+   if(h.touched){const x=hubPosOut(h);x.ref=h.ref;x.i=i;ht.push(x);}}
+ if(ht.length)o.hubs=ht; if(hh.length)o.hubsHidden=hh; if(ha.length)o.hubsAdded=ha;
+ const ct=[],ch=[],ca=[];
+ for(let i=0;i<e.conns.length;i++){const c=e.conns[i];
+   if(c.userAdded){ca.push({a:endOut(c,'a'),b:endOut(c,'b')});continue;}
+   if(c.hidden){ch.push(c.ref);continue;}
+   if(c.touched)ct.push({ref:c.ref,i:i,a:endOut(c,'a'),b:endOut(c,'b')});}
+ if(ct.length)o.conns=ct; if(ch.length)o.connsHidden=ch; if(ca.length)o.connsAdded=ca;
+ if(!Object.keys(o).length)return null;
+ o.zoneKeys=Object.keys(e.zones).concat(ALL[cont].skipped||[]); // authored roster at save time, including pack gaps
+ return o;}
+function worldOverlay(){if(!WEDIT)return null;const o={};
+ const cp={};for(const c in WEDIT.meta){const p=WEDIT.meta[c].pos,q=META[c]&&META[c].pos;
+   if(q&&(Math.abs(p[0]-q[0])>0.005||Math.abs(p[1]-q[1])>0.005))cp[c]=[rnd2(p[0]),rnd2(p[1])];}
+ if(Object.keys(cp).length)o.contPos=cp;
+ const rp={};for(const e of WEDIT.universe){const q=UNIVERSE.find(x=>x.name===e.name);
+   if(q&&(Math.abs(e.cx-q.cx)>5e-5||Math.abs(e.cy-q.cy)>5e-5))rp[e.name]=[rnd4(e.cx),rnd4(e.cy)];}
+ if(Object.keys(rp).length)o.realmPos=rp;
+ const wt=[],wh=[],wa=[],wl=WEDIT.worldLinks;
+ for(let i=0;i<wl.length;i++){const l=wl[i],ab={a:wlEndOut(l,'a'),b:wlEndOut(l,'b')};
+   if(l.userAdded){ab.alt=l.alt;wa.push(ab);continue;}
+   if(l.hidden){wh.push(l.ref);continue;}
+   if(l.touched){ab.ref=l.ref;ab.i=i;wt.push(ab);}}
+ if(wt.length)o.worldConns=wt; if(wh.length)o.worldConnsHidden=wh; if(wa.length)o.worldConnsAdded=wa;
+ return Object.keys(o).length?o:null;}
+// Whole-document overlay: every continent with live edit-state, plus the world level.
+function buildOverlay(){const ov={v:OVERLAY_V,continents:{},world:{}};
+ for(const c in EDIT){const o=contOverlay(c);if(o)ov.continents[c]=o;}
+ const w=worldOverlay();if(w)ov.world=w;
+ return ov;}
+
+/* ---- apply ---- */
+function applyLinkOverlay(links){let drops=0;   // requires linksReady (zoneLinks populated)
+ for(const rawk in links){const v=links[rawk],parts=rawk.split('|');
+   if(parts.length!==2){drops++;continue;}
+   const z1=parts[0],z2=parts[1],k=weldKey(z1,z2);       // normalize on READ too
+   if(!zones[z1]||!zones[z2]){drops++;continue;}
+   const idx=zoneLinks.findIndex(l=>weldKey(l.z1,l.z2)===k);
+   if(v.deleted){if(idx>=0)zoneLinks.splice(idx,1);
+     if(!delLinks.some(d=>weldKey(d.z1,d.z2)===k))delLinks.push({z1:z1,z2:z2});
+     continue;}
+   for(let i=delLinks.length-1;i>=0;i--)if(weldKey(delLinks[i].z1,delLinks[i].z2)===k)delLinks.splice(i,1);
+   if(idx>=0){zoneLinks[idx].locked=v.locked!==false;if(v.manual)zoneLinks[idx].manual=true;}
+   else{const w=weldPoints(z1,z2);
+     zoneLinks.push({z1:z1,z2:z2,p1:w.p1,p2:w.p2,locked:v.locked!==false,manual:true});}}
+ return drops;}
+/* A zone added by an update would otherwise render at its published spot - stranded where its
+   neighbour used to be, with connectors stretching across the map. Seed it by the DELTA its
+   nearest neighbour was moved by (not that neighbour's absolute offset, which would stack the
+   two on top of each other), translation only: inheriting scale or rotation would deform a
+   zone the user never touched. Transient - never written back unless the user then drags it,
+   so a later update re-seeds cleanly.
+
+   `roster` is why the overlay records zoneKeys. In a SPARSE overlay "has no zoneXf entry"
+   means "untouched", which covers both brand-new zones and pre-existing ones the user chose
+   to leave alone - indistinguishable without knowing which zones existed at save time.
+   Guessing wrong here drags every unmoved zone along with its neighbour. No roster (an older
+   overlay) means seeding is skipped rather than misapplied. */
+function seedNewZones(cont,zx,roster){if(!roster||!roster.length)return;
+ const e=EDIT[cont],keys=Object.keys(e.zones);
+ const known=roster.filter(k=>e.zones[k]);            // zones the overlay was written against
+ const fresh=keys.filter(k=>roster.indexOf(k)<0);     // ...so these are genuinely new
+ if(!fresh.length||!known.length)return;
+ for(const k of fresh){const z=e.zones[k],cc=zoneCentroid(z);
+   let best=null,bd=1e18;
+   for(const j of known){const d=distToZone(e.zones[j],cc[0],cc[1]);if(d<bd){bd=d;best=j;}}
+   if(!best)continue;
+   // Nearest neighbour overall, not nearest *moved* neighbour: if the zone next door stayed
+   // put, the new zone should stay put with it.
+   const pn=publishedXf(cont,best),un=(zx&&zx[best])?xfIn(zx[best]):pn;
+   const dx=un.tx-pn.tx,dy=un.ty-pn.ty;
+   if(dx||dy){z.xf={tx:z.xf.tx+dx,ty:z.xf.ty+dy,s:z.xf.s,rot:z.xf.rot};
+     z.seeded=true;}}}   // inferred, not chosen: contOverlay skips it so a later update re-seeds cleanly
+// A seeded transform stops being a guess the moment the user moves the zone themselves.
+function unseed(k){const z=zones[k];if(z)z.seeded=false;}
+function applyContOverlay(cont,o){const e=EDIT[cont];if(!e||!o)return 0;let drops=0;
+ bindES(cont);
+ // Order matters. Seeding runs while every xf is still the published one, so its
+ // nearest-neighbour search measures published space; and buildEditState has already
+ // anchored hubs/connector ends against published positions, so the local-frame lx/ly then
+ // transport them with their zones for free once the transforms below land.
+ seedNewZones(cont,o.zoneXf,o.zoneKeys);
+ if(o.zoneXf)for(const k in o.zoneXf){
+   if(e.zones[k]){e.zones[k].xf=xfIn(o.zoneXf[k]);e.zones[k].seeded=false;}else drops++;}
+ if(o.links){if(e.linksReady)drops+=applyLinkOverlay(o.links);else e.pendingLinks=o.links;}
+ // Touched and hidden resolve BEFORE additions are appended, so the hint scan only ever
+ // sees published entries.
+ for(const t of (o.hubs||[])){const i=resolveRef(e.hubs,t.ref,t.i);
+   if(i<0){drops++;continue;} hubPosIn(e.hubs[i],t);e.hubs[i].touched=true;}
+ for(const t of (o.conns||[])){const i=resolveRef(e.conns,t.ref,t.i);
+   if(i<0){drops++;continue;} const c=e.conns[i];endIn(c,'a',t.a);endIn(c,'b',t.b);c.touched=true;}
+ for(const r of (o.hubsHidden||[])){const i=resolveRef(e.hubs,r,null);
+   if(i<0){drops++;continue;} e.hubs[i].hidden=true;}
+ for(const r of (o.connsHidden||[])){const i=resolveRef(e.conns,r,null);
+   if(i<0){drops++;continue;} e.conns[i].hidden=true;}
+ for(const h of (o.hubsAdded||[])){
+   const nh={x:0,y:0,kind:h.kind||'boat',label:h.label||'',letter:h.letter||'',note:h.note||'',
+     anchor:null,lx:null,ly:null,ref:'',pidx:null,touched:true,hidden:false,userAdded:true};
+   hubPosIn(nh,h);nh.ref=hubRefOf(nh);e.hubs.push(nh);}
+ for(const c of (o.connsAdded||[])){
+   const nc={a:[0,0],b:[0,0],anchorA:null,anchorB:null,la:null,lb:null,
+     ref:'',touched:true,hidden:false,userAdded:true};
+   endIn(nc,'a',c.a);endIn(nc,'b',c.b);nc.ref=connRefOf(nc);e.conns.push(nc);}
+ return drops;}
+function applyWorldOverlay(o){if(!WEDIT||!o)return 0;let drops=0;
+ if(o.contPos)for(const c in o.contPos){
+   if(WEDIT.meta[c]&&o.contPos[c])WEDIT.meta[c].pos=o.contPos[c].slice();else drops++;}
+ if(o.realmPos)for(const n in o.realmPos){const e=WEDIT.universe.find(x=>x.name===n);
+   if(e&&o.realmPos[n]){e.cx=o.realmPos[n][0];e.cy=o.realmPos[n][1];}else drops++;}
+ const wl=WEDIT.worldLinks;
+ for(const t of (o.worldConns||[])){const i=resolveRef(wl,t.ref,t.i);
+   if(i<0){drops++;continue;} wlEndIn(wl[i],'a',t.a);wlEndIn(wl[i],'b',t.b);wl[i].touched=true;}
+ for(const r of (o.worldConnsHidden||[])){const i=resolveRef(wl,r,null);
+   if(i<0){drops++;continue;} wl[i].hidden=true;}
+ for(const l of (o.worldConnsAdded||[])){const nl={a:[0,0],b:[0,0],alt:l.alt||alt,
+   anchorA:null,anchorB:null,la:null,lb:null,
+   ref:'',pidx:null,touched:true,hidden:false,userAdded:true};
+   wlEndIn(nl,'a',l.a);wlEndIn(nl,'b',l.b);wl.push(nl);}
+ worldCache=null;
+ return drops;}
+function reportDrops(n){if(n)toast(n+' customization'+(n>1?'s':'')+' could not be reapplied (map data changed).');}
+
+/* ---- customization file: export / import (both editions, so the author build can exercise
+       exactly the flow users get) ---- */
+function exportOverlay(){const ov=buildOverlay();
+ const nCont=Object.keys(ov.continents).length, nWorld=Object.keys(ov.world).length;
+ if(!nCont&&!nWorld){toast('Nothing customized yet — move something first.');return;}
+ downloadBlob(JSON.stringify(ov,null,2),'application/json','eql-map-customization.json');
+ toast('Saved your layout → eql-map-customization.json');}
+// Malformed input must never leave a half-applied map, so the whole file is validated before
+// anything is touched. Unknown continents are skipped and counted rather than aborting.
+function importOverlay(text){let ov;
+ try{ov=JSON.parse(text);}catch(err){toast('That file is not valid JSON — nothing changed.');return;}
+ if(!ov||typeof ov!=='object'||Array.isArray(ov)){toast('That file is not a layout — nothing changed.');return;}
+ if(ov.v!==OVERLAY_V&&ov.v!==1){
+   toast('This layout is version '+(ov.v===undefined?'(unknown)':ov.v)+', but this map reads version '+OVERLAY_V+' — nothing changed.');return;}
+ const conts=(ov.continents&&typeof ov.continents==='object')?ov.continents:{};
+ let drops=0,applied=0;
+ for(const c in conts){
+   if(!ALL[c]){drops++;continue;}                       // a continent this release does not have
+   buildEditState(c);
+   drops+=applyContOverlay(c,conts[c]);
+   if(editMode&&c===cur)ensureLinks(c);
+   applied++;
+   // Persist so a plain reload keeps the imported layout. USER-ONLY: the author edition's
+   // buffer holds FULL snapshots, and writing a sparse overlay into it would make the next
+   // applyState() throw on c.a.slice() (a is {xy:[...]}, not an array) or silently blank the
+   // hub list. The author's durable path is the repo export, so their import stays in memory.
+   // Note this collapses the version history to a single entry - the imported file becomes
+   // the new baseline, which is what "Import layout" should mean.
+   /*__USER__*/writeStoreK(lsKeyFor(c),{versions:[{ts:Date.now(),state:contOverlay(c)||{}}]});/*__END_USER__*/}
+ if(ov.world&&typeof ov.world==='object'&&Object.keys(ov.world).length){
+   if(!WEDIT)buildWorldEditState();
+   drops+=applyWorldOverlay(ov.world);
+   /*__USER__*/writeStoreK(worldLsKey(),{versions:[{ts:Date.now(),state:worldOverlay()||{}}]});/*__END_USER__*/}
+ if(cur&&EDIT[cur])bindES(cur);
+ worldCache=null;
+ buildHist();markSaved();refreshHiddenUI();refreshInspector();
+ if(level==='continent'&&cur)fitBox(contBbox(cur));
+ draw();
+ toast('Layout imported — '+applied+' continent'+(applied===1?'':'s')
+   +(drops?(' · '+drops+' entr'+(drops===1?'y':'ies')+' skipped (map data changed)'):''));}
+function importOverlayFile(f){if(!f)return;
+ const r=new FileReader();
+ r.onload=()=>importOverlay(String(r.result));
+ r.onerror=()=>toast('Could not read that file — nothing changed.');
+ r.readAsText(f);}
+
+/*__USER__*/
+/* ---- eager apply on VIEW ----
+   A saved customization has to show with Edit OFF, and EDIT[cont] is otherwise built lazily
+   inside setEdit. Guard on a stored buffer actually existing, so an uncustomized viewer
+   builds nothing at all; and note the state is deliberately left linksReady:false, so plain
+   viewing never runs the weld detector. */
+function applyStoredCont(name){const st=storedState(lsKeyFor(name));if(!st)return;
+ buildEditState(name);reportDrops(applyContOverlay(name,st));}
+function applyStoredWorld(){if(WEDIT)return;const st=storedState(worldLsKey());if(!st)return;
+ buildWorldEditState();reportDrops(applyWorldOverlay(st));}
+/*__END_USER__*/
+
+/* ---- shared download helper: used by the customization export in BOTH editions,
+       and by the author-only repo/standalone exports below ---- */
+function downloadBlob(text,type,fname){const blob=new Blob([text],{type});const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();
+ setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},0);}
+
+/*__AUTHOR__*//* ---- durable export (§F) ---- */
+function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
+ const connectors=e.conns.map(c=>{const A=ep(c,'a',e.zones),B=ep(c,'b',e.zones);return {a:[R(A[0]),R(A[1])],b:[R(B[0]),R(B[1])]};});
+ const hubsOut=e.hubs.map(h=>{const P=hubPos(h,e.zones);const o={x:R(P[0]),y:R(P[1]),kind:h.kind,label:h.label};
+   if(hubHasLetter(h.kind)&&h.letter)o.letter=h.letter;if(h.note)o.note=h.note;return o;});   // letter on portal/teleport; note when present
+ // Welds are detected lazily (ensureLinks). If this continent's edit-state was built without
+ // them - importOverlay does that for every continent in the file - zoneLinks is empty, and
+ // recomputing from it would silently DELETE the published manual links and deleted-markers.
+ // Fall back to the published list instead.
+ let links;
+ if(!e.linksReady){links=(ALL[cont].links||[]).map(l=>Object.assign({},l));}
+ else{links=[];   // auto pairs: emit only unlocked exceptions; manual links: always persist; deletions: persist as markers
+  for(const l of e.zoneLinks){
+    if(l.manual)links.push({z1:l.z1,z2:l.z2,locked:l.locked,manual:true});
+    else if(!l.locked)links.push({z1:l.z1,z2:l.z2,locked:false});}
+  for(const d of (e.deletedLinks||[]))links.push({z1:d.z1,z2:d.z2,deleted:true});}
+ const zoneXf={};
+ for(const k in e.zones){const xf=e.zones[k].xf;
+   if(!isIdentity(xf))zoneXf[k]={tx:R(xf.tx),ty:R(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
+ return {connectors,hubs:hubsOut,links,zoneXf};}
+function exportLayout(){if(refusePartialAuthor())return;const obj=buildLayoutObject(cur);
+ downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout.json');
+ toast('Exported → data/continents/'+contDirJS(cur)+'/layout.json  ·  rebuild: python scripts/build.py');}
+let _pristine=null;
+// Captured once at first edit-entry (setEdit), before any edit action mutates transient UI (toast/bAuto),
+// so the standalone export ships a clean template. Pure viewers never enter edit -> never pay the ~17MB snapshot.
+function getPristine(){if(_pristine===null)_pristine='<!DOCTYPE html>\n'+document.documentElement.outerHTML;return _pristine;}
+function spliceBetween(s,a,b,rep){const i=s.indexOf(a);if(i<0)return s;const j=s.indexOf(b,i);if(j<0)return s;
+ return s.slice(0,i)+rep+s.slice(j+b.length);}
+function exportStandaloneHTML(){
+ const outAll=JSON.parse(JSON.stringify(ALL)), outHubs=JSON.parse(JSON.stringify(HUBS));
+ for(const c in EDIT){const e=EDIT[c];if(!outAll[c])continue;
+   for(const k in e.zones){const xf=e.zones[k].xf;if(!outAll[c].zones[k])continue;
+     if(isIdentity(xf))delete outAll[c].zones[k].xf;
+     else outAll[c].zones[k].xf={tx:Math.round(xf.tx),ty:Math.round(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
+   outAll[c].connectors=e.conns.map(cc=>{const A=ep(cc,'a',e.zones),B=ep(cc,'b',e.zones);return {a:[Math.round(A[0]),Math.round(A[1])],b:[Math.round(B[0]),Math.round(B[1])]};});
+   // same lazy-weld guard as buildLayoutObject: an unvisited continent has no zoneLinks, and
+   // recomputing from it would strip the published links out of the distributable
+   if(e.linksReady){
+     const lk=[];for(const l of e.zoneLinks){if(l.manual)lk.push({z1:l.z1,z2:l.z2,locked:l.locked,manual:true});else if(!l.locked)lk.push({z1:l.z1,z2:l.z2,locked:false});}
+     for(const d of (e.deletedLinks||[]))lk.push({z1:d.z1,z2:d.z2,deleted:true});
+     if(lk.length)outAll[c].links=lk;else if(outAll[c].links)delete outAll[c].links;}
+   const hh=e.hubs.map(h=>{const P=hubPos(h,e.zones);const o={x:Math.round(P[0]),y:Math.round(P[1]),kind:h.kind,label:h.label};if(hubHasLetter(h.kind)&&h.letter)o.letter=h.letter;if(h.note)o.note=h.note;return o;});
+   if(hh.length)outHubs[c]=hh;else delete outHubs[c];}
+ const esc=s=>s.replace(/</g,'\\u003c');
+ // world/universe edits (WEDIT) merged into deep copies; never mutate the live consts
+ let outMeta=META,outUni=UNIVERSE,outWL=WORLDLINKS;
+ if(WEDIT){outMeta=JSON.parse(JSON.stringify(META));
+   for(const c in WEDIT.meta){if(outMeta[c])outMeta[c].pos=[Math.round(WEDIT.meta[c].pos[0]*100)/100,Math.round(WEDIT.meta[c].pos[1]*100)/100];}
+   outUni=WEDIT.universe.map(e=>Object.assign({},e));
+   // Rounded to match the other export path: resolving an anchor re-adds an offset, and this
+   // path used to copy raw arrays, so the float tails would be baked into the emitted file.
+   outWL=WEDIT.worldLinks.map(l=>{const A=wlPt(l,'a'),B=wlPt(l,'b');
+     return {a:[rnd3(A[0]),rnd3(A[1])],b:[rnd3(B[0]),rnd3(B[1])],alt:l.alt};});}
+ const allBlock='const ALL='+esc(JSON.stringify(outAll))+', META='+esc(JSON.stringify(outMeta))+', DETAIL='+esc(JSON.stringify(DETAIL))+';';
+ const hubsBlock='const HUBS='+esc(JSON.stringify(outHubs))+';';
+ const wlBlock='const WORLDLINKS='+esc(JSON.stringify(outWL))+';';
+ const uniBlock='const UNIVERSE='+esc(JSON.stringify(outUni))+';';
+ let out=getPristine();
+ out=spliceBetween(out,'/*__DATA_ALL__*/','/*__END_ALL__*/','/*__DATA_ALL__*/'+allBlock+'/*__END_ALL__*/');
+ out=spliceBetween(out,'/*__DATA_HUBS__*/','/*__END_HUBS__*/','/*__DATA_HUBS__*/'+hubsBlock+'/*__END_HUBS__*/');
+ out=spliceBetween(out,'/*__DATA_WL__*/','/*__END_WL__*/','/*__DATA_WL__*/'+wlBlock+'/*__END_WL__*/');
+ out=spliceBetween(out,'/*__DATA_UNI__*/','/*__END_UNI__*/','/*__DATA_UNI__*/'+uniBlock+'/*__END_UNI__*/');
+ // Named .author.html deliberately: getPristine() snapshots the running document, so this file
+ // carries the author surface. The user distributable is exactly eql-interactive-map.html, and
+ // .gitignore's *.author.html guard is what keeps an author artifact out of a commit.
+ downloadBlob(out,'text/html;charset=utf-8','eql-interactive-map.author.html');
+ toast('Exported standalone map (edits baked in) → eql-interactive-map.author.html');}
+/*__END_AUTHOR__*/
+
+/* ================= UNIVERSE + WORLD edit (global WEDIT) ================= */
+function wlRefOf(l){const r=v=>Math.round(v*10)/10;
+ return r(l.a[0])+','+r(l.a[1])+'|'+r(l.b[0])+','+r(l.b[1]);}
+function buildWorldEditState(){
+ WEDIT={universe:UNIVERSE.map(e=>Object.assign({},e)),
+        meta:{}, worldLinks:WORLDLINKS.map((l,i)=>({a:l.a.slice(),b:l.b.slice(),alt:l.alt,
+          anchorA:null,anchorB:null,la:null,lb:null,
+          ref:wlRefOf(l),pidx:i,touched:false,hidden:false,userAdded:false}))};
+ for(const c in META)WEDIT.meta[c]={pos:META[c].pos.slice()};
+ // Anchors are DERIVED here, never authored, so they self-heal when the published data moves.
+ // Must run after meta is populated - the derive resolves against metaPos. Unconditional rather
+ // than gated on autoAnchor, matching buildEditState's baseline pass: that toggle governs
+ // re-anchoring after a drag and new-item creation, not the baseline.
+ for(const l of WEDIT.worldLinks){anchorWlEnd(l,'a',false);anchorWlEnd(l,'b',false);}
+ worldCache=null;}   // continents are drawn from a cached bitmap - force a rebuild so reset/revert/history reflect the restored positions   // continents are drawn from a cached bitmap — force a rebuild so reset/revert/history reflect the restored positions
+// screen(device px) <-> globe(0-100) via the world map transform + wv pan/zoom
+function screenToGlobe(mx,my){const wm=worldMap(),bx=(mx-wv.x)/wv.k,by=(my-wv.y)/wv.k;
+ return [(bx-wm.gx(0))/wm.side*100, (by-wm.gy(0))/wm.side*100];}
+function globeToScreen(gx,gy){const wm=worldMap();return [wm.gx(gx)*wv.k+wv.x, wm.gy(gy)*wv.k+wv.y];}
+function pickWConnEndpoint(mx,my){const R=9*devicePixelRatio,wc=worldConns();
+ for(let i=0;i<wc.length;i++){const c=wc[i];if((c.alt&&c.alt!==alt)||isGhost(c)||xpacWlHidden(c,i))continue;
+  const pa=wlPt(c,'a'),pb=wlPt(c,'b');
+  const A=globeToScreen(pa[0],pa[1]),B=globeToScreen(pb[0],pb[1]);
+  if(Math.hypot(mx-A[0],my-A[1])<=R)return {i,which:'a'};
+  if(Math.hypot(mx-B[0],my-B[1])<=R)return {i,which:'b'};}
+ return null;}
+function pickWConnBody(mx,my){const R=7*devicePixelRatio,wc=worldConns();
+ for(let i=0;i<wc.length;i++){const c=wc[i];if((c.alt&&c.alt!==alt)||isGhost(c)||xpacWlHidden(c,i))continue;
+  const pa=wlPt(c,'a'),pb=wlPt(c,'b');
+  const A=globeToScreen(pa[0],pa[1]),B=globeToScreen(pb[0],pb[1]);
+  if(distSegPx(mx,my,A[0],A[1],B[0],B[1])<=R)return i;}
+ return null;}
+
+/* ---- universe: drag realms (cx,cy are viewport fractions) ---- */
+function uniMouseDown(e){const [mx,my]=evPt(e);const name=pickUniverse(mx,my);
+ if(name){const ents=uEntities(),idx=ents.findIndex(x=>x.name===name),en=ents[idx];
+   drag={mode:'uni',idx,ox:en.cx*cv.width-mx,oy:en.cy*cv.height-my,moved:false};
+   sel={type:'uni',id:idx};refreshInspector();draw();return;}
+ sel=null;refreshInspector();draw();}
+function uniMouseMove(e){const [mx,my]=evPt(e);
+ if(drag&&drag.mode==='uni'){drag.moved=true;const en=uEntities()[drag.idx];
+   en.cx=(mx+drag.ox)/cv.width; en.cy=(my+drag.oy)/cv.height; draw(); return;}
+ const name=pickUniverse(mx,my);
+ if(name)showTip(e,name+' — drag to reposition'); else tip.style.display='none';}
+function uniMouseUp(e){if(drag&&drag.mode==='uni')refreshInspector();drag=null;}
+function drawUniEditOverlay(){const dpr=devicePixelRatio;
+ if(sel&&sel.type==='uni'){const en=uEntities()[sel.id];if(!en)return;
+   const W=cv.width,H=cv.height,S=Math.min(W,H);
+   ctx.strokeStyle='#ffd24a';ctx.lineWidth=2*dpr;ctx.setLineDash([5*dpr,4*dpr]);
+   ctx.beginPath();ctx.arc(en.cx*W,en.cy*H,en.r*S+10*dpr,0,7);ctx.stroke();ctx.setLineDash([]);}}
+
+/* ---- world: drag continents (META.pos) + add/edit free connectors ---- */
+function worldMouseDown(e){const [mx,my]=evPt(e);
+ if(tool==='conn'){const g=screenToGlobe(mx,my);
+   if(!pendingConn){pendingConn=g;draw();return;}
+   const wc=worldConns();const nwc={a:pendingConn.slice(),b:g.slice(),alt:alt,
+     anchorA:null,anchorB:null,la:null,lb:null,
+     ref:'',pidx:null,touched:true,hidden:false,userAdded:true};
+   nwc.ref=wlRefOf(nwc);wc.push(nwc);
+   if(autoAnchor){anchorWlEnd(nwc,'a',false);anchorWlEnd(nwc,'b',false);}
+   pendingConn=null;sel={type:'wconn',id:wc.length-1};setTool('select');refreshInspector();draw();return;}
+ const pe=pickWConnEndpoint(mx,my);
+ if(pe){sel={type:'wconn',id:pe.i};drag={mode:'wcend',i:pe.i,which:pe.which,moved:false};refreshInspector();return;}
+ const cb=pickWConnBody(mx,my);
+ if(cb!==null){sel={type:'wconn',id:cb};const c=worldConns()[cb];
+   // Resolved, not raw: a body-drag of an anchored link would otherwise jump to the stale fallback.
+   drag={mode:'wcbody',i:cb,g0:screenToGlobe(mx,my),A0:wlPt(c,'a').slice(),B0:wlPt(c,'b').slice(),moved:false};refreshInspector();return;}
+ const cont=worldPick(mx,my);
+ if(cont){sel={type:'cont',id:cont};drag={mode:'cmove',cont,p0:metaPos(cont).slice(),g0:screenToGlobe(mx,my),moved:false};refreshInspector();return;}
+ sel=null;refreshInspector();
+ drag={mode:'wpan',sx:e.clientX,sy:e.clientY,vx:wv.x,vy:wv.y,moved:false};cv.classList.add('drag');}
+function worldMouseMove(e){const [mx,my]=evPt(e),dpr=devicePixelRatio;
+ if(drag){drag.moved=true;
+  if(drag.mode==='wpan'){wv.x=drag.vx+(e.clientX-drag.sx)*dpr;wv.y=drag.vy+(e.clientY-drag.sy)*dpr;draw();return;}
+  if(drag.mode==='cmove'){const g=screenToGlobe(mx,my),p=metaPos(drag.cont);
+    p[0]=drag.p0[0]+(g[0]-drag.g0[0]);p[1]=drag.p0[1]+(g[1]-drag.g0[1]);worldCache=null;draw();return;}
+  if(drag.mode==='wcend'){const c=worldConns()[drag.i],g=screenToGlobe(mx,my);
+    if(drag.which==='a'){c.a=g;c.anchorA=null;c.la=null;}else{c.b=g;c.anchorB=null;c.lb=null;}draw();return;}
+  if(drag.mode==='wcbody'){const c=worldConns()[drag.i],g=screenToGlobe(mx,my),dgx=g[0]-drag.g0[0],dgy=g[1]-drag.g0[1];
+    c.a=[drag.A0[0]+dgx,drag.A0[1]+dgy];c.b=[drag.B0[0]+dgx,drag.B0[1]+dgy];
+    c.anchorA=null;c.anchorB=null;c.la=null;c.lb=null;draw();return;}
+  return;}
+ if(tool==='conn'){showTip(e,pendingConn?'Click for connector END point':'Click for connector START point');return;}
+ if(pickWConnEndpoint(mx,my)!==null||pickWConnBody(mx,my)!==null){cv.style.cursor='pointer';showTip(e,'World connector — drag to edit');return;}
+ cv.style.cursor='';const cont=worldPick(mx,my);
+ if(cont)showTip(e,cont+' — drag to reposition'); else tip.style.display='none';}
+function worldMouseUp(e){if(drag){if(drag.mode==='wpan')cv.classList.remove('drag');
+  // World connectors are index-keyed and need the `touched` flag; continent positions are
+  // name-keyed and compare against published META, so 'cmove' needs no flag. Re-anchoring lives
+  // in the same gate for the same reason: "this end moved" is what makes both true, and a bare
+  // click on an end the user deliberately freed must not silently re-bind it.
+  if(drag.moved&&(drag.mode==='wcend'||drag.mode==='wcbody')){const l=worldConns()[drag.i];
+    if(l){l.touched=true;
+      if(autoAnchor){if(drag.mode==='wcend')anchorWlEnd(l,drag.which,false);
+        else{anchorWlEnd(l,'a',false);anchorWlEnd(l,'b',false);}}}}
+  if(drag.mode==='wcend'||drag.mode==='wcbody'||drag.mode==='cmove')refreshInspector();}
+ drag=null;}
+function drawWorldEditOverlay(wm,TX,TY){const dpr=devicePixelRatio,wc=worldConns();
+ for(let i=0;i<wc.length;i++){const c=wc[i];if((c.alt&&c.alt!==alt)||isGhost(c)||xpacWlHidden(c,i))continue;const strong=sel&&sel.type==='wconn'&&sel.id===i;
+   const A=wlPt(c,'a'),B=wlPt(c,'b');
+   drawEndpoint(TX(wm.gx(A[0])),TY(wm.gy(A[1])),c.anchorA,strong);
+   drawEndpoint(TX(wm.gx(B[0])),TY(wm.gy(B[1])),c.anchorB,strong);}
+ if(sel&&sel.type==='cont'&&worldRects[sel.id]){const r=worldRects[sel.id];
+   ctx.strokeStyle='#ffd24a';ctx.lineWidth=2*dpr;ctx.setLineDash([6*dpr,4*dpr]);
+   ctx.strokeRect(TX(r.x0)-4*dpr,TY(r.y0)-4*dpr,(r.x1-r.x0)*wv.k+8*dpr,(r.y1-r.y0)*wv.k+8*dpr);ctx.setLineDash([]);}
+ if(pendingConn){const P=globeToScreen(pendingConn[0],pendingConn[1]);
+   ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(P[0],P[1],5*dpr,0,7);ctx.fill();}}
+
+/* ---- world/universe persistence buffer (localStorage, key eql_editor_world_v1) ---- */
+/*__AUTHOR__*/
+function worldSnapshot(){return {
+  universe:WEDIT.universe.map(e=>({name:e.name,cx:e.cx,cy:e.cy})),
+  meta:Object.fromEntries(Object.keys(WEDIT.meta).map(k=>[k,{pos:WEDIT.meta[k].pos.slice()}])),
+  // pidx rides along for the same reason the continent snapshot carries it: this array has
+  // already had adds and deletes folded into it, so a restored entry's POSITION no longer says
+  // which published link it is.
+  worldLinks:WEDIT.worldLinks.map(l=>({a:l.a.slice(),b:l.b.slice(),alt:l.alt,
+    anchorA:l.anchorA,anchorB:l.anchorB,la:l.la?l.la.slice():null,lb:l.lb?l.lb.slice():null,
+    pidx:(l.pidx==null?null:l.pidx)}))};}
+function worldApplyState(st){buildWorldEditState();
+ if(st.universe)for(const u of st.universe){const e=WEDIT.universe.find(x=>x.name===u.name);if(e){e.cx=u.cx;e.cy=u.cy;}}
+ if(st.meta)for(const c in st.meta){if(WEDIT.meta[c]&&st.meta[c].pos)WEDIT.meta[c].pos=st.meta[c].pos.slice();}
+ if(Array.isArray(st.worldLinks)){const pub=WEDIT.worldLinks;   // published-derived, pre-replacement
+  WEDIT.worldLinks=st.worldLinks.map(l=>{const pi=(l.pidx==null?null:l.pidx);
+   return {a:l.a.slice(),b:l.b.slice(),alt:l.alt,
+    anchorA:(l.anchorA===undefined?null:l.anchorA),anchorB:(l.anchorB===undefined?null:l.anchorB),
+    la:(l.la?l.la.slice():null),lb:(l.lb?l.lb.slice():null),
+    // The hint comes from PUBLISHED data and is never recomputed from a restored a/b. Those raw
+    // coords move whenever the user drags an end - or, now, frees one after moving its landmass -
+    // so a recomputed hint matches nothing on a later import and the entry silently drops. pidx
+    // is what still says which published link this is; a user-added entry has none, and nothing
+    // reads its hint.
+    ref:(pi!=null&&pub[pi])?pub[pi].ref:wlRefOf(l),
+    pidx:pi,touched:false,hidden:false,userAdded:false};});
+  // ABSENT means a snapshot written before ends could anchor - re-derive, or every restored end
+  // comes back free and baseline anchoring is silently lost. NULL means the user deliberately
+  // freed that end - preserve it. Runs here, after st.meta was applied, because it resolves
+  // against the restored continent positions.
+  for(let i=0;i<st.worldLinks.length;i++){const s=st.worldLinks[i],l=WEDIT.worldLinks[i];
+    if(s.anchorA===undefined)anchorWlEnd(l,'a',false);
+    if(s.anchorB===undefined)anchorWlEnd(l,'b',false);}}}
+/*__END_AUTHOR__*/
+/*__USER__*/
+// Sparse, for the same reason as the continent buffer: the old form replaced worldLinks
+// wholesale, so a world connector added by an update was discarded on reopen.
+function worldSnapshot(){return worldOverlay()||{};}
+function worldApplyState(st){buildWorldEditState();reportDrops(applyWorldOverlay(st));}
+/*__END_USER__*/
+function worldSaveVersion(){const o=readStoreK(worldLsKey());o.versions.push({ts:Date.now(),state:worldSnapshot()});
+ if(o.versions.length>MAXVER)o.versions=o.versions.slice(-MAXVER);writeStoreK(worldLsKey(),o);buildHist();markSaved();
+ toast('Saved world v'+o.versions.length+' in this browser — export your layout for a file copy.');}
+function worldRevertLast(){const o=readStoreK(worldLsKey());if(!o.versions.length){toast('No saved versions to revert.');return;}
+ o.versions.pop();writeStoreK(worldLsKey(),o);
+ if(o.versions.length)worldApplyState(o.versions[o.versions.length-1].state);else buildWorldEditState();
+ sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
+ toast(o.versions.length?('Reverted to world v'+o.versions.length):'Reverted to the published map.');}
+function worldLoadLatest(){const o=readStoreK(worldLsKey());if(o.versions.length){worldApplyState(o.versions[o.versions.length-1].state);return true;}return false;}
+
+/*__AUTHOR__*//* ---- world durable export: a full world.json ---- */
+function buildWorldObject(){const r2=v=>Math.round(v*100)/100,r3=v=>Math.round(v*1e3)/1e3,r4=v=>Math.round(v*1e4)/1e4;
+ const meta=JSON.parse(JSON.stringify(META));
+ const uni=(WEDIT?WEDIT.universe:UNIVERSE), wl=(WEDIT?WEDIT.worldLinks:WORLDLINKS), mp=(WEDIT?WEDIT.meta:null);
+ if(mp)for(const c in mp){if(meta[c])meta[c].pos=[r2(mp[c].pos[0]),r2(mp[c].pos[1])];}
+ const universe=uni.map(e=>{const o=Object.assign({},e);o.cx=r4(e.cx);o.cy=r4(e.cy);return o;});
+ // Anchors resolve on the way out, so the durable file keeps its plain two-point form and the
+ // anchor stays a runtime derivation. Same relationship the continent export has to ep().
+ const worldLinks=wl.map(l=>{const A=wlPt(l,'a'),B=wlPt(l,'b');
+   return {a:[r3(A[0]),r3(A[1])],b:[r3(B[0]),r3(B[1])],alt:l.alt};});
+ // The expansion declaration rides through untouched. Nothing edits it, which is exactly why it
+ // has to be named: this object IS the exported file, so a key omitted is a key deleted, and the
+ // next build would read a file the author never chose to strip. META's own new fields need no
+ // work - the deep copy above carries them.
+ return {meta,order:names,xpacs:XPACS,universe,worldLinks};}
+function exportWorld(){if(refusePartialAuthor())return;downloadBlob(JSON.stringify(buildWorldObject(),null,2),'application/json','world.json');
+ toast('Exported → data/world.json  ·  rebuild: python scripts/build.py');}
+/*__END_AUTHOR__*/
+
+/* ---- editbar config per level + view-mode desc ---- */
+function configEditbar(){const isCont=level==='continent',isWorld=level==='world';
+ document.getElementById('tConn').style.display=(isCont||isWorld)?'':'none';
+ document.getElementById('tHub').style.display=isCont?'':'none';
+ document.getElementById('hubkinds').style.display='none';
+ // World-link ends anchor too, so Auto-anchor belongs at both levels - but welds are a continent
+ // concept, so the padlock sub-line gets its own rule rather than riding the block.
+ document.getElementById('anchorBlock').style.display=(isCont||isWorld)?'':'none';
+ document.getElementById('weldHint').style.display=isCont?'':'none';
+ /*__AUTHOR__*/document.getElementById('bExport').innerHTML=isCont?'&#10515; Export layout.json':'&#10515; Export world.json';/*__END_AUTHOR__*/}
+function viewDesc(){
+ if(level==='universe')return 'Choose a realm. Norrath and The Planes are mapped; others await EQL data.';
+ if(level==='world')return alt==="Norrath"?'Click a landmass to zoom in. Scroll = zoom, drag = pan.':'The Outer Planes - portal realms beyond Norrath. Click a plane to zoom in.';
+ if(level==='continent')return Object.keys(ALL[cur].zones).length+' zones'+(DETAIL[cur]?' - click a zone for full detail':'');
+ return '';}
+
+/* ---- edit UI wiring ---- */
+function setTool(t){tool=t;pendingConn=null;
+ document.getElementById('tSelect').classList.toggle('on',t==='select');
+ document.getElementById('tConn').classList.toggle('on',t==='conn');
+ document.getElementById('tHub').classList.toggle('on',t==='hub');
+ document.getElementById('hubkinds').style.display=(t==='hub')?'':'none';
+ tip.style.display='none';}
+function suspendEdit(){editMode=false;sel=null;hoverZone=null;pendingConn=null;hoverLink=null;
+ showHidden=false;refreshHiddenUI();   // ghosts are an edit-mode affordance; never leak them into plain view
+ const eb=document.getElementById('editbar');if(eb)eb.style.display='none';
+ if(insp)insp.style.display='none';
+ const be=document.getElementById('bEdit');if(be){be.classList.remove('on');be.innerHTML='&#9998; Edit: off';}
+ cv.classList.remove('edit');suppressClick=false;}
+function setEdit(on){
+ if(on){
+   /*__AUTHOR__*/getPristine();   // snapshot the clean template on FIRST edit-entry (no toast shown, autoAnchor still on) for standalone export/*__END_AUTHOR__*/
+   if(editScope()==='world'){ if(!WEDIT){buildWorldEditState();worldLoadLatest();} }
+   else { if(!EDIT[cur]){buildEditState(cur);loadLatest();}else bindES(cur);
+          ensureLinks(cur); }   // welds are deferred out of buildEditState; this is where they get detected
+   editMode=true;
+   const be=document.getElementById('bEdit');be.innerHTML='&#9998; Edit: on';be.classList.add('on');
+   document.getElementById('editbar').style.display='';
+   configEditbar();
+   document.getElementById('desc').textContent = (editScope()==='world')
+     ? (level==='universe'?'Edit mode: drag realms to reposition.'
+                          :'Edit mode: drag continents; +Connector adds world routes.')
+     : 'Edit mode: drag zones, connectors and hubs.';
+   cv.classList.add('edit');suppressClick=false;
+   setTool('select');buildHist();markSaved();refreshHiddenUI();refreshInspector();draw();
+ } else {
+   suspendEdit();
+   document.getElementById('desc').textContent=viewDesc();
+   refreshInspector();draw();}}
+document.getElementById('bEdit').onclick=()=>setEdit(!editMode);
+document.getElementById('tSelect').onclick=()=>setTool('select');
+document.getElementById('tConn').onclick=()=>setTool('conn');
+document.getElementById('tHub').onclick=()=>setTool('hub');
+document.querySelectorAll('#hubkinds .k').forEach(el=>el.onclick=()=>{newHubKind=el.dataset.kind;
+ document.querySelectorAll('#hubkinds .k').forEach(x=>x.classList.toggle('on',x===el));});
+document.getElementById('bAuto').onclick=()=>{autoAnchor=!autoAnchor;
+ const b=document.getElementById('bAuto');b.innerHTML='&#9875; Auto-anchor: '+(autoAnchor?'on':'off');b.classList.toggle('on',autoAnchor);};
+/*__USER__*/
+document.getElementById('bShowHidden').onclick=()=>{showHidden=!showHidden;refreshHiddenUI();draw();};
+document.getElementById('bHiddenList').onclick=()=>{const l=document.getElementById('hiddenList');
+ l.style.display=(l.style.display==='none')?'':'none';refreshHiddenUI();};
+/*__END_USER__*/
+/*__AUTHOR__*/document.getElementById('bExport').onclick=()=>{editScope()==='world'?exportWorld():exportLayout();};
+document.getElementById('bExportHTML').onclick=exportStandaloneHTML;
+/*__END_AUTHOR__*/
+document.getElementById('bOvExport').onclick=exportOverlay;
+document.getElementById('bOvImport').onclick=()=>document.getElementById('ovFile').click();
+document.getElementById('ovFile').onchange=ev=>{const f=ev.target.files&&ev.target.files[0];
+ ev.target.value='';importOverlayFile(f);};   // clear first so re-picking the same file still fires
+// drag-and-drop anywhere on the page
+addEventListener('dragover',e=>{if(e.dataTransfer)e.dataTransfer.dropEffect='copy';e.preventDefault();});
+addEventListener('drop',e=>{e.preventDefault();
+ const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+ if(f)importOverlayFile(f);});
+document.getElementById('bSave').onclick=()=>{editScope()==='world'?worldSaveVersion():saveVersion();};
+document.getElementById('bRevert').onclick=()=>{editScope()==='world'?worldRevertLast():revertLast();};
+document.getElementById('histSel').onchange=ev=>{const i=+ev.target.value;if(i<0)return;const o=readStoreK(curStoreKey());
+ if(o.versions[i]){ if(editScope()==='world')worldApplyState(o.versions[i].state); else applyState(o.versions[i].state);
+   sel=null;refreshInspector();draw();toast('Loaded v'+(i+1)+' (Save to keep as newest).');}};
+document.getElementById('bReset').onclick=()=>{
+ const isW=editScope()==='world';
+ if(!confirm('Discard ALL versions saved in this browser and reset '+(isW?'the world/universe layout':cur)+' to the published map?'))return;
+ try{localStorage.removeItem(curStoreKey());}catch(e){}
+ if(isW)buildWorldEditState();else {buildEditState(cur);if(editMode)ensureLinks(cur);}
+ sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();toast('Reset to the published map.');};
+
+addEventListener('resize',resize);resize();enterUniverse();
+</script></body></html>

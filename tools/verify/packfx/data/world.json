@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "Testland": { "pos": [50, 50], "uc": 0, "vc": 0, "gscale": 1, "gw": 10, "gh": 10,
+                  "alt": "Norrath", "xpac": "classic" }
+  },
+  "order": ["Testland"],
+  "xpacs": { "order": ["classic"], "default": "classic", "labels": { "classic": "Classic" } },
+  "universe": [],
+  "worldLinks": []
+}

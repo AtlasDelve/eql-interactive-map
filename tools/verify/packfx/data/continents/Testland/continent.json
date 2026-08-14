@@ -1,0 +1,13 @@
+{
+  "name": "Testland",
+  "zoneOrder": ["alpha", "beta", "gamma"],
+  "detailZones": ["beta", "alpha", "gamma"],
+  "placed": ["alpha", "beta", "gamma"],
+  "unplaced": [],
+  "bbox": [-20, -20, 40, 40],
+  "zones": {
+    "alpha": { "name": "Alpha", "color": "#5fb95f", "cx": 1, "cy": 0, "off": [0.5, -0.25] },
+    "beta":  { "name": "Beta",  "color": "#cd853f", "cx": 2, "cy": 8, "off": [-2.0, 3.0] },
+    "gamma": { "name": "Gamma", "color": "#6c6cff", "cx": 1, "cy": 1, "off": [0.0, 0.0] }
+  }
+}

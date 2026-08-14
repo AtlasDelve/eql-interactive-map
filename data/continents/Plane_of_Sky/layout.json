@@ -1,0 +1,15 @@
+{
+  "connectors": [],
+  "hubs": [
+    {
+      "x": -550,
+      "y": 1423,
+      "kind": "teleport",
+      "label": "Teleport — Plane of Sky",
+      "letter": "S",
+      "note": "Alter Plane: Sky\nCloudy Stone of Veeshan (consumed)"
+    }
+  ],
+  "links": [],
+  "zoneXf": {}
+}

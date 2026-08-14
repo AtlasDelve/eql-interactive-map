@@ -1,0 +1,19 @@
+{
+  "description": "Codex-side wiring for the commit-time docs reminder. The script is shared with Claude Code (.claude/settings.json) rather than duplicated -- see .codex/README.md for why the path points into .claude/.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-agent-docs.js",
+            "commandWindows": "node .claude\\hooks\\check-agent-docs.js",
+            "timeout": 10,
+            "statusMessage": "Checking whether AGENTS.md needs an update"
+          }
+        ]
+      }
+    ]
+  }
+}

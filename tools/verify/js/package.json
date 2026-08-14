@@ -1,0 +1,14 @@
+{
+  "name": "eql-interactive-map-verify",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ad-hoc verification suites for the generated map. Not shipped; not a build dependency.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "scripts": {
+    "fixtures": "node overlay.test.js && node hide-io.test.js && node ghost-alpha.test.js && node author-guards.test.js"
+  },
+  "dependencies": {
+    "jsdom": "^29.1.1",
+    "playwright-core": "^1.62.0"
+  }
+}
