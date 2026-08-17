@@ -18,7 +18,12 @@ One decimal place is ``_r(x * 10) / 10`` -- ``roundHalfEven(x * 10) / 10`` in Ja
 half-to-even; one-decimal ties such as 0.25 and 0.75 are exactly representable, so they occur
 (2,000 / 150,000).
 
-Use no trig on the derivation path: ``cos``/``sin`` diverged on about 2.4% of random angles.
+No trig on the cost path. Nothing that produces a ``cost`` may use ``cos``/``sin``; they diverged
+on about 2.4% of random angles. ``tpoint``/``tinv`` are the deliberate exception -- they are frame
+transforms, not cost arithmetic, and every value they produce is rounded to one decimal before it
+can reach the injected data, which absorbs the divergence by many orders of magnitude. A
+JavaScript twin of ``tpoint``/``tinv`` does not inherit that safety for free: it must be checked
+for parity against Python, not assumed.
 
 Canonicalise anything reaching the injected data: integral floats become ``int``; non-finite and
 out-of-safe-range values raise. ``build.py``'s ``_canon_float`` applies this through ``load()``'s
@@ -29,6 +34,8 @@ import re
 
 
 COST_SAMPLE = 200         # outline points per zone for the closest-approach cost scan
+# Nominal continent-frame units per cost unit. Cost is authored and hand-tunable; this only
+# sets the bootstrap default, so it needs to be reasonable, not exact.
 UNITS_PER_COST = 250.0
 
 
