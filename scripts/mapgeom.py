@@ -6,6 +6,23 @@ conversion can import it without creating a repository-internal import cycle.
 Most helpers operate only on records supplied by the caller. ``cost_points`` deliberately
 memoises sampled points into those zone records under the private ``_cpts`` or ``_cpts_t`` key;
 callers must not serialize a record after passing it here without removing private keys.
+
+Never ``hypot`` on a path whose result can reach the injected data. ``Math.hypot`` is not required
+to be correctly rounded and diverges from CPython's on 35% of continent-scale inputs (21,015 /
+60,000, measured 2026-08-08). Explicit ``sqrt`` of the squared sum is correctly rounded in both
+and diverged on 0 / 60,000.
+
+One decimal place is ``_r(x * 10) / 10`` -- ``roundHalfEven(x * 10) / 10`` in JavaScript. Never
+``round(x, 1)``, which has no JavaScript twin (it differs from ``_r(x * 10) / 10`` on 11,083 /
+100,000 adversarial inputs). Never ``toFixed(1)``, which rounds half-up where Python rounds
+half-to-even; one-decimal ties such as 0.25 and 0.75 are exactly representable, so they occur
+(2,000 / 150,000).
+
+Use no trig on the derivation path: ``cos``/``sin`` diverged on about 2.4% of random angles.
+
+Canonicalise anything reaching the injected data: integral floats become ``int``; non-finite and
+out-of-safe-range values raise. ``build.py``'s ``_canon_float`` applies this through ``load()``'s
+``parse_float`` hook, so a value created rather than loaded never passes through it.
 """
 import math
 import re
@@ -13,6 +30,11 @@ import re
 
 COST_SAMPLE = 200         # outline points per zone for the closest-approach cost scan
 UNITS_PER_COST = 250.0
+
+
+def norm(dx, dy):
+    """Euclidean length. NEVER math.hypot - see the module docstring."""
+    return math.sqrt(dx * dx + dy * dy)
 
 
 def tpoint(z, x, y):
@@ -243,6 +265,6 @@ def cost_between(zones, k1, k2, transformed, exits=None):
                 d = (ax - bx) ** 2 + (ay - by) ** 2
                 if d < best:
                     best, pa, pb = d, (ax, ay), (bx, by)
-    reach = math.hypot(c1[0] - pa[0], c1[1] - pa[1]) \
-        + math.hypot(pb[0] - c2[0], pb[1] - c2[1])
+    reach = norm(c1[0] - pa[0], c1[1] - pa[1]) \
+        + norm(pb[0] - c2[0], pb[1] - c2[1])
     return reach / UNITS_PER_COST
