@@ -19,6 +19,7 @@ it.** Where a row names two files, you need both.
 | If you are touching… | Read first |
 |---|---|
 | `data/travel.json`; walk edges, transport routes (boats, ports, spires), route costs, `access`, `overrides`, adjacency, doorways; `scripts/derive_travel_graph.py` | [`travel-graph.md`](docs/reference/travel-graph.md) |
+| `scripts/mapgeom.py`; reusable geometry, walk-cost arithmetic, zone-name resolution | [`travel-graph.md`](docs/reference/travel-graph.md) |
 | the travel module in `src/template.html` — search, `tPlan`, the itinerary, `TROUTE`, `tRender`, route drawing at any level, `focus`/`zoneDimmed`, the zone legend | [`travel-runtime.md`](docs/reference/travel-runtime.md) |
 | `META[c].xpac`, `XPAC_*`, `recomputeXpac`, `ALTITUDES`, the expansion picker, `META` field semantics | [`expansion-selection.md`](docs/reference/expansion-selection.md) |
 | `EDIT`/`WEDIT`, `contData()`, `buildOverlay`, `applyContOverlay`/`applyWorldOverlay`, anchoring, the localStorage buffers | [`customization-overlay.md`](docs/reference/customization-overlay.md) |
