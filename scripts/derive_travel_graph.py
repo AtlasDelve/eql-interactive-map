@@ -31,12 +31,12 @@ import argparse
 import json
 import math
 import os
-import re
 import sys
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import import_pack                                              # noqa: E402
+import mapgeom                                                 # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
@@ -56,7 +56,6 @@ for _s in (sys.stdout, sys.stderr):
 LINK_THRESH = 120
 ANCHOR_THRESH = 1200
 SAMPLE_MAX = 700          # detectLinks() samples at most this many outline points per zone
-COST_SAMPLE = 200         # outline points per zone for the closest-approach cost scan
 REVIEW_DIST = 100         # connector endpoint further than this from its zone -> flag for review
 COST_DIVERGE = 0.25       # untransformed vs transformed cost differing by more than this -> flag
 NEARMISS_GAP = 20         # weld-only edge whose outlines stay this far apart -> flag for review
@@ -65,11 +64,6 @@ NEARMISS_GAP = 20         # weld-only edge whose outlines stay this far apart ->
 # unrouted until EQL has them; the verify layer keeps that an explicit allowlist, not a gap.
 CLASSIC = ["Antonica", "Faydwer", "Odus", "Ocean of Tears", "Erud's Crossing",
            "Timorous Deep", "Plane of Fear", "Plane of Hate", "Plane of Sky"]
-
-# Nominal continent-frame units per cost unit. Cost is authored and hand-tunable; this only
-# sets the bootstrap default, so it needs to be reasonable, not exact.
-UNITS_PER_COST = 250.0
-
 
 def load(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -86,31 +80,6 @@ def gen_dir(cont):
                         cont.replace(" ", "_").replace("'", ""))
 
 
-# ---------------------------------------------------------------- geometry (mirrors viewer)
-
-def tpoint(z, x, y):
-    """Apply a zone's render-time affine, exactly as the viewer's tPoint() does."""
-    xf = z.get("xf") or {}
-    s = xf.get("s", 1)
-    s = 1 if s is None else s
-    rot = xf.get("rot", 0)
-    dx, dy = (x - z["cx"]) * s, (y - z["cy"]) * s
-    c, si = math.cos(rot), math.sin(rot)
-    return (z["cx"] + dx * c - dy * si + xf.get("tx", 0),
-            z["cy"] + dx * si + dy * c + xf.get("ty", 0))
-
-
-def tinv(z, X, Y):
-    """Inverse of tpoint: a world point back into the zone's LOCAL frame."""
-    xf = z.get("xf") or {}
-    s = xf.get("s", 1)
-    s = 1 if s is None else s
-    rot = xf.get("rot", 0)
-    dx, dy = X - z["cx"] - xf.get("tx", 0), Y - z["cy"] - xf.get("ty", 0)
-    c, si = math.cos(-rot), math.sin(-rot)
-    return (z["cx"] + (dx * c - dy * si) / s, z["cy"] + (dx * si + dy * c) / s)
-
-
 def sampled_points(z):
     """Transformed outline points, sampled the same way detectLinks() samples them."""
     pts = []
@@ -120,7 +89,7 @@ def sampled_points(z):
     if len(pts) > SAMPLE_MAX:
         step = len(pts) / SAMPLE_MAX
         pts = [pts[int(i * step)] for i in range(SAMPLE_MAX)]
-    return [tpoint(z, p[0], p[1]) for p in pts]
+    return [mapgeom.tpoint(z, p[0], p[1]) for p in pts]
 
 
 def dist_to_zone(z, px, py, ceiling=None):
@@ -138,8 +107,8 @@ def dist_to_zone(z, px, py, ceiling=None):
             return None
     best = float("inf")
     for s in z["segs"]:
-        ax, ay = tpoint(z, s[0], s[1])
-        bx, by = tpoint(z, s[2], s[3])
+        ax, ay = mapgeom.tpoint(z, s[0], s[1])
+        bx, by = mapgeom.tpoint(z, s[2], s[3])
         dx, dy = bx - ax, by - ay
         l2 = dx * dx + dy * dy
         t = ((px - ax) * dx + (py - ay) * dy) / l2 if l2 else 0.0
@@ -212,8 +181,8 @@ def load_continent(cont):
 # ------------------------------------------------- zone transitions (mirrors the viewer)
 # A zone's detail map marks its own exits with `to_`/`from_` labels, and that is the primary
 # source for WHERE a zone line is. Resolving those labels needs the viewer's own name index, so
-# the four pieces below mirror src/template.html: znorm, ZIDX built from DETAIL zone names,
-# ZALIAS, LINK_OVERRIDE. Two copies of a table is a drift risk, so travel-full.test.js checks
+# mapgeom mirrors src/template.html's znorm, ZIDX built from DETAIL zone names, ZALIAS and
+# LINK_OVERRIDE. Two copies of a table is a drift risk, so travel-full.test.js checks
 # the authored costs against the RUNTIME's own resolution - if these fall out of step with the
 # template, the costs written here stop matching and that test fails.
 #
@@ -221,45 +190,9 @@ def load_continent(cont):
 # "neriak"). This copy walks world.json order and zoneOrder within each continent; the viewer
 # instead walks DETAIL in detailZones order. The colliding groups retain the same relative order
 # today, so the two copies agree by coincidence rather than by construction.
-_SPELL = [("forrest", "forest"), ("excile", "exile"), ("cablis", "cabilis"),
-          ("toxullia", "toxxulia"), ("feerott", "feerrott"), ("aquaduct", "aqueduct"),
-          ("northern", "north"), ("southern", "south"), ("eastern", "east"),
-          ("western", "west")]
-ZALIAS = {"butcherblock": "butcherblock mountains", "kerra ridge": "kerra isle",
-          "castle of mistmoore": "castle mistmoore", "city of guk": "upper guk",
-          "erudin city": "erudin", "erudin docks": "erudin",
-          "north ro": "north desert of ro", "south ro": "south desert of ro",
-          "permafrost keep": "permafrost caverns", "temple of cazic-thule": "cazic-thule",
-          "skyshrine lower level": "skyshrine", "ruins of old guk": "lower guk",
-          "ruins of old paineel": "warrens", "ruins of sebilis": "old sebilis",
-          "city of thurgadin": "thurgadin", "qeynos aqueduct system": "qeynos catacombs",
-          "liberated citadel of runnyeye": "runnyeye citadel",
-          "valley of king xorbb": "gorge of king xorbb"}
-LINK_OVERRIDE = {"kithicor|to_The_Commonlands": "commons",
-                 "befallen|to_The_Commonlands": "commons"}
-
-
-def znorm(s):
-    s = s.lower().replace("`", "'").replace("_", " ")
-    s = re.sub(r"^\s*(to|from)\s+", "", s)
-    s = re.sub(r"\(.*?\)", "", s)
-    s = re.sub(r":.*$", "", s)
-    s = re.sub(r"\bone[- ]way\b", "", s).replace("&", " ").replace(" - ", " ")
-    for a, b in _SPELL:
-        s = s.replace(a, b)
-    s = s.replace("plains of karana", "karana")
-    s = re.sub(r"^(the|clan)\s+", "", s)
-    return re.sub(r"\s+", " ", s).strip(" -")
-
-
 def build_zidx(conts):
     """Name -> zone key over detail maps, in authored zoneOrder insertion order."""
-    idx = {}
-
-    def put(k, v):
-        k = k.strip()
-        if k and k not in idx:
-            idx[k] = v
+    entries = []
     for cont in conts:
         base = cont_dir(cont)
         cj = os.path.join(base, "continent.json")
@@ -274,63 +207,8 @@ def build_zidx(conts):
             if not os.path.exists(os.path.join(gen_dir(cont), "detail", zk + ".json")):
                 continue
             nm = (cmeta.get("zones") or {})[zk]["name"]
-            nl = nm.lower()
-            put(znorm(nm), (cont, zk))
-            mm = re.search(r"\((north|south|east|west)\)", nl)
-            if mm:
-                b = znorm(re.sub(r"\s*\((north|south|east|west)\)", "", nl))
-                put(mm.group(1) + " " + b, (cont, zk))
-                put(b + " " + mm.group(1), (cont, zk))
-            m2 = re.search(r"neriak \((.*)\)", nl)
-            if m2:
-                put("neriak " + m2.group(1), (cont, zk))
-    return idx
-
-
-def resolve_zone(idx, lab):
-    n = znorm(lab)
-    if n in idx:
-        return idx[n]
-    a = ZALIAS.get(n)
-    return idx.get(a) if a else None
-
-
-def transition_targets(idx, zk, full):
-    """Zone keys a detail label is a doorway to. Mirrors the viewer's transitionTargets()."""
-    if not re.match(r"^(to|from)_", full, re.I):
-        return []
-    ov = LINK_OVERRIDE.get(zk + "|" + full)
-    if ov:
-        return [ov]
-    amp = full.find("&")
-    if amp < 0:
-        t = resolve_zone(idx, full)
-        return [t[1]] if t else []
-    out = []
-    for part in (full[:amp], full[amp + 1:]):
-        t = resolve_zone(idx, part)
-        if t:
-            out.append(t[1])
-    return out
-
-
-def detail_offset(z, det):
-    """Detail frame -> continent frame. A pure translation, recovered from one segment pair.
-
-    Confirmed against a second, well-separated segment before it is trusted: one pair is enough
-    to RECOVER a translation and not enough to know there is one, and a re-import that reordered
-    or dropped a segment would give a plausible offset that silently misplaced every exit in the
-    zone. Mirrors the viewer's detailOffset(), including giving up rather than guessing.
-    """
-    if not z["segs"] or not det["segs"]:
-        return None
-    ox = z["segs"][0][0] - det["segs"][0][0]
-    oy = z["segs"][0][1] - det["segs"][0][1]
-    m = min(len(z["segs"]), len(det["segs"])) // 2
-    a, b = z["segs"][m], det["segs"][m]
-    if abs((a[0] - b[0]) - ox) > 1.5 or abs((a[1] - b[1]) - oy) > 1.5:
-        return None
-    return ox, oy
+            entries.append((cont, zk, nm))
+    return mapgeom.zidx_from(entries)
 
 
 def exit_points(cont, zones, idx, meta):
@@ -350,106 +228,9 @@ def exit_points(cont, zones, idx, meta):
         if not os.path.exists(dp):
             continue
         det = import_pack.compose_detail(azones[zk], load(dp), palette)
-        off = detail_offset(z, det)
-        if not off:
-            continue
-        for lab in det["labels"]:
-            for tgt in transition_targets(idx, zk, lab[4]):
-                out.setdefault((zk, tgt), (lab[0] + off[0], lab[1] + off[1]))
+        for pair, point in mapgeom.exit_points_from(zk, z, det, idx).items():
+            out.setdefault(pair, point)
     return out
-
-
-def nearest_outline_point(z, px, py, transformed):
-    """The point of z's outline nearest (px,py), in the same frame the caller is working in.
-
-    Scans EVERY segment endpoint rather than cost_points()' 200-point sample. That sample exists
-    for the O(n*m) closest-approach scan; this is O(n), so thinning it buys nothing and only costs
-    accuracy - and it runs at most twice per one-sided edge, of which there are two.
-    """
-    best, bp = float("inf"), (z["cx"], z["cy"])
-    for s in z["segs"]:
-        for p in ((s[0], s[1]), (s[2], s[3])):
-            q = tpoint(z, p[0], p[1]) if transformed else p
-            d = (q[0] - px) ** 2 + (q[1] - py) ** 2
-            if d < best:
-                best, bp = d, q
-    return bp
-
-
-def cost_points(z, transformed):
-    """Outline points for the cost measurement, thinned for an O(n*m) closest-pair scan.
-
-    Separate from `_pts` because that one is always transformed and sampled for weld
-    detection. A few units of imprecision is irrelevant after dividing by UNITS_PER_COST.
-    """
-    key = "_cpts_t" if transformed else "_cpts"
-    if key not in z:
-        pts = []
-        for s in z["segs"]:
-            pts.append((s[0], s[1]))
-            pts.append((s[2], s[3]))
-        if len(pts) > COST_SAMPLE:
-            step = len(pts) / COST_SAMPLE
-            pts = [pts[int(i * step)] for i in range(COST_SAMPLE)]
-        z[key] = [tpoint(z, p[0], p[1]) for p in pts] if transformed else pts
-    return z[key]
-
-
-def cost_between(zones, k1, k2, transformed, exits=None):
-    """Default walk cost: centroid -> the doorway each zone names -> centroid, / UNITS_PER_COST.
-
-    NOT centroid separation. The continental stitch does not place zones at true relative
-    distance - Innothule Swamp and South Desert of Ro are drawn 13 800 units apart with
-    nothing between them - so centroid separation bills the traveller for empty canvas. A
-    connector between two zones means they are directly connected, whatever the drawing puts
-    between them, so the void must not be priced.
-
-    The doorway comes from the zone's OWN detail map: its `to_X`/`from_X` label marks where that
-    exit physically is, resolved through the viewer's name index and placed on the continent map
-    by detail_offset(). On current data 72 of 74 edges name it from both sides and none from
-    neither.
-
-    Geometric closest approach is the FALLBACK, because it is only a valid proxy for a zone line
-    where the outlines actually touch. Where a stitch void separates them it returns whichever
-    flanks happen to face each other - a fact about relative box placement, not about the game.
-    It put the South Ro crossing on Innothule's east flank beside the Guk and Grobb city
-    entrances, 3 096 units from the northern entrance the zone itself names. With one label, the
-    unnamed end is the point of that outline nearest the named doorway, so it stays pinned to a
-    real exit rather than to bounding-box geometry.
-
-    The edge's stored `at` is not the doorway either: it holds the drawn connector's endpoints,
-    which on Innothule/South Ro sit 16 553 apart - further than the centroids themselves - and
-    land on neither outline.
-
-    transformed=False is what ships. Rotation and scale are about the centroid so they cannot
-    move it, but tx/ty can - so a transformed cost would shift whenever an author drags a zone
-    for looks. Untransformed stored geometry is stable. Both are computed so the review report
-    can flag where they disagree.
-    """
-    z1, z2 = zones[k1], zones[k2]
-    fwd = (lambda z, p: tpoint(z, p[0], p[1])) if transformed else (lambda z, p: p)
-    c1, c2 = fwd(z1, (z1["cx"], z1["cy"])), fwd(z2, (z2["cx"], z2["cy"]))
-    e1 = (exits or {}).get((k1, k2))
-    e2 = (exits or {}).get((k2, k1))
-    if e1 and e2:
-        pa, pb = fwd(z1, e1), fwd(z2, e2)
-    elif e1:
-        pa = fwd(z1, e1)
-        pb = nearest_outline_point(z2, pa[0], pa[1], transformed)
-    elif e2:
-        pb = fwd(z2, e2)
-        pa = nearest_outline_point(z1, pb[0], pb[1], transformed)
-    else:
-        A, B = cost_points(z1, transformed), cost_points(z2, transformed)
-        best, pa, pb = float("inf"), c1, c2
-        for ax, ay in A:
-            for bx, by in B:
-                d = (ax - bx) ** 2 + (ay - by) ** 2
-                if d < best:
-                    best, pa, pb = d, (ax, ay), (bx, by)
-    reach = math.hypot(c1[0] - pa[0], c1[1] - pa[1]) \
-        + math.hypot(pb[0] - c2[0], pb[1] - c2[1])
-    return reach / UNITS_PER_COST
 
 
 def derive(conts):
@@ -484,8 +265,8 @@ def derive(conts):
             if pair not in conn_at:
                 # store per-zone LOCAL coords so the point follows its zone, exactly as
                 # connector anchors (la/lb) already do
-                pa = tinv(zones[pair[0]], *(c["a"] if pair[0] == ka else c["b"]))
-                pb = tinv(zones[pair[1]], *(c["b"] if pair[0] == ka else c["a"]))
+                pa = mapgeom.tinv(zones[pair[0]], *(c["a"] if pair[0] == ka else c["b"]))
+                pb = mapgeom.tinv(zones[pair[1]], *(c["b"] if pair[0] == ka else c["a"]))
                 conn_at[pair] = [[round(pa[0], 1), round(pa[1], 1)],
                                  [round(pb[0], 1), round(pb[1], 1)]]
             if max(da, db) > REVIEW_DIST:
@@ -526,13 +307,13 @@ def derive(conts):
                 src.append("connector")
             if pair in manual:
                 src.append("manual")
-            c_plain = cost_between(zones, k1, k2, False, exits)
-            c_xf = cost_between(zones, k1, k2, True, exits)
+            c_plain = mapgeom.cost_between(zones, k1, k2, False, exits)
+            c_xf = mapgeom.cost_between(zones, k1, k2, True, exits)
             at = conn_at.get(pair)
             if at is None and pair in welds:
                 _, p1, p2 = welds[pair]
-                a1 = tinv(zones[k1], *p1)
-                a2 = tinv(zones[k2], *p2)
+                a1 = mapgeom.tinv(zones[k1], *p1)
+                a2 = mapgeom.tinv(zones[k2], *p2)
                 at = [[round(a1[0], 1), round(a1[1], 1)], [round(a2[0], 1), round(a2[1], 1)]]
             entry = {"z": [k1, k2], "cost": round(max(c_plain, 0.1), 1)}
             if at:
@@ -744,7 +525,7 @@ def access_cost(zones, layout, stop, anchor):
     z = zones.get(stop)
     if z is None:
         return 0.0
-    return math.hypot(h["x"] - z["cx"], h["y"] - z["cy"]) / UNITS_PER_COST
+    return math.hypot(h["x"] - z["cx"], h["y"] - z["cy"]) / mapgeom.UNITS_PER_COST
 
 
 def cmd_recost(conts):
@@ -773,7 +554,8 @@ def cmd_recost(conts):
         if host is None:
             missed.append((k1, k2))
             continue
-        new = round(max(cost_between(zones_by[host], k1, k2, False, exits_by[host]), 0.1), 1)
+        new = round(max(mapgeom.cost_between(zones_by[host], k1, k2, False,
+                                             exits_by[host]), 0.1), 1)
         old = e.get("cost")
         total_old += old or 0
         total_new += new
