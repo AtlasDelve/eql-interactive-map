@@ -218,8 +218,9 @@ def load_continent(cont):
 # template, the costs written here stop matching and that test fails.
 #
 # ZIDX is first-wins and its keys genuinely collide (all three Neriak quarters normalise to
-# "neriak"), so the build order below is load-bearing and follows the viewer's: world.json order
-# of continents, zoneOrder within each.
+# "neriak"). This copy walks world.json order and zoneOrder within each continent; the viewer
+# instead walks DETAIL in detailZones order. The colliding groups retain the same relative order
+# today, so the two copies agree by coincidence rather than by construction.
 _SPELL = [("forrest", "forest"), ("excile", "exile"), ("cablis", "cabilis"),
           ("toxullia", "toxxulia"), ("feerott", "feerrott"), ("aquaduct", "aqueduct"),
           ("northern", "north"), ("southern", "south"), ("eastern", "east"),
@@ -252,7 +253,7 @@ def znorm(s):
 
 
 def build_zidx(conts):
-    """name -> zone key, over the detail maps, in the viewer's own insertion order."""
+    """Name -> zone key over detail maps, in authored zoneOrder insertion order."""
     idx = {}
 
     def put(k, v):
