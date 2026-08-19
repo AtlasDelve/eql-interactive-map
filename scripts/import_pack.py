@@ -28,6 +28,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mapgeom                                                 # noqa: E402
 import pack_colors                                              # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -394,6 +395,35 @@ def promote(tmp_root, out_root):
 
 
 # --------------------------------------------------------------------------- conversion
+def discovery_index_entries(pack, root, data, world):
+    """Authored ``(continent, key, name)`` entries in the viewer's DETAIL order.
+
+    Resolution is existence-only here: a rostered detail zone participates only when the
+    selected source can actually supply it.  That mirrors the viewer's ZIDX, which is built
+    from DETAIL rather than from the complete authored roster.  The full authored order is
+    always scanned, even for ``--only``, because this is one global first-wins index.
+    """
+    entries = []
+    for cont in world["order"]:
+        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        roster = list(meta["zoneOrder"])
+        for zk in meta.get("detailZones", []):
+            if zk not in roster:
+                roster.append(zk)
+        resolved = set()
+        for zk in roster:
+            srcdir, _src = resolve_zone_source(pack, root, zk)
+            if srcdir is not None:
+                resolved.add(zk)
+        zones = authored_zones(meta)
+        for zk in meta.get("detailZones", []):
+            if zk in resolved:
+                entries.append((cont, zk, zones[zk]["name"]))
+    return entries
+
+
 def convert(pack, data=None, only=None, quiet=False):
     data = data or DATA
     with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
@@ -430,6 +460,16 @@ def convert(pack, data=None, only=None, quiet=False):
     # and anything else gets none - in which case every line below behaves exactly as it did
     # before layering existed.
     root = root_layer(pack)
+
+    # Pass A -- index. Build the same global, first-wins name index the viewer gets from
+    # DETAIL. Map-file contents are deliberately not read in this pass.
+    index_entries = discovery_index_entries(pack, root, data, world)
+    zone_index = mapgeom.zidx_from(index_entries)
+
+    # Pass B -- detect. Step 2 fills this in; keeping both collections explicit here makes
+    # the three-pass shape testable without changing what conversion writes.
+    accepted = {cont: [] for cont in world["order"]}
+    rejected = []
 
     out_root = os.path.join(data, CACHE_DIRNAME)
     # A unique staging directory beside the target, not a fixed `.tmp` sibling: two runs in
@@ -479,6 +519,9 @@ def convert(pack, data=None, only=None, quiet=False):
         for zk in meta.get("detailZones", []):
             if zk not in roster:
                 roster.append(zk)
+        for candidate in accepted.get(cont, []):
+            if candidate["key"] not in roster:
+                roster.append(candidate["key"])
         for zk in roster:
             # ONE directory per zone, chosen before a byte is read. That is what makes a zone
             # assembled from two sources unrepresentable rather than merely untested - a

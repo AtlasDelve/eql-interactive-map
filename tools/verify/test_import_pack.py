@@ -93,6 +93,48 @@ tmp = tempfile.mkdtemp(prefix="packfx-")
 try:
     data = os.path.join(tmp, "data")
     shutil.copytree(os.path.join(FX, "data"), data)
+
+    # -- pass-A discovery index --------------------------------------
+    # The viewer builds ZIDX from DETAIL, so conversion must use detailZones order and omit
+    # roster entries whose selected source is absent.  Pin the first-wins collision too: a
+    # plausible index can still resolve the wrong zone if either ordering rule drifts.
+    with open(os.path.join(data, "world.json"), encoding="utf-8") as f:
+        iworld = json.load(f)
+    ientries = IP.discovery_index_entries(PACK, None, data, iworld)
+    check("discovery index follows detailZones order",
+          ientries,
+          [("Testland", "beta", "Beta"),
+           ("Testland", "alpha", "Alpha"),
+           ("Testland", "gamma", "Gamma")])
+    check("discovery index resolves a known authored name",
+          IP.mapgeom.resolve_zone(IP.mapgeom.zidx_from(ientries), "Beta"),
+          ("Testland", "beta"))
+
+    index_cpath = os.path.join(data, "continents", "Testland", "continent.json")
+    with open(index_cpath, encoding="utf-8") as f:
+        index_meta = json.load(f)
+    original_index_meta = json.loads(json.dumps(index_meta))
+    index_meta["zoneOrder"].append("epsilon")
+    index_meta["detailZones"].append("epsilon")
+    index_meta["zones"]["epsilon"] = {
+        "name": "Epsilon", "color": "#5fb95f", "cx": 0, "cy": 0, "off": [0, 0]}
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(index_meta, f)
+    check("discovery index omits a detail zone whose source is missing",
+          [e[1] for e in IP.discovery_index_entries(PACK, None, data, iworld)],
+          ["beta", "alpha", "gamma"])
+
+    collision_meta = json.loads(json.dumps(original_index_meta))
+    collision_meta["zones"]["alpha"]["name"] = "Beta"
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(collision_meta, f)
+    collision_entries = IP.discovery_index_entries(PACK, None, data, iworld)
+    check("discovery index collision is first-wins in detailZones order",
+          IP.mapgeom.resolve_zone(IP.mapgeom.zidx_from(collision_entries), "Beta"),
+          ("Testland", "beta"))
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(original_index_meta, f)
+
     manifest = IP.convert(PACK, data, quiet=True)
     gen = os.path.join(data, IP.CACHE_DIRNAME, "continents", "Testland")
 
