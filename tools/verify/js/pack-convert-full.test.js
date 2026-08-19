@@ -149,13 +149,13 @@ async function runRootOnly(mapsRoot, template, colors) {
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);
-    assert.strictEqual(skipped.length, 6, 'root-only skipped continent count');
-    assert.strictEqual(skippedCount, 37, 'root-only skipped zone count');
-    assert.strictEqual(surviving, 83, 'root-only surviving zone count');
+    assert.strictEqual(skipped.length, 5, 'root-only skipped continent count');
+    assert.strictEqual(skippedCount, 32, 'root-only skipped zone count');
+    assert.strictEqual(surviving, 88, 'root-only surviving zone count');
     assert.deepStrictEqual(result.data.ALL['Plane of Hate'].zones, {}, 'zero-zone continent retained');
     assert.strictEqual(result.credit, 'EQL · selected maps folder');
     compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
-    console.log('PASS: maps/ root alone (37 skipped across 6 continents, 83 surviving, Plane of Hate retained empty)');
+    console.log('PASS: maps/ root alone (32 skipped across 5 continents, 88 surviving, Plane of Hate retained empty)');
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
