@@ -36,6 +36,7 @@ DATA = os.path.join(ROOT, "data")
 CACHE_DIRNAME = "_generated"
 # 2: per-file `from` and per-continent rootZones/baselessZones (layered pack resolution).
 # 3: per-continent skippedZones (partial authored-roster coverage).
+# 4: per-continent discovery mode/catalog and structured top-level discovery rejections.
 #
 # The bump is not hygiene. validate_cache never reads `sources`, so a schema-1 cache would
 # keep building perfectly well - what it would break is the provenance report: seeded into a
@@ -45,7 +46,7 @@ CACHE_DIRNAME = "_generated"
 # validate_cache BEFORE seeding, so the stale manifest is rejected instead. The same applies
 # to schema 2 seeded into a schema-3 --only run: untouched continents would have no
 # skippedZones and the merged skip report would silently under-count them.
-SCHEMA = 3
+SCHEMA = 4
 
 # A pack zone is up to four files. They are semantic layers, not floors: the base file is line
 # geometry, _1 the POI/label layer (where the to_/from_ transition markers live), _2 a
@@ -424,7 +425,99 @@ def discovery_index_entries(pack, root, data, world):
     return entries
 
 
-def convert(pack, data=None, only=None, quiet=False):
+def discovery_base_keys(pack, root):
+    """Sorted, case-folded zone keys represented by any layer in either directory."""
+    keys = set()
+    suffixes = tuple(s.casefold() for s in LAYER_SUFFIXES if s)
+    for srcdir in (pack, root):
+        if not srcdir:
+            continue
+        for name in os.listdir(srcdir):
+            stem, ext = os.path.splitext(name)
+            folded = stem.casefold()
+            if ext.casefold() != ".txt":
+                continue
+            for suffix in suffixes:
+                if folded.endswith(suffix):
+                    folded = folded[:-len(suffix)]
+                    break
+            keys.add(folded)
+    return sorted(keys)
+
+
+def detect_discoveries(pack, root, roster, zone_index):
+    """Return ({continent: partial records}, structured rejections) for unrostered maps."""
+    roster = {key.casefold() for key in roster}
+    key_continent = {key: cont for cont, key in zone_index.values()}
+    candidates, rejected = [], []
+
+    def reject(key, reason, detail):
+        rejected.append({"key": key, "reason": reason, "detail": detail})
+
+    for key in discovery_base_keys(pack, root):
+        if key in roster:
+            continue
+        srcdir, source = resolve_zone_source(pack, root, key)
+        if srcdir is None:
+            continue
+        # The orphan tail resolves annotation-only zones.  Reject it before parsing so a
+        # markerless orphan is always baseless, never incidentally unresolved.
+        if not os.path.exists(os.path.join(srcdir, key + ".txt")):
+            reject(key, "baseless", source)
+            continue
+        records, _unknown = parse_zone(srcdir, key)
+        targets = set()
+        for layer, kind, record, _name, _lineno in records:
+            if layer == 1 and kind == "P":
+                targets.update(mapgeom.transition_targets(zone_index, key, record[3]))
+        targets = sorted(target for target in targets if target in key_continent)
+        continents = sorted({key_continent[target] for target in targets})
+        if not targets:
+            reject(key, "unresolved", "no resolved outward transition")
+            continue
+        if len(continents) != 1:
+            reject(key, "ambiguous", ", ".join(continents))
+            continue
+        candidates.append({"key": key, "from": source, "continent": continents[0],
+                           "targets": targets})
+
+    # A series qualifies only when every member has exactly one neighbour and it is the same
+    # neighbour for the whole stem.  Multi-neighbour members deliberately fall through.
+    groups = {}
+    for candidate in candidates:
+        stem = mapgeom.discovery_series_stem(candidate["key"])
+        if stem:
+            groups.setdefault(stem, []).append(candidate)
+    series_keys = set()
+    for stem, members in groups.items():
+        if (len(members) >= 3 and all(len(m["targets"]) == 1 for m in members) and
+                len({m["targets"][0] for m in members}) == 1):
+            for member in members:
+                series_keys.add(member["key"])
+                reject(member["key"], "series", stem)
+
+    accepted = {}
+    for candidate in candidates:
+        key = candidate["key"]
+        if key in series_keys:
+            continue
+        parent = mapgeom.discovery_derived_parent(key, roster)
+        if parent is not None:
+            reject(key, "derived", parent)
+            continue
+        if key in mapgeom.DISCOVERY_EXCLUDE:
+            reject(key, "excluded", "DISCOVERY_EXCLUDE")
+            continue
+        accepted.setdefault(candidate["continent"], []).append(
+            {"key": key, "from": candidate["from"]})
+
+    for records in accepted.values():
+        records.sort(key=lambda record: record["key"])
+    rejected.sort(key=lambda record: record["key"])
+    return accepted, rejected
+
+
+def convert(pack, data=None, only=None, quiet=False, discover=True):
     data = data or DATA
     with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
         world = json.load(f)
@@ -466,10 +559,18 @@ def convert(pack, data=None, only=None, quiet=False):
     index_entries = discovery_index_entries(pack, root, data, world)
     zone_index = mapgeom.zidx_from(index_entries)
 
-    # Pass B -- detect. Step 2 fills this in; keeping both collections explicit here makes
-    # the three-pass shape testable without changing what conversion writes.
-    accepted = {cont: [] for cont in world["order"]}
-    rejected = []
+    # Pass B -- detect globally. --only scopes which catalog entry is replaced, never the
+    # first-wins index or the classification that assigned a candidate to a continent.
+    accepted, rejected = {}, []
+    if discover:
+        roster_keys = []
+        for cont in world["order"]:
+            cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+            with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            roster_keys.extend(meta["zoneOrder"])
+            roster_keys.extend(meta.get("detailZones", []))
+        accepted, rejected = detect_discoveries(pack, root, roster_keys, zone_index)
 
     out_root = os.path.join(data, CACHE_DIRNAME)
     # A unique staging directory beside the target, not a fixed `.tmp` sibling: two runs in
@@ -498,6 +599,10 @@ def convert(pack, data=None, only=None, quiet=False):
         "unknownRecords": {},
         "unseenColors": [],
     }
+    if discover:
+        manifest["discoveryRejected"] = rejected
+        manifest["discoveryRejectedNote"] = (
+            "Run-scoped like unknownRecords; an --only conversion may under-report the merged cache.")
     if root:
         manifest["rootNote"] = (
             "Base layer: the client's own maps/ root, used per zone where no pack file exists. "
@@ -519,9 +624,6 @@ def convert(pack, data=None, only=None, quiet=False):
         for zk in meta.get("detailZones", []):
             if zk not in roster:
                 roster.append(zk)
-        for candidate in accepted.get(cont, []):
-            if candidate["key"] not in roster:
-                roster.append(candidate["key"])
         for zk in roster:
             # ONE directory per zone, chosen before a byte is read. That is what makes a zone
             # assembled from two sources unrepresentable rather than merely untested - a
@@ -634,11 +736,14 @@ def convert(pack, data=None, only=None, quiet=False):
         manifest["continents"][cont] = {
             "zones": roster,
             "paletteSize": len(palette),
+            "discovery": bool(discover),
             "rootZones": root_zones,
             "baselessZones": baseless,
             "skippedZones": skipped,
             "sources": sources,
         }
+        if discover:
+            manifest["continents"][cont]["discovered"] = accepted.get(cont, [])
         baseless_all += ["%s/%s" % (cont, zk) for zk in baseless]
         if not quiet:
             detail_written = sum(zk in parsed for zk in meta.get("detailZones", []))
@@ -920,6 +1025,8 @@ def main():
                          "continent-scoped and index assignment is first-seen)")
     ap.add_argument("--print-authored", default=None, metavar="CONTINENT",
                     help="print the continent.json 'zones' block instead of converting")
+    ap.add_argument("--no-discover", action="store_true",
+                    help="skip unrostered-zone detection and omit its catalog")
     args = ap.parse_args()
 
     data = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -943,7 +1050,7 @@ def main():
         return
 
     print("Converting %s -> %s" % (pack, os.path.join(data, CACHE_DIRNAME)))
-    manifest = convert(pack, data, args.only)
+    manifest = convert(pack, data, args.only, discover=not args.no_discover)
     nz = sum(len(c["zones"]) - len(c.get("skippedZones", []))
              for c in manifest["continents"].values())
     print("Wrote %d continents, %d zones" % (len(manifest["continents"]), nz))

@@ -491,6 +491,76 @@ try:
         with open(os.path.join(lgen, *parts), encoding="utf-8") as f:
             return json.load(f)
 
+    # -- pass-B discovery --------------------------------------------
+    with open(os.path.join(ldata, "world.json"), encoding="utf-8") as f:
+        lworld = json.load(f)
+    lentries = IP.discovery_index_entries(LAYERED, ROOTA, ldata, lworld)
+    lindex = IP.mapgeom.zidx_from(lentries)
+    lroster = ["alpha", "beta", "gamma"]
+    detected, drejected = IP.detect_discoveries(LAYERED, ROOTA, lroster, lindex)
+    check("detection accepts only partial key/from records, sorted",
+          detected,
+          {"Testland": [{"key": "ambi", "from": "root"},
+                         {"key": "excluded", "from": "root"},
+                         {"key": "theta", "from": "root"}]})
+    by_key = {record["key"]: record for record in drejected}
+    check("series members are rejected with their common stem",
+          [(key, by_key[key]["reason"], by_key[key]["detail"])
+           for key in ("sraa", "srab", "srac")],
+          [("sraa", "series", "sra"), ("srab", "series", "sra"),
+           ("srac", "series", "sra")])
+    check("a derived-key candidate names its authored parent",
+          by_key["alphab"], {"key": "alphab", "reason": "derived", "detail": "alpha"})
+    check("baseless rejection precedes marker resolution",
+          [(key, by_key[key]["reason"]) for key in ("eta", "zeta")],
+          [("eta", "baseless"), ("zeta", "baseless")])
+    check("the bare Beta fixture label is still rejected by the transition prefix gate",
+          by_key["delta"]["reason"], "unresolved")
+
+    ambiguous_index = dict(lindex)
+    ambiguous_index[IP.mapgeom.znorm("Other")] = ("Elsewhere", "other")
+    _accepted_amb, rejected_amb = IP.detect_discoveries(
+        LAYERED, ROOTA, lroster + ["other"], ambiguous_index)
+    check("resolved neighbours spanning continents are ambiguous",
+          {r["key"]: r for r in rejected_amb}["ambi"]["reason"], "ambiguous")
+
+    saved_exclude = IP.mapgeom.DISCOVERY_EXCLUDE
+    try:
+        IP.mapgeom.DISCOVERY_EXCLUDE = {"excluded"}
+        _accepted_exc, rejected_exc = IP.detect_discoveries(
+            LAYERED, ROOTA, lroster, lindex)
+    finally:
+        IP.mapgeom.DISCOVERY_EXCLUDE = saved_exclude
+    check("the authored residue table emits its closed rejection record",
+          {r["key"]: r for r in rejected_exc}["excluded"],
+          {"key": "excluded", "reason": "excluded", "detail": "DISCOVERY_EXCLUDE"})
+    all_reasons = {r["reason"] for r in drejected + rejected_amb + rejected_exc}
+    check("fixtures exercise the complete rejection reason schema",
+          all_reasons,
+          {"ambiguous", "unresolved", "series", "derived", "excluded", "baseless"})
+
+    empty_accepted, empty_rejected = IP.detect_discoveries(
+        PACK, None, ["alpha", "beta", "gamma"], IP.mapgeom.zidx_from(ientries))
+    check("a source with no unrostered maps has paired empty detection results",
+          (empty_accepted, empty_rejected), ({}, []))
+
+    check("the manifest records discovery mode per continent", lman["continents"]["Testland"]["discovery"], True)
+    check("the manifest stores sorted partial discovered records",
+          lman["continents"]["Testland"]["discovered"], detected["Testland"])
+    check("the manifest stores structured top-level rejections",
+          lman["discoveryRejected"], drejected)
+    check("step 2 writes no accepted candidate geometry",
+          [key for key in ("ambi", "excluded", "theta")
+           if os.path.exists(os.path.join(lgen, "geometry", key + ".json"))], [])
+
+    no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
+    check("discovery-off records false per refreshed continent",
+          no_discovery["continents"]["Testland"]["discovery"], False)
+    check("discovery-off writes neither accepted nor rejected catalog",
+          ("discovered" in no_discovery["continents"]["Testland"],
+           "discoveryRejected" in no_discovery), (False, False))
+    lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the discovery-on cache below
+
     # The anchor for the whole section: confirmed NON-empty, which is what makes the paired
     # empty-assertions on the flat pack at the end of this block mean anything.
     check("the manifest records the derived base layer", lman["root"], ROOTA)

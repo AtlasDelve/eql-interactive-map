@@ -81,6 +81,9 @@ ZALIAS = {"butcherblock": "butcherblock mountains", "kerra ridge": "kerra isle",
           "city of thurgadin": "thurgadin", "qeynos aqueduct system": "qeynos catacombs",
           "liberated citadel of runnyeye": "runnyeye citadel",
           "valley of king xorbb": "gorge of king xorbb"}
+# Authored only after the detection residue has been reviewed.  Step 2 deliberately ships this
+# empty: filename or theme inference is not evidence of a zone's continent.
+DISCOVERY_EXCLUDE = set()
 LINK_OVERRIDE = {"kithicor|to_The_Commonlands": "commons",
                  "befallen|to_The_Commonlands": "commons"}
 
@@ -146,6 +149,29 @@ def transition_targets(idx, zk, full):
         if t:
             out.append(t[1])
     return out
+
+
+def discovery_series_stem(key):
+    """The mechanical instance-series stem, or None when ``key`` is not series-shaped."""
+    key = key.casefold()
+    if len(key) < 4 or not re.match(r"^[a-j0-9]$", key[-1]):
+        return None
+    return key[:-1]
+
+
+def discovery_derived_parent(key, roster):
+    """Longest authored key for which ``key`` has the closed derived-zone grammar."""
+    key = key.casefold()
+    matches = []
+    for parent in roster:
+        parent = parent.casefold()
+        tail = key[len(parent):] if key.startswith(parent) else None
+        if ((tail is not None and re.match(r"^(b|c|two|twoa|twob)$", tail)) or
+                key == "old" + parent or key == parent + "_original"):
+            matches.append(parent)
+    # Distinct strings cannot tie as prefixes at the same length: if the lengths are equal,
+    # the prefix strings are equal too.  No unreachable tie guard belongs here.
+    return max(matches, key=len) if matches else None
 
 
 def detail_offset(z, det):
