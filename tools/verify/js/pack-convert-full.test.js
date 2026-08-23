@@ -102,6 +102,80 @@ function compare(label, actual, expected) {
   }
 }
 
+function extract(text, prefix, opener) {
+  let at = 0, i;
+  while (true) {
+    at = text.indexOf(prefix, at);
+    if (at < 0) throw new Error(`missing ${prefix}`);
+    i = at + prefix.length;
+    if (text[i] === opener) break;
+    at = i;
+  }
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0, inString = false, escaped = false;
+  for (let j = i; j < text.length; j++) {
+    const ch = text[j];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === opener) depth++;
+    else if (ch === closer && --depth === 0) {
+      return JSON.parse(text.slice(i, j + 1).replace(/<\\\//g, '</'));
+    }
+  }
+  throw new Error(`unterminated ${prefix}`);
+}
+
+function znorm(s) {
+  s = s.toLowerCase().replace(/`/g, "'").replace(/_/g, ' ');
+  s = s.replace(/^\s*(to|from)\s+/, '').replace(/\(.*?\)/g, '').replace(/:.*$/, '');
+  s = s.replace(/\bone[- ]way\b/g, '').replace(/&/g, ' ').replace(/ - /g, ' ');
+  for (const [a, b] of [['forrest', 'forest'], ['excile', 'exile'], ['cablis', 'cabilis'],
+    ['toxullia', 'toxxulia'], ['feerott', 'feerrott'], ['aquaduct', 'aqueduct'],
+    ['northern', 'north'], ['southern', 'south'], ['eastern', 'east'], ['western', 'west']]) {
+    s = s.split(a).join(b);
+  }
+  s = s.split('plains of karana').join('karana').replace(/^(the|clan)\s+/, '');
+  return s.replace(/\s+/g, ' ').replace(/^[ -]+|[ -]+$/g, '');
+}
+
+function assertMarkerBridge(artifact, manifest) {
+  const detail = extract(fs.readFileSync(artifact, 'utf8'), ', DETAIL=', '{');
+  const zidx = {};
+  for (const [cont, block] of Object.entries(detail)) {
+    for (const [key, zone] of Object.entries(block.zones)) {
+      const n = znorm(zone.name);
+      if (n && !(n in zidx)) zidx[n] = { cont, key };
+    }
+  }
+  let count = 0;
+  for (const [cont, meta] of Object.entries(manifest.continents || {})) {
+    for (const record of meta.discovered || []) {
+      if (record.nameFrom !== 'marker') continue;
+      count++;
+      const anchor = detail[cont] && detail[cont].zones[record.anchor];
+      assert(anchor, `${cont}/${record.key}: missing anchor detail ${record.anchor}`);
+      const targets = [];
+      for (const label of anchor.labels) {
+        const full = label[4];
+        if (!/^(to|from)_/i.test(full)) continue;
+        const amp = full.indexOf('&');
+        const pieces = amp < 0 ? [full] : [full.slice(0, amp), full.slice(amp + 1)];
+        for (const piece of pieces) {
+          const target = zidx[znorm(piece)];
+          if (target) targets.push(target);
+        }
+      }
+      assert(targets.some(t => t.cont === cont && t.key === record.key),
+        `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
+    }
+  }
+  assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
+  return count;
+}
+
 function copyAuthoredWithoutCache(target) {
   fs.cpSync(DATA, target, {
     recursive: true,
@@ -131,6 +205,7 @@ async function runRootOnly(mapsRoot, template, colors) {
   fs.mkdirSync(OUT, { recursive: true });
   const scratch = fs.mkdtempSync(path.join(FX, 'rootonly-data-'));
   const reference = path.join(OUT, 'rootonly.html');
+  const discoveryReference = path.join(OUT, 'rootonly-discover.html');
   const resolvedFx = path.resolve(FX) + path.sep;
   if (!path.resolve(scratch).startsWith(resolvedFx) || !path.basename(scratch).startsWith('rootonly-data-')) {
     throw new Error('refusing unsafe root-only scratch path ' + scratch);
@@ -142,6 +217,12 @@ async function runRootOnly(mapsRoot, template, colors) {
     // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
     run = runPython(['scripts/build.py', '--data', scratch, '--out', reference, '--no-discover']);
     if (run.status !== 0) throw new Error(`root-only build failed: ${run.stderr.toString('utf8')}`);
+    run = runPython(['scripts/build.py', '--data', scratch, '--out', discoveryReference]);
+    if (run.status !== 0) throw new Error(`root-only discovery build failed: ${run.stderr.toString('utf8')}`);
+
+    const bridgeCount = assertMarkerBridge(
+      discoveryReference, json(path.join(scratch, '_generated', 'manifest.json')));
+    console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridgeCount} checked)`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
     const result = await convert({ authored: loadAuthored(scratch), files, colors, packDir, rootDir: null });

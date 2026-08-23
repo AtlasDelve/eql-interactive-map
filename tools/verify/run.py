@@ -127,7 +127,7 @@ def main():
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
         print("2 jsdom/small builder, overlay, hide-io, ghost-alpha, author-guards, script-escape,")
-        print("               travel, world-anchor")
+        print("               travel, discovered-runtime, world-anchor")
         print("3 jsdom/full  smoke x2, travel-full, untouched, perf"
               + ("  [--quick skips]" if True else ""))
         print("4 browser     browser.test.js" + ("  [--no-browser skips]" if True else ""))
@@ -214,7 +214,7 @@ def main():
          ["node", "builder.test.js", sys.executable], cwd=JS)
     for f in ("overlay.test.js", "hide-io.test.js", "ghost-alpha.test.js",
               "author-guards.test.js", "script-escape.test.js", "travel.test.js",
-              "world-anchor.test.js"):
+              "discovered-runtime.test.js", "world-anchor.test.js"):
         step("jsdom fixtures: " + f, ["node", f], cwd=JS)
 
     # ---- 3. jsdom, the real artifact -------------------------------------

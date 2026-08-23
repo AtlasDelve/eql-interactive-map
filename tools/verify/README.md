@@ -127,8 +127,11 @@ Written down because each one is a mistake worth not repeating:
   must be available: either mismatch is a failure naming the remediation, never a comparison that
   disappears behind `SKIP`. Both cases report the number of source files compared. The root-only
   case builds in an isolated ignored data copy and pins 32 skips, 88 survivors, and the retained
-  empty Plane of Hate. The enclosing runner may still skip the whole optional layer when the
-  machine-local pack configuration or Node is absent, or under `--quick`.
+  empty Plane of Hate. Before deleting that scratch tree it also builds a discovery-on twin and
+  requires every marker-named catalog entry to resolve from its anchor label to the injected zone
+  key, with a non-zero count; the ordinary root-only parity artifact remains discovery-off. The
+  enclosing runner may still skip the whole optional layer when the machine-local pack
+  configuration or Node is absent, or under `--quick`.
 - **Browser-converter parity is temporarily discovery-off, while full-artifact verification stays
   discovery-on.** The browser converter does not consume the generated catalog until plan 3, so its
   Python references pass `--no-discover` only to `build.py`, never to conversion. The ordinary user
@@ -142,6 +145,11 @@ Written down because each one is a mistake worth not repeating:
   It also rejects absent endpoints and authored-pair collisions. Requiring at least one tail edge is
   the control against a green check with the entire merge removed; the step is skipped under
   `--quick` because it needs the real artifact and generated cache.
+- **Discovered-zone runtime behaviour uses a viewer fixture, not the converter fixture.**
+  `discovered-runtime.test.js` consumes an ordinary injected zone whose display name resolves from
+  a neighbour's detail marker and whose walk edge stands in for the catalog-derived edge. It checks
+  the marker target, click navigation, exit lookup, travel search, and planned leg/cost. The
+  real-pack bridge above separately proves that conversion reaches this runtime shape.
 
 - **A dangling *function* reference.** `getPristine()` is called from *retained* `setEdit()`
   code, so the user edition threw on the first Edit click. "Parses with no console errors at
