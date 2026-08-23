@@ -9,9 +9,11 @@ Usage:
     python verify.py strip    USER.html       # strip-completeness greps
     python verify.py linediff A.html B.html   # show changed lines (for small deltas)
     python verify.py hints                    # ref-hint collision check over data/
+    python verify.py discoveryfresh           # discovered source bytes + fingerprints
     python verify.py travel                   # authored travel graph + expansion declaration
     python verify.py xpacs                    # just the expansion half (run.py folds it in)
 """
+import hashlib
 import json
 import math
 import os
@@ -282,6 +284,69 @@ def cmd_hints():
                                          "" if u == len(wh) else "  <-- COLLISION"))
     if u != len(wh):
         bad += 1
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_discoveryfresh(data=None):
+    """Recompute every discovered input's metadata and per-continent content digest."""
+    data = data or os.path.join(REPO, "data")
+    mpath = os.path.join(data, "_generated", "manifest.json")
+    try:
+        with open(mpath, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError) as exc:
+        print("FAIL  cannot read discovery manifest: %s" % exc)
+        print("\nRESULT: FAIL (1)")
+        return 1
+
+    bad = compared = catalogs = 0
+    for cont, entry in manifest.get("continents", {}).items():
+        sources = entry.get("discoveredSources")
+        if sources is None:
+            if entry.get("discovered"):
+                print("FAIL  %s has discovered entries but no discoveredSources" % cont)
+                bad += 1
+            continue
+        catalogs += 1
+        pairs = []
+        for name, expected in sorted(sources.items()):
+            tag = expected.get("from")
+            srcdir = manifest.get("pack") if tag == "pack" else manifest.get("root")
+            if tag not in ("pack", "root") or not srcdir:
+                print("FAIL  %s/%s has unusable source tag %r" % (cont, name, tag))
+                bad += 1
+                continue
+            path = os.path.join(srcdir, name)
+            try:
+                size = os.path.getsize(path)
+                h = hashlib.sha256()
+                with open(path, "rb") as f:
+                    for chunk in iter(lambda: f.read(65536), b""):
+                        h.update(chunk)
+                digest = h.hexdigest()
+            except OSError as exc:
+                print("FAIL  cannot read %s/%s: %s" % (cont, name, exc))
+                bad += 1
+                continue
+            compared += 1
+            pairs.append((name, digest))
+            if size != expected.get("bytes") or digest != expected.get("sha256"):
+                print("FAIL  discovered source changed: %s/%s" % (cont, name))
+                bad += 1
+        digest = hashlib.sha256()
+        for name, source_hash in pairs:
+            digest.update(("%s %s\n" % (name, source_hash)).encode("utf-8"))
+        if entry.get("discoveredSourceCount") != len(pairs):
+            print("FAIL  %s discoveredSourceCount: %r vs recomputed %d"
+                  % (cont, entry.get("discoveredSourceCount"), len(pairs)))
+            bad += 1
+        if entry.get("discoveredSourceFingerprint") != digest.hexdigest():
+            print("FAIL  %s discoveredSourceFingerprint differs from disk" % cont)
+            bad += 1
+
+    print("compared %d discovered source file(s) across %d continent catalog(s)"
+          % (compared, catalogs))
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

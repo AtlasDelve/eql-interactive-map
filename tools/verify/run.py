@@ -116,7 +116,7 @@ def main():
     if args.list:
         print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
         print("               strip, lf,")
-        print("               datacmp(user,author), jsnum x2, hints, travel")
+        print("               datacmp(user,author), jsnum x2, hints, discoveryfresh, travel")
         print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
@@ -155,6 +155,7 @@ def main():
     step("JS-canonical numbers (author edition)",
          [sys.executable, "verify.py", "jsnum", AUTHOR])
     step("ref-hint collision check over data/", [sys.executable, "verify.py", "hints"])
+    step("discovered input freshness", [sys.executable, "verify.py", "discoveryfresh"])
     step("travel graph integrity over data/", [sys.executable, "verify.py", "travel"])
 
     # Dependency-free twin gates run before the npm-module gate. Fixture scale is cheap and

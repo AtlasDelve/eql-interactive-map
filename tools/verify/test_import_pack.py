@@ -23,6 +23,7 @@ import import_pack as IP                                       # noqa: E402
 import pack_colors                                             # noqa: E402
 import build as BUILD                                          # noqa: E402
 import derive_travel_graph as DTG                              # noqa: E402
+import verify as VERIFY                                        # noqa: E402
 
 FX = os.path.join(HERE, "packfx")
 PACK = os.path.join(FX, "pack")
@@ -502,6 +503,8 @@ try:
           detected,
           {"Testland": [{"key": "ambi", "from": "root"},
                          {"key": "excluded", "from": "root"},
+                         {"key": "kappa", "from": "root"},
+                         {"key": "multi", "from": "root"},
                          {"key": "theta", "from": "root"}]})
     by_key = {record["key"]: record for record in drejected}
     check("series members are rejected with their common stem",
@@ -511,6 +514,18 @@ try:
            ("srac", "series", "sra")])
     check("a derived-key candidate names its authored parent",
           by_key["alphab"], {"key": "alphab", "reason": "derived", "detail": "alpha"})
+    check("grammar alone rejects a derived key that does not exit its parent",
+          by_key["betab"], {"key": "betab", "reason": "derived", "detail": "beta"})
+    betab_records, _ = IP.parse_zone(ROOTA, "betab")
+    betab_targets = sorted({target
+                            for layer, kind, record, _name, _lineno in betab_records
+                            if layer == 1 and kind == "P"
+                            for target in IP.mapgeom.transition_targets(
+                                lindex, "betab", record[3])})
+    check("the removed parent-exit conjunct would flip betab",
+          (IP.mapgeom.discovery_derived_parent("betab", lroster), betab_targets,
+           "beta" in betab_targets),
+          ("beta", ["gamma"], False))
     check("baseless rejection precedes marker resolution",
           [(key, by_key[key]["reason"]) for key in ("eta", "zeta")],
           [("eta", "baseless"), ("zeta", "baseless")])
@@ -545,13 +560,36 @@ try:
           (empty_accepted, empty_rejected), ({}, []))
 
     check("the manifest records discovery mode per continent", lman["continents"]["Testland"]["discovery"], True)
-    check("the manifest stores sorted partial discovered records",
-          lman["continents"]["Testland"]["discovered"], detected["Testland"])
+    expected_discovered = [
+        {"key": "ambi", "name": "ambi", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 4, "cy": 4, "off": [4, 4], "anchor": "alpha", "from": "root"},
+        {"key": "excluded", "name": "excluded", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 2, "cy": 8, "off": [1, 7], "anchor": "beta", "from": "root"},
+        {"key": "kappa", "name": "Kappa Expedition", "nameFrom": "marker",
+         "color": "#8f78d4", "cx": 5, "cy": 5, "off": [2.0, 2.0],
+         "anchor": "gamma", "from": "root"},
+        {"key": "multi", "name": "multi", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 4, "cy": 4, "off": [3, 3], "anchor": "alpha", "from": "root"},
+        {"key": "theta", "name": "theta", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 2, "cy": 8, "off": [1, 7], "anchor": "beta", "from": "root"},
+    ]
+    check("the manifest stores the complete discovered catalog in sorted key order",
+          lman["continents"]["Testland"]["discovered"], expected_discovered)
     check("the manifest stores structured top-level rejections",
           lman["discoveryRejected"], drejected)
-    check("step 2 writes no accepted candidate geometry",
-          [key for key in ("ambi", "excluded", "theta")
-           if os.path.exists(os.path.join(lgen, "geometry", key + ".json"))], [])
+    discovered_keys = [record["key"] for record in expected_discovered]
+    check("every accepted candidate has geometry and detail cache files",
+          [(key,
+            os.path.exists(os.path.join(lgen, "geometry", key + ".json")),
+            os.path.exists(os.path.join(lgen, "detail", key + ".json")))
+           for key in discovered_keys],
+          [(key, True, True) for key in discovered_keys])
+    check("the marker and key naming paths both bite",
+          [(record["key"], record["name"], record["nameFrom"])
+           for record in expected_discovered if record["key"] in ("kappa", "theta")],
+          [("kappa", "Kappa Expedition", "marker"), ("theta", "theta", "key")])
+    check("multi-neighbour placement chooses the lexicographically first anchor",
+          expected_discovered[3]["anchor"], "alpha")
 
     no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
     check("discovery-off records false per refreshed continent",
@@ -609,7 +647,40 @@ try:
            "#ffffff",     # 1  (255,255,255) beta _1
            "#ff4545",     # 2  (255,0,0)     alpha base and alpha _1
            "#4f94cd"])    # 3  (70,130,180)  gamma base   <- from the ROOT layer
-    check("...and no root colour is unknown to the shipped table", lman["unseenColors"], [])
+    check("discovered colours never enter the shared palette",
+          lload("palette.json"), ["#08ce08", "#ffffff", "#ff4545", "#4f94cd"])
+    check("the discovered palette tail is a pinned ordered literal",
+          lman["continents"]["Testland"]["discoveredPalette"],
+          ["#cd9a4d", "#5fcd16"])
+    check("only the fixture's two discovered colours are unknown to the shipped table",
+          lman["unseenColors"], [(85, 184, 20), (160, 120, 60)])
+    kappa_detail = lload("detail", "kappa.json")
+    check("discovered detail indices resolve only against palette plus its tail",
+          ([seg[4] for seg in kappa_detail["segs"]],
+           [label[2] for label in kappa_detail["labels"]],
+           lman["continents"]["Testland"]["paletteSize"]),
+          ([4], [5], 4))
+    check("discovered provenance lists only accepted candidate inputs",
+          sorted(lman["continents"]["Testland"]["discoveredSources"]),
+          [key + suffix for key in discovered_keys for suffix in (".txt", "_1.txt")])
+    check("discovered provenance count and fingerprint are pinned",
+          (lman["continents"]["Testland"]["discoveredSourceCount"],
+           lman["continents"]["Testland"]["discoveredSourceFingerprint"]),
+          (10, "9770140ab35272b3994ac26c62bc16846b01eaf85edcda16cba1d6ba61511557"))
+    check("the freshness command compares the fixture instead of skipping",
+          VERIFY.cmd_discoveryfresh(ldata), 0)
+
+    manifest_path = os.path.join(ldata, IP.CACHE_DIRNAME, "manifest.json")
+    tiny_manifest = json.loads(json.dumps(lman))
+    tiny_manifest["continents"]["Testland"]["discovered"][0]["off"][0] = 0.00001
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(tiny_manifest, f, sort_keys=True)
+    check("manifest-only tiny offsets do not trip the injected-data number dialect",
+          (BUILD.load_manifest(ldata)["continents"]["Testland"]["discovered"][0]["off"][0],
+           BUILD.cred_text(ldata).startswith("EQL")),
+          (0.00001, True))
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(lman, f, sort_keys=True)
     check("the layered manifest records the schema", lman["schema"], IP.SCHEMA)
 
     # baselessZones is ASSERTED, not merely printed. Without this the only guard against the
@@ -723,7 +794,9 @@ try:
     # The summary helper needs world["order"], because the manifest is sort_keys=True and does
     # not store it - alphabetical continent keys cannot recover the authored order.
     check("root_layer_zones pairs continent with zone, in authored order",
-          IP.root_layer_zones(lman, ["Testland"]), [("Testland", "gamma")])
+          IP.root_layer_zones(lman, ["Testland"]),
+          [("Testland", key) for key in
+           ("gamma", "ambi", "excluded", "kappa", "multi", "theta")])
     check("...and reports nothing for a flat conversion",
           IP.root_layer_zones(fman, ["Testland"]), [])
     # The summary is derived from the ZONE LIST, never from top-level `root`, and this pins

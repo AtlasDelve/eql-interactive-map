@@ -81,9 +81,19 @@ ZALIAS = {"butcherblock": "butcherblock mountains", "kerra ridge": "kerra isle",
           "city of thurgadin": "thurgadin", "qeynos aqueduct system": "qeynos catacombs",
           "liberated citadel of runnyeye": "runnyeye citadel",
           "valley of king xorbb": "gorge of king xorbb"}
-# Authored only after the detection residue has been reviewed.  Step 2 deliberately ships this
-# empty: filename or theme inference is not evidence of a zone's continent.
-DISCOVERY_EXCLUDE = set()
+# Owner-ruled later-era/duplicate residue.  This list is authored game knowledge: do not infer
+# additions from filenames or themes.  See discovered-zones-decisions.md -> RESIDUE RULING.
+DISCOVERY_EXCLUDE = {
+    "arcstone", "arginhiz", "barren", "bloodfalls", "breedinggrounds", "brellsrest",
+    "broodlands", "commonlands", "corathus", "crystalshard", "delvea", "dragonscale",
+    "eastwastesshard", "ethernere", "feerrott2", "freeportacademy", "freeportcityhall",
+    "freeporthall", "freeportmilitia", "freeportsewers", "freeporttheater", "freeportwest",
+    "gorowyn", "growthplane", "gunthak", "highpasshold", "jaggedpine", "kaelshard",
+    "korshaext", "lopingplains", "mischiefplane", "mistythicket", "moors", "neriakd",
+    "oceangreenhills", "oceanoftears", "scorchedwoods", "soldungc", "steamfontmts",
+    "takishruins", "toxxulia", "xorbb",
+}
+DISCOVERED_ZONE_COLOR = "#8f78d4"
 LINK_OVERRIDE = {"kithicor|to_The_Commonlands": "commons",
                  "befallen|to_The_Commonlands": "commons"}
 
@@ -169,9 +179,18 @@ def discovery_derived_parent(key, roster):
         if ((tail is not None and re.match(r"^(b|c|two|twoa|twob)$", tail)) or
                 key == "old" + parent or key == parent + "_original"):
             matches.append(parent)
-    # Distinct strings cannot tie as prefixes at the same length: if the lengths are equal,
-    # the prefix strings are equal too.  No unreachable tie guard belongs here.
+    # No key has two grammar matches.  The suffix limb can only match the one exact prefix,
+    # while old<parent> and <parent>_original each determine one exact parent by removing
+    # their fixed affix.  No unreachable tie guard belongs here (and max() never chooses
+    # between equal-length distinct matches).
     return max(matches, key=len) if matches else None
+
+
+def discovery_display_name(label):
+    """Turn a reciprocal transition label into its display name without normalising it."""
+    name = re.sub(r"^(to|from)_", "", label, flags=re.I)
+    name = re.sub(r"\(.*?\)", "", name)
+    return re.sub(r"\s+", " ", name.replace("_", " ")).strip()
 
 
 def detail_offset(z, det):

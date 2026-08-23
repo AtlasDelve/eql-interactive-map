@@ -110,6 +110,18 @@ def load(path):
             raise SystemExit("%s: %s" % (path, e)) from None
 
 
+def load_manifest(data):
+    """Read manifest metadata without applying the injected-data number dialect.
+
+    Catalog ``off`` values are audit metadata and may legitimately be smaller than the lower
+    bound enforced for numbers that reach JavaScript.  Geometry, detail, and palette files keep
+    using ``load()`` above; widening this reader would disarm their canonical-number guard.
+    """
+    path = os.path.join(data, import_pack.CACHE_DIRNAME, "manifest.json")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def read_version(path=VERSION_FILE):
     """Read the one-line, raw-substitution-safe release version."""
     with open(path, "r", encoding="ascii") as f:
@@ -123,7 +135,7 @@ def read_version(path=VERSION_FILE):
 
 def cred_text(data):
     """Describe the selected pack and any zones supplied by the game's own maps."""
-    manifest = load(os.path.join(data, import_pack.CACHE_DIRNAME, "manifest.json"))
+    manifest = load_manifest(data)
     pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
     root_count = sum(len(c.get("rootZones", []))
                      for c in manifest.get("continents", {}).values())

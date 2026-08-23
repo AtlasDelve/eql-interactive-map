@@ -330,19 +330,25 @@ def resolve_zone_source(pack, root, zone_key):
 
 
 def root_layer_zones(manifest, order):
-    """[(continent, zone)] for every zone resolved to the root base layer, in authored order.
+    """[(continent, zone)] for every authored or discovered root-layer zone.
 
     `order` is a required parameter rather than a convenience: the manifest is written with
     sort_keys=True and does not store world["order"], so its continent keys come back
     alphabetically and the manifest alone cannot recover the authored order. Callers pass
-    world["order"]. Within a continent, rootZones is already in roster order.
+    world["order"]. Within a continent, authored rootZones stay in roster order and discovered
+    entries follow in their catalog's sorted candidate-key order.
 
     Read from the MERGED manifest, so this covers the whole cache rather than one --only run's
     continents.
     """
     conts = manifest.get("continents", {})
-    return [(cont, zk) for cont in order
-            for zk in (conts.get(cont) or {}).get("rootZones", [])]
+    out = []
+    for cont in order:
+        entry = conts.get(cont) or {}
+        out.extend((cont, zk) for zk in entry.get("rootZones", []))
+        out.extend((cont, record["key"]) for record in entry.get("discovered", [])
+                   if record.get("from") == "root")
+    return out
 
 
 def cache_skips(data=None):
@@ -445,7 +451,7 @@ def discovery_base_keys(pack, root):
     return sorted(keys)
 
 
-def detect_discoveries(pack, root, roster, zone_index):
+def detect_discoveries(pack, root, roster, zone_index, include_targets=False):
     """Return ({continent: partial records}, structured rejections) for unrostered maps."""
     roster = {key.casefold() for key in roster}
     key_continent = {key: cont for cont, key in zone_index.values()}
@@ -508,13 +514,167 @@ def detect_discoveries(pack, root, roster, zone_index):
         if key in mapgeom.DISCOVERY_EXCLUDE:
             reject(key, "excluded", "DISCOVERY_EXCLUDE")
             continue
-        accepted.setdefault(candidate["continent"], []).append(
-            {"key": key, "from": candidate["from"]})
+        record = {"key": key, "from": candidate["from"]}
+        if include_targets:
+            # Conversion needs the already-resolved neighbours for placement.  Keep them
+            # private: the durable catalog receives sorted `edges` in step 4 instead.
+            record["_targets"] = candidate["targets"]
+        accepted.setdefault(candidate["continent"], []).append(record)
 
     for records in accepted.values():
         records.sort(key=lambda record: record["key"])
     rejected.sort(key=lambda record: record["key"])
     return accepted, rejected
+
+
+def _source_identity(sources):
+    """(count, sha256) over sorted (filename, content-sha256) pairs."""
+    pairs = sorted((name, entry["sha256"]) for name, entry in sources.items())
+    h = hashlib.sha256()
+    for name, digest in pairs:
+        h.update(("%s %s\n" % (name, digest)).encode("utf-8"))
+    return len(pairs), h.hexdigest()
+
+
+def _candidate_doorway(records, zone_index, key, target):
+    """First layer-1 transition point from candidate ``key`` to ``target``."""
+    for layer, kind, record, _name, _lineno in records:
+        if layer != 1 or kind != "P":
+            continue
+        nums, _rgb, _size, label = record
+        if target in mapgeom.transition_targets(zone_index, key, label):
+            return (_r(nums[0]), _r(-nums[1]))
+    raise AssertionError("discovery target %s -> %s lost its source marker" % (key, target))
+
+
+def _reciprocal_marker(records, zone_index, anchor):
+    """The one unresolved transition in an anchor's selected _1 layer, if unique."""
+    unresolved = []
+    for layer, kind, record, _name, _lineno in records:
+        if layer != 1 or kind != "P":
+            continue
+        nums, _rgb, _size, label = record
+        if not label.casefold().startswith(("to_", "from_")):
+            continue
+        if not mapgeom.transition_targets(zone_index, anchor, label):
+            unresolved.append((_r(nums[0]), _r(-nums[1]), label))
+    return unresolved[0] if len(unresolved) == 1 else None
+
+
+def _written_centroid(segs, key):
+    """Endpoint mean in written segment order, rounded to the authored integer dialect."""
+    if not segs:
+        raise SystemExit("discovered zone %r has no base-layer line geometry" % key)
+    sx = sy = 0
+    count = 0
+    for seg in segs:
+        sx += seg[0]
+        sx += seg[2]
+        sy += seg[1]
+        sy += seg[3]
+        count += 2
+    return _r(sx / count), _r(sy / count)
+
+
+def _read_compact(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
+                         cout, palette, unseen_all):
+    """Write discovered cache files and return (catalog, sources, palette tail).
+
+    The shared palette.json is already final when this runs and is never modified.  New display
+    colours are indexed against an in-memory extension recorded as discoveredPalette.
+    """
+    catalog = []
+    discovered_sources = {}
+    discovered_palette = []
+    palette_index = {color: i for i, color in enumerate(palette)}
+    azones = authored_zones(meta)
+
+    zones = {}
+    for key in meta["zoneOrder"]:
+        if key not in parsed:
+            continue
+        geometry = _read_compact(os.path.join(cout, "geometry", key + ".json"))
+        zones[key] = compose_zone(azones[key], geometry, None)
+
+    for partial in sorted(candidates, key=lambda record: record["key"]):
+        key = partial["key"]
+        targets = sorted(partial["_targets"])
+        anchor = targets[0]
+        srcdir, source = resolve_zone_source(pack, root, key)
+        if srcdir is None or source != partial["from"]:
+            raise AssertionError("discovered source changed during conversion for %s" % key)
+        records, _unknown = parse_zone(srcdir, key)
+        candidate_doorway = _candidate_doorway(records, zone_index, key, anchor)
+        reciprocal = _reciprocal_marker(parsed[anchor], zone_index, anchor)
+
+        if reciprocal is not None:
+            off = [azones[anchor]["off"][0] + reciprocal[0] - candidate_doorway[0],
+                   azones[anchor]["off"][1] + reciprocal[1] - candidate_doorway[1]]
+            name = mapgeom.discovery_display_name(reciprocal[2])
+            if mapgeom.znorm(name) != mapgeom.znorm(reciprocal[2]):
+                raise AssertionError("discovered display name changed marker identity for %s" % key)
+            # This is an argument made executable, not a reachable collision guard: had the
+            # marker resolved to authored content, detection would not have left it unresolved.
+            if mapgeom.resolve_zone(zone_index, name) is not None:
+                raise AssertionError("discovered marker name collides with authored content: %s" % name)
+            name_from = "marker"
+        else:
+            point = mapgeom.nearest_outline_point(
+                zones[anchor], zones[anchor]["cx"], zones[anchor]["cy"], transformed=False)
+            # Arbitrary by design: without a reciprocal marker the selected source says which
+            # zone connects, but not where on its outline the doorway belongs.
+            off = [point[0] - candidate_doorway[0], point[1] - candidate_doorway[1]]
+            name = key
+            name_from = "key"
+
+        geometry_segs, geometry_z = geometry_records(records, off)
+        cx, cy = _written_centroid(geometry_segs, key)
+        dump_compact({"segs": geometry_segs, "segz": geometry_z},
+                     os.path.join(cout, "geometry", key + ".json"))
+        zone = compose_zone({"name": name, "color": mapgeom.DISCOVERED_ZONE_COLOR,
+                             "cx": cx, "cy": cy}, {"segs": geometry_segs}, None)
+        zones[key] = zone
+
+        segs, segz, seglayer, labels, lablayer, raw = detail_records(records)
+        # Tail order is the written detail order: every segment first, then every label, each
+        # array retaining base/_1/_2/_3 source order.  Existing colours reuse their old index.
+        for item, slot in [(seg, 4) for seg in segs] + [(label, 2) for label in labels]:
+            color = pack_colors.color_for(item[slot], unseen_all)
+            if color not in palette_index:
+                palette_index[color] = len(palette) + len(discovered_palette)
+                discovered_palette.append(color)
+            item[slot] = palette_index[color]
+        dump_compact({"segs": segs, "segz": segz, "seglayer": seglayer,
+                      "labels": labels, "lablayer": lablayer,
+                      "bbox": bbox_of(raw[0], raw[1])},
+                     os.path.join(cout, "detail", key + ".json"))
+
+        for path in zone_files(srcdir, key):
+            discovered_sources[os.path.basename(path)] = {
+                "bytes": os.path.getsize(path), "sha256": sha256_of(path), "from": source}
+
+        catalog.append({"key": key, "name": name, "nameFrom": name_from,
+                        "color": mapgeom.DISCOVERED_ZONE_COLOR, "cx": cx, "cy": cy,
+                        "off": off, "anchor": anchor, "from": source})
+
+    by_name = {}
+    for record in catalog:
+        by_name.setdefault(mapgeom.znorm(record["name"]), []).append(record)
+    for collision in (records for records in by_name.values() if len(records) > 1):
+        key_norms = [mapgeom.znorm(record["key"]) for record in collision]
+        if len(set(key_norms)) != len(key_norms):
+            raise SystemExit("discovered zone keys still collide after name fallback: %s"
+                             % ", ".join(record["key"] for record in collision))
+        for record in collision:
+            record["name"] = record["key"]
+            record["nameFrom"] = "key"
+
+    return catalog, discovered_sources, discovered_palette
 
 
 def convert(pack, data=None, only=None, quiet=False, discover=True):
@@ -570,7 +730,8 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
                 meta = json.load(f)
             roster_keys.extend(meta["zoneOrder"])
             roster_keys.extend(meta.get("detailZones", []))
-        accepted, rejected = detect_discoveries(pack, root, roster_keys, zone_index)
+        accepted, rejected = detect_discoveries(
+            pack, root, roster_keys, zone_index, include_targets=True)
 
     out_root = os.path.join(data, CACHE_DIRNAME)
     # A unique staging directory beside the target, not a fixed `.tmp` sibling: two runs in
@@ -603,6 +764,11 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
         manifest["discoveryRejected"] = rejected
         manifest["discoveryRejectedNote"] = (
             "Run-scoped like unknownRecords; an --only conversion may under-report the merged cache.")
+        manifest["discoveredSourcesNote"] = (
+            "Discovered inputs are separate from sources so sourceCount/sourceFingerprint keep "
+            "describing the authored roster files read by the browser twin. Their own count and "
+            "fingerprint are checked by the Python freshness gate; plan 3 extends that check "
+            "across the browser seam.")
     if root:
         manifest["rootNote"] = (
             "Base layer: the client's own maps/ root, used per zone where no pack file exists. "
@@ -728,6 +894,12 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
                 if lab[4] in traced:
                     collisions.append("%s/%s: %s" % (cont, zk, lab[4]))
 
+        discovered, discovered_sources, discovered_palette = [], {}, []
+        if discover and accepted.get(cont):
+            discovered, discovered_sources, discovered_palette = assemble_discoveries(
+                cont, accepted[cont], pack, root, parsed, meta, zone_index,
+                cout, palette, unseen_all)
+
         # Anything that must survive an --only run lives HERE, under continents[cont], because
         # the --only seed copies only `continents`. That is why from/rootZones/baselessZones
         # are per-continent rather than top-level: the per-run unknownRecords already
@@ -743,7 +915,13 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
             "sources": sources,
         }
         if discover:
-            manifest["continents"][cont]["discovered"] = accepted.get(cont, [])
+            manifest["continents"][cont]["discovered"] = discovered
+            if discovered:
+                manifest["continents"][cont]["discoveredPalette"] = discovered_palette
+                manifest["continents"][cont]["discoveredSources"] = discovered_sources
+                dcount, dfingerprint = _source_identity(discovered_sources)
+                manifest["continents"][cont]["discoveredSourceCount"] = dcount
+                manifest["continents"][cont]["discoveredSourceFingerprint"] = dfingerprint
         baseless_all += ["%s/%s" % (cont, zk) for zk in baseless]
         if not quiet:
             detail_written = sum(zk in parsed for zk in meta.get("detailZones", []))
