@@ -11,6 +11,7 @@ Usage:
     python verify.py linediff A.html B.html   # show changed lines (for small deltas)
     python verify.py hints                    # ref-hint collision check over data/
     python verify.py discoveryfresh           # discovered source bytes + fingerprints
+    python verify.py derivedtravel ARTIFACT    # catalog edges appended to injected travel
     python verify.py travel                   # authored travel graph + expansion declaration
     python verify.py xpacs                    # just the expansion half (run.py folds it in)
 """
@@ -176,6 +177,67 @@ def cmd_discoveryappend(off_path, on_path):
     else:
         print("compared %d appended discovered zone(s): %s" %
               (len(appended), ", ".join("%s/%s" % pair for pair in appended)))
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_derivedtravel(path):
+    """Require the artifact's travel tail to be the non-empty manifest catalog append."""
+    data = extract(path)
+    travel = data["TRAVEL"]
+    with open(os.path.join(REPO, "data", "travel.json"), encoding="utf-8") as f:
+        authored = json.load(f)
+    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+              encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    bad = 0
+    schema = (isinstance(travel, dict)
+              and isinstance(travel.get("groups"), dict)
+              and isinstance(travel.get("capabilities"), list)
+              and isinstance(travel.get("walk"), list)
+              and isinstance(travel.get("routes"), list))
+    if not schema:
+        print("FAIL  injected travel graph is schema-incomplete")
+        bad += 1
+
+    authored_walk = authored.get("walk", [])
+    walk = travel.get("walk", []) if isinstance(travel, dict) else []
+    if walk[:len(authored_walk)] != authored_walk:
+        print("FAIL  injected travel graph changed or interleaved the authored walk prefix")
+        bad += 1
+    derived = walk[len(authored_walk):]
+
+    expected = []
+    records = sorted(
+        (record for entry in manifest.get("continents", {}).values()
+         for record in entry.get("discovered", [])),
+        key=lambda record: record["key"])
+    for record in records:
+        for edge in sorted(record.get("edges", []), key=lambda edge: edge["z"]):
+            expected.append({"z": [record["key"], edge["z"]], "cost": edge["cost"]})
+    if derived != expected:
+        print("FAIL  injected derived walk tail does not equal the ordered catalog edges")
+        bad += 1
+
+    zones = {key for cont in data["ALL"].values() for key in cont.get("zones", {})}
+    authored_pairs = {tuple(sorted(edge["z"])) for edge in authored_walk}
+    for edge in derived:
+        pair = tuple(edge.get("z", []))
+        if len(pair) != 2 or any(key not in zones for key in pair):
+            print("FAIL  derived walk edge names a zone absent from ALL: %r" % (edge,))
+            bad += 1
+            continue
+        if tuple(sorted(pair)) in authored_pairs:
+            print("FAIL  derived walk edge duplicates an authored pair: %s|%s" % pair)
+            bad += 1
+    if not derived:
+        print("FAIL  discovery-on artifact has no derived walk edges")
+        bad += 1
+    else:
+        print("compared %d derived walk edge(s): %s" %
+              (len(derived), ", ".join("%s>%s" % tuple(edge["z"]) for edge in derived)))
+
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

@@ -661,6 +661,8 @@ try:
     check("placed and unplaced remain authored bookkeeping in both modes",
           (on_all["placed"], on_all["unplaced"], off_all["placed"], off_all["unplaced"]),
           (["alpha", "beta", "gamma"], [], ["alpha", "beta", "gamma"], []))
+    check("a discovery catalog does not manufacture a schema-incomplete travel graph",
+          built_on[6], {})
     check("the credit counts discovered root geometry only when enabled",
           (BUILD.cred_text(ldata), BUILD.cred_text(ldata, discover=False)),
           ("EQL · Layered map data · 6 zones from the game's own maps",

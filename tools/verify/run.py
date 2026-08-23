@@ -122,6 +122,7 @@ def main():
         print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
         print("               strip, lf,")
         print("               datacmp(user,author), discoveryappend, jsnum x2, hints, discoveryfresh, travel")
+        print("1/artifact     derivedtravel  [--quick skips]")
         print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
@@ -165,6 +166,11 @@ def main():
     step("ref-hint collision check over data/", [sys.executable, "verify.py", "hints"])
     step("discovered input freshness", [sys.executable, "verify.py", "discoveryfresh"])
     step("travel graph integrity over data/", [sys.executable, "verify.py", "travel"])
+    if args.quick:
+        results.append(("catalog-derived travel edges in the artifact", "SKIP"))
+    else:
+        step("catalog-derived travel edges in the artifact",
+             [sys.executable, "verify.py", "derivedtravel", USER])
 
     # Dependency-free twin gates run before the npm-module gate. Fixture scale is cheap and
     # always runs when Node exists; real-pack scale follows the other 18 MB --quick gates.

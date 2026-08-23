@@ -22,7 +22,7 @@ with a notice rather than failing.
 
 | | Layer | What it covers |
 |---|---|---|
-| 1 | Python | Marker-walker and declaration-locator mutation tests; `inject()` data escaping; credit formatting/escaping/substitution order; the pack importer against a synthetic pack; browser-builder embedding, closed inputs, cache-independence, refusals and script-data escaping; strip completeness; CLI artifact LF bytes; injected-data equivalence between editions; discovery-on append and source-freshness contracts; JS-canonical number spellings; ref-hint collision check. |
+| 1 | Python | Marker-walker and declaration-locator mutation tests; `inject()` data escaping; credit formatting/escaping/substitution order; the pack importer against a synthetic pack; browser-builder embedding, closed inputs, cache-independence, refusals and script-data escaping; strip completeness; CLI artifact LF bytes; injected-data equivalence between editions; discovery-on append, source-freshness and artifact travel-tail contracts; JS-canonical number spellings; ref-hint collision check. |
 | 2 | jsdom, ~100 KB fixtures | Overlay build/apply/resolve, hide-restore, ghost alpha, author-edition guards, script-close escaping through the standalone export, browser-builder adapter/conversion identity modulo line endings (`assertSame` normalizes them); the browser-built artifact's LF bytes are asserted here, and the CLI artifact's independently in layer 1, so normalized parity establishes byte identity. Covers tokenization/report/download seams, travel-graph **semantics**, and world-link anchoring mechanics. Fast, and canonical data can be **mutated to simulate an update**. |
 | 3 | Node + jsdom, real 18 MB artifact | JavaScript parse/stringify identity for all injected blobs after normalizing the intentional `<\/` script-safety escape (Node-only, no installed modules); smoke on both editions; travel search and real routes; the drawn route's state, lifecycle, per-level position sources, realm accounting and leg navigation; the untouched-overlay invariant across all 11 continents; view-vs-edit timing. |
 | 4 | Real browser | The builder directory picker and conversion, `FileReader`, drag-and-drop, genuine downloads, the CSS cascade, and the rendered bitmap. |
@@ -132,9 +132,16 @@ Written down because each one is a mistake worth not repeating:
 - **Browser-converter parity is temporarily discovery-off, while full-artifact verification stays
   discovery-on.** The browser converter does not consume the generated catalog until plan 3, so its
   Python references pass `--no-discover` only to `build.py`, never to conversion. The ordinary user
-  and author artifacts retain discovery, and `discoveryappend` proves that the feature is non-inert
-  and changes only the manifest-declared `ALL`/`DETAIL` append. Comments at each parity-only flag
-  name plan 3 as the removal point.
+  and author artifacts retain discovery. `discoveryappend` proves the manifest-declared
+  `ALL`/`DETAIL` append; `derivedtravel` separately proves the authored `TRAVEL.walk` prefix and the
+  exact non-empty catalog tail. Comments at each parity-only flag name plan 3 as the removal point.
+- **The derived-travel check reads the artifact, not the authored graph verifier.** `verify.py travel`
+  stays bare-clone-safe and owns only `data/travel.json`. `derivedtravel` instead extracts the built
+  `ALL` and `TRAVEL`, requires the authored walk array as an unchanged prefix, and compares the
+  ordered tail directly with manifest records whose costs were already produced during conversion.
+  It also rejects absent endpoints and authored-pair collisions. Requiring at least one tail edge is
+  the control against a green check with the entire merge removed; the step is skipped under
+  `--quick` because it needs the real artifact and generated cache.
 
 - **A dangling *function* reference.** `getPristine()` is called from *retained* `setEdit()`
   code, so the user edition threw on the first Edit click. "Parses with no console errors at
@@ -271,8 +278,8 @@ control with evidence that dimming worked. The browser test now chooses the outl
 the greatest clearance and keeps the original `> 1.5` delta ratio. Disabling dimming makes that
 check fail, so relocation did not turn the control inert.
 
-**Searchability is asserted; `ZIDX` coverage is only reported.** All 77 routed zones happen to
-have a detail map, and it is tempting to lock that down — but the runtime takes zone names from
+**Searchability is asserted; `ZIDX` coverage is only reported.** Every currently routed zone happens
+to have a detail map, and it is tempting to lock that down — but the runtime takes zone names from
 `ALL`, not `DETAIL`, so a routable zone shipped without a detail map is still searchable and the
 coincidence is not load-bearing. Enforcing it would invent a constraint the code does not have
 and fail the first time a plane ships routable but undetailed. The property that matters, and

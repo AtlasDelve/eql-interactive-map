@@ -197,6 +197,8 @@ Brewall, **4** under Good's Maps (`commons`, `highpass`, `innothule`, `kerraridg
 lives in the pack while only the root has a `_1` POI layer). Those four keep the pack's tracing
 and forgo the root's labels — the correct trade, but it means "all-or-nothing loses nothing" is
 true of Brewall specifically, not of packs in general.
+The client's own map UI also has a pack selector, so choosing one directory's whole zone mirrors
+the game's behaviour rather than inventing a stricter model only for this converter.
 
 **Why root is derived, not a flag.** `<install>/maps/<Pack>` is the only layout the client
 supports for a manually installed pack, so the parent directory already carries the answer; a
@@ -296,11 +298,41 @@ the first rostered fallback zone makes `unseenColors` non-empty for the first ti
 table was recovered. That is the report path working. (Confirmed by converting a scratch tree with
 `newsebexp` rostered; it cannot fire in the repo's own `data/`, where no zone is rostered.)
 
-**Out of scope, and measured:** deriving a fallback zone's `off` from the transition-marker pair.
-`sebilis` sits at x 12138…13908 / y 11620…14166 while `trakanon`, the zone its door is in, is at
-x 3867…14442 / y −11684…−4282 — ~16 000 units apart with no overlap. This atlas **parks** dungeons
-in clear space rather than aligning them to their doorway, so marker-pair derivation would propose
-a placement the atlas does not use.
+## The discovered-zone catalog
+
+Unrostered base files are detected across the same pack/root cascade, but acceptance still requires
+authored game knowledge: the fixed exclusion table rejects ruled residue, while a candidate must
+carry a layer-1 transition to an authored zone in exactly one continent. Discovery never changes a
+`zoneOrder`; it writes generated `geometry/<key>.json` and `detail/<key>.json` plus an ordered
+`manifest.continents[continent].discovered` record. Each record carries the resolved source layer,
+display-name provenance, placement and centroid, and its conversion-time walk edges with stored
+costs. Sorted candidate key then sorted neighbour key is the append order used by `ALL`, `DETAIL`
+and injected `TRAVEL`.
+
+Placement has two explicit paths. If the selected anchor layer has one unresolved reciprocal marker,
+the two rounded doorway points solve an exact translation and supply the display name. Otherwise the
+candidate key is the name and its named doorway is placed at the nearest point on the anchor outline.
+That fallback is deliberately arbitrary but legible (`nameFrom: "key"` and per-edge `named`); guessing
+a reciprocal from a different layer would break the one-directory source model. Both placement and
+walk cost are traced facts about the selected inputs, so reconversion against another pack may move
+them. A user overlay cannot: it exists only at runtime, while the catalog was already written.
+
+**Discovered provenance is a second digest namespace.** `discoveredSources` uses the same
+`{bytes, sha256, from}` records as `sources`, with its own count and fingerprint. Keeping it separate
+preserves `sources` as the authored roster inputs compared by the temporarily discovery-free browser
+converter; folding the files into that digest would make the parity check disappear as a stale-cache
+skip. The split's own gap is closed by `verify.py discoveryfresh`, which recomputes and requires the
+discovered digest on the Python side. Plan 3 inherits extending that check across the browser seam.
+`rootZones` still unions root-sourced authored and discovered keys, so release provenance counts the
+artifact rather than only the roster.
+
+**Discovered colours never enter `palette.json`.** The shared palette and its `paletteSize` remain
+the authored-roster conversion result. New colours form `discoveredPalette` in sorted candidate-key
+order and first-seen written-detail order within each candidate. Their detail indices begin at
+`paletteSize`; a discovery-on build composes and injects `palette.json + discoveredPalette`, while a
+discovery-off build retains the byte-identical shared palette. This allocation point keeps existing
+indices stable and makes a permuted tail observable through literal-order tests rather than only
+range checks.
 
 ## Anything geometry-derived is a fact about ONE pack, and must say which
 

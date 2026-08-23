@@ -298,8 +298,8 @@ def build(data=None, discover=True):
     # than hardcoded in the template; nothing at runtime mutates them.
     XPACS = world.get("xpacs", {})
 
-    # Travel graph: authored, never derived here. scripts/derive_travel_graph.py bootstraps and
-    # audits it; deriving at build time would let a cosmetic zone nudge change a route silently.
+    # The authored graph is the stable prefix.  Catalog edges already carry their conversion-time
+    # costs; build only appends those records and never derives geometry or cost here.
     travel_path = os.path.join(data, "travel.json")
     TRAVEL = load(travel_path) if os.path.exists(travel_path) else {}
 
@@ -369,6 +369,28 @@ def build(data=None, discover=True):
         hubs = layout.get("hubs", [])
         if hubs and zones:
             HUBS[cont] = hubs
+
+    if TRAVEL:
+        # Copy before appending so the loaded authored graph remains a distinct value.  A user
+        # overlay cannot affect these costs; reconverting against another pack can move only this
+        # catalog-derived tail.
+        TRAVEL = dict(TRAVEL)
+        authored_pairs = {
+            tuple(sorted(edge["z"])) for edge in TRAVEL.get("walk", [])
+        }
+        derived = []
+        records = sorted(
+            (record for catalog in discoveries.values() for record in catalog["zones"]),
+            key=lambda record: record["key"])
+        for record in records:
+            for edge in sorted(record["edges"], key=lambda edge: edge["z"]):
+                pair = tuple(sorted((record["key"], edge["z"])))
+                # Fence 1 makes this unreachable today.  Keep it as an assertion so a future
+                # discovery-rule change cannot silently duplicate an authored edge.
+                assert pair not in authored_pairs, (
+                    "discovered walk edge duplicates authored pair: %s|%s" % pair)
+                derived.append({"z": [record["key"], edge["z"]], "cost": edge["cost"]})
+        TRAVEL["walk"] = list(TRAVEL.get("walk", [])) + derived
 
     return ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS
 

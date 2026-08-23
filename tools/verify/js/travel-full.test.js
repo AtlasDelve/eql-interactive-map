@@ -1,4 +1,4 @@
-// Travel guide against the REAL artifact: actual routes over the authored graph, and the
+// Travel guide against the REAL artifact: actual routes over the composed graph, and the
 // search index, which the fixture tier cannot reach (ZIDX is built from DETAIL and the
 // fixtures ship DETAIL={}).
 //
@@ -7,6 +7,8 @@
 // happens to work anyway.
 //
 // Usage: node travel-full.test.js <artifact.html>
+const fs = require('fs');
+const path = require('path');
 const { load } = require('./lib.js');
 
 let fails = 0, checks = 0;
@@ -27,6 +29,13 @@ function section(t) { console.log('\n-- ' + t); }
 const a = load(process.argv[2]);
 if (a.errors.length) { console.log('FAIL load: ' + a.errors.join('; ')); process.exit(1); }
 const ev = a.ev;
+const manifest = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'data', '_generated', 'manifest.json'), 'utf8'));
+const authoredTravel = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'data', 'travel.json'), 'utf8'));
+const discovered = Object.values(manifest.continents || {})
+  .flatMap((entry) => entry.discovered || []);
+const discoveredKeys = new Set(discovered.map((record) => record.key));
 
 function plan(from, to, caps) {
   ev('for(const k in TCAPS)TCAPS[k]=false;'
@@ -38,15 +47,23 @@ const hops = (r) => r.legs.map((l) => l.from + '>' + l.to);
 const find = (q, n) => JSON.parse(
   ev(`JSON.stringify(tFind(${JSON.stringify(q)},${n || 9}).map(e=>e.kind+':'+e.key))`));
 
-section('the roster the runtime built from the authored graph');
+section('the roster the runtime built from authored and catalog-derived edges');
 {
-  const n = ev('Object.keys(TZONES).length');
-  eq('77 routed zones, matching what verify.py travel reports', n, 77);
+  const keys = JSON.parse(ev('JSON.stringify(Object.keys(TZONES))'));
+  const authored = keys.filter((key) => !discoveredKeys.has(key));
+  const derived = keys.filter((key) => discoveredKeys.has(key)).sort();
+  eq('77 authored routed zones, matching what verify.py travel reports', authored.length, 77);
+  eq('derived routed zones match the discovery catalog', derived,
+    discovered.map((record) => record.key).sort());
   eq('no node is missing a name', ev('Object.keys(TZONES).filter(k=>!TZONES[k].name).length'), 0);
-  eq('no node fell back to its own key as a name',
-    ev('Object.keys(TZONES).filter(k=>TZONES[k].name===k).length'), 0);
+  eq('no authored node fell back to its own key as a name',
+    authored.filter((key) => ev(`TZONES[${JSON.stringify(key)}].name`) === key), []);
+  eq('derived key-fallback names equal their keys',
+    discovered.filter((record) => record.nameFrom === 'key'
+      && ev(`TZONES[${JSON.stringify(record.key)}].name`) !== record.key).map((record) => record.key),
+    []);
   info(ev('TSEARCH.length') + ' search entries ('
-    + ev('Object.keys(TRAVEL.groups).length') + ' groups + ' + n + ' zones)');
+    + ev('Object.keys(TRAVEL.groups).length') + ' groups + ' + keys.length + ' zones)');
 }
 
 section('every routed zone is findable by typing its own name');
@@ -62,6 +79,22 @@ section('every routed zone is findable by typing its own name');
     + '&&DETAIL[TZONES[k].cont].zones[k]).length');
   info(detailed + '/' + ev('Object.keys(TZONES).length')
     + ' routed zones also have a detail map (reported, not enforced)');
+}
+
+section('a catalog-derived edge routes with its stored cost');
+{
+  const record = discovered.find((entry) => entry.key === 'newsebexp');
+  ok('the live catalog contains newsebexp', !!record, discovered.map((entry) => entry.key));
+  if (record) {
+    const edge = record.edges[0];
+    const trip = plan([edge.z], [record.key]);
+    ok(`${edge.z} -> newsebexp routes`, !!trip, trip);
+    if (trip) {
+      const leg = trip.legs.find((entry) => entry.from === edge.z && entry.to === record.key);
+      ok('the itinerary contains the catalog-derived leg', !!leg, hops(trip));
+      if (leg) eq('the derived leg carries the catalog cost', leg.cost, edge.cost);
+    }
+  }
 }
 
 section('search ranking: the group wins a bare city name, quarters stay reachable');
@@ -156,7 +189,7 @@ section('calibration holds: no trip detours through a port to reach the zone nex
 {
   // The failure mode the cost pass exists to prevent. With a port cheaper than a typical
   // single walk edge, the planner tells a player standing at the Cazic-Thule exit to cast a
-  // port to step into The Feerrott, and the 76 walk edges go decorative.
+  // port to step into The Feerrott, and the walk graph goes decorative.
   //
   // These two are NOT bugs: each is a crossing long enough that a porting class really would
   // port. Declared by name rather than tolerated by a threshold, exactly as TRAVEL_AWAITING
@@ -245,7 +278,7 @@ section('every routed zone can actually be reached from somewhere, at every expa
   // Mirrors verify.py travel's reachability report, but through the runtime pathfinder, so
   // an edge-assembly bug that the Python side cannot see shows up here.
   //
-  // Swept per expansion over the IN-EXPANSION node set, not over TZONES. TZONES stays the complete authored
+  // Swept per expansion over the IN-EXPANSION node set, not over TZONES. TZONES stays the complete routed
   // roster by design -- it is the naming and lookup table search needs -- so iterating it at an
   // early expansion would demand a route to a zone the server does not have yet. Freeport is the
   // origin at every expansion because it is in the first one.
@@ -259,7 +292,7 @@ section('every routed zone can actually be reached from somewhere, at every expa
       return out;})())`));
     eq('nothing is stranded at ' + e + ' with every capability granted', bad, []);
     info(ev('Object.keys(TZONES).filter(xpacZoneOn).length') + ' of '
-      + ev('Object.keys(TZONES).length') + ' authored zones exist at ' + e);
+      + ev('Object.keys(TZONES).length') + ' routed zones exist at ' + e);
   }
   ev("setXpac(XPACS.default)");
 }
@@ -583,7 +616,7 @@ section('the authored walk costs are the doorways the RUNTIME resolves, not a se
   const cmp = JSON.parse(ev(`JSON.stringify((function(){
     const UNITS=250, out=[];
     const local=(c,z,t)=>zoneExitPoint(c,z,t);
-    for(const w of TRAVEL.walk){
+    for(const w of TRAVEL.walk.slice(0,${authoredTravel.walk.length})){
       const A=TZONES[w.z[0]],B=TZONES[w.z[1]];
       if(!A||!B||A.cont!==B.cont){out.push([w.z.join('|'),'cross-continent',null]);continue;}
       const c=A.cont, za=ALL[c].zones[w.z[0]], zb=ALL[c].zones[w.z[1]];
@@ -608,7 +641,7 @@ section('the authored walk costs are the doorways the RUNTIME resolves, not a se
   // It was briefly 0.15 to absorb the script sampling 200 outline points where the viewer scans
   // them all -- that gap was closed in the script instead, because a tolerance wide enough to hide
   // a sampling difference is wide enough to hide a small table divergence.
-  info('checked all ' + ev('TRAVEL.walk.length') + ' authored walk costs against the runtime');
+  info('checked all ' + authoredTravel.walk.length + ' authored walk costs against the runtime');
 }
 
 section('a walk leg is drawn through the shared zone line, not across the middle');

@@ -166,10 +166,12 @@ a second copy drifts on precisely the awkward cases, the `&` two-target split an
 Forgetting `LINK_OVERRIDE` is not hypothetical — it makes `commons|kithicor` look one-sided when
 Kithicor does name the Commonlands through the override.
 
-**The drawn line and the authored cost measure the same path again.** They diverged briefly, when the
-drawing moved to the named doorway while cost still came from closest approach; `--recost` closed it.
-Keep them together: anything that changes how a doorway is chosen has to be applied on both sides, and
-the cross-language cost check is what notices if it is not.
+**The drawn line and the stored walk cost measure the same path again.** They diverged briefly, when
+the drawing moved to the named doorway while authored cost still came from closest approach;
+`--recost` closed it. Authored edges remain guarded by the cross-language cost sweep. An unrostered
+discovered edge instead carries the conversion-time catalog cost that `build.py` appends unchanged,
+and the real-artifact travel test asserts that exact cost on a planned leg. In either class, anything
+that changes doorway selection has to move drawing and the cost-producing path together.
 
 **`walk[].at` is still not that point, and must not be substituted for it.** It holds the *drawn
 connector's* endpoints, resolved only to within `ANCHOR_THRESH` of a zone — on `innothule|sro` they
