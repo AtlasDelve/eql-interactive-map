@@ -8,6 +8,7 @@ a UTF-8 BOM, a Latin-1 label - which a generated fixture would round-trip away.
 Every expectation below is written out by hand. The point is that a converter change which
 alters output has to change a number here too, so the diff says what moved.
 """
+import copy
 import json
 import io
 import os
@@ -562,16 +563,22 @@ try:
     check("the manifest records discovery mode per continent", lman["continents"]["Testland"]["discovery"], True)
     expected_discovered = [
         {"key": "ambi", "name": "ambi", "nameFrom": "key", "color": "#8f78d4",
-         "cx": 4, "cy": 4, "off": [4, 4], "anchor": "alpha", "from": "root"},
+         "cx": 4, "cy": 4, "off": [4, 4], "anchor": "alpha", "from": "root",
+         "edges": [{"z": "alpha", "cost": 0.1, "named": "candidate"}]},
         {"key": "excluded", "name": "excluded", "nameFrom": "key", "color": "#8f78d4",
-         "cx": 2, "cy": 8, "off": [1, 7], "anchor": "beta", "from": "root"},
+         "cx": 251, "cy": 7, "off": [1, 7], "anchor": "beta", "from": "root",
+         "edges": [{"z": "beta", "cost": 1, "named": "candidate"}]},
         {"key": "kappa", "name": "Kappa Expedition", "nameFrom": "marker",
          "color": "#8f78d4", "cx": 5, "cy": 5, "off": [2.0, 2.0],
-         "anchor": "gamma", "from": "root"},
+         "anchor": "gamma", "from": "root",
+         "edges": [{"z": "gamma", "cost": 0.1, "named": "both"}]},
         {"key": "multi", "name": "multi", "nameFrom": "key", "color": "#8f78d4",
-         "cx": 4, "cy": 4, "off": [3, 3], "anchor": "alpha", "from": "root"},
+         "cx": 4, "cy": 4, "off": [3, 3], "anchor": "alpha", "from": "root",
+         "edges": [{"z": "alpha", "cost": 0.1, "named": "candidate"},
+                   {"z": "gamma", "cost": 0.1, "named": "candidate"}]},
         {"key": "theta", "name": "theta", "nameFrom": "key", "color": "#8f78d4",
-         "cx": 2, "cy": 8, "off": [1, 7], "anchor": "beta", "from": "root"},
+         "cx": 38, "cy": 7, "off": [1, 7], "anchor": "beta", "from": "root",
+         "edges": [{"z": "beta", "cost": 0.2, "named": "candidate"}]},
     ]
     check("the manifest stores the complete discovered catalog in sorted key order",
           lman["continents"]["Testland"]["discovered"], expected_discovered)
@@ -590,6 +597,45 @@ try:
           [("kappa", "Kappa Expedition", "marker"), ("theta", "theta", "key")])
     check("multi-neighbour placement chooses the lexicographically first anchor",
           expected_discovered[3]["anchor"], "alpha")
+    integral_cost = next(record for record in
+                         lman["continents"]["Testland"]["discovered"]
+                         if record["key"] == "excluded")["edges"][0]["cost"]
+    check("an integral normalized cost is emitted as an integer",
+          (integral_cost, type(integral_cost)), (1, int))
+
+    # Make theta's real doorway reach exactly 37.5 units: the candidate contributes 37 and
+    # beta's temporary half-unit centroid contributes 0.5.  This is a committed pipeline
+    # candidate, not a direct call to the rounding helper, so the cost ordering and composition
+    # seam participate in the control.
+    lcpath = os.path.join(ldata, "continents", "Testland", "continent.json")
+    with open(lcpath, encoding="utf-8") as f:
+        tie_meta = json.load(f)
+    original_meta = copy.deepcopy(tie_meta)
+    tie_meta["zones"]["beta"]["cx"] = 1.5
+    tie_meta["zones"]["beta"]["cy"] = 7
+    with open(lcpath, "w", encoding="utf-8") as f:
+        json.dump(tie_meta, f)
+    seen_costs = []
+    original_normalise = IP._normalise_cost
+    try:
+        def record_normalise(value):
+            seen_costs.append(value)
+            return original_normalise(value)
+        IP._normalise_cost = record_normalise
+        tie_manifest = IP.convert(LAYERED, ldata, quiet=True)
+    finally:
+        IP._normalise_cost = original_normalise
+        with open(lcpath, "w", encoding="utf-8") as f:
+            json.dump(original_meta, f)
+    theta_tie = next(record for record in
+                     tie_manifest["continents"]["Testland"]["discovered"]
+                     if record["key"] == "theta")
+    check("the one-decimal tie candidate reaches cost_between through the real pipeline",
+          seen_costs[-1], 0.15)
+    check("the half-to-even multiply/round/divide contract resolves the tie",
+          (theta_tie["edges"][0]["cost"], round(seen_costs[-1], 1)),
+          (0.2, 0.1))
+    lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the ordinary authored fixture
 
     no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
     check("discovery-off records false per refreshed continent",
@@ -666,11 +712,93 @@ try:
     check("discovered provenance count and fingerprint are pinned",
           (lman["continents"]["Testland"]["discoveredSourceCount"],
            lman["continents"]["Testland"]["discoveredSourceFingerprint"]),
-          (10, "9770140ab35272b3994ac26c62bc16846b01eaf85edcda16cba1d6ba61511557"))
+          (10, "4a396c88816e5e22699b0ffba17df76872a89e4ecd46096c5c67c2406944829f"))
     check("the freshness command compares the fixture instead of skipping",
           VERIFY.cmd_discoveryfresh(ldata), 0)
 
     manifest_path = os.path.join(ldata, IP.CACHE_DIRNAME, "manifest.json")
+
+    def catalog_rejects(label, mutate, needle):
+        broken = copy.deepcopy(lman)
+        mutate(broken)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(broken, f, sort_keys=True)
+        ok, why = IP.validate_cache(ldata)
+        check(label, (ok, needle in why), (False, True))
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(lman, f, sort_keys=True)
+
+    def first_record(manifest):
+        return manifest["continents"]["Testland"]["discovered"][0]
+
+    catalog_rejects("catalog validation: discovered must be a list",
+                    lambda m: m["continents"]["Testland"].__setitem__("discovered", {}),
+                    "not a list")
+    catalog_rejects("catalog validation: duplicate keys",
+                    lambda m: m["continents"]["Testland"]["discovered"].append(
+                        copy.deepcopy(first_record(m))),
+                    "duplicate keys")
+    catalog_rejects("catalog validation: keys are case-folded",
+                    lambda m: first_record(m).__setitem__("key", "Ambi"),
+                    "not case-folded")
+    catalog_rejects("catalog validation: keys do not collide with any authored roster",
+                    lambda m: first_record(m).__setitem__("key", "alpha"),
+                    "authored roster")
+    catalog_rejects("catalog validation: required fields cannot be missing",
+                    lambda m: first_record(m).pop("color"),
+                    "missing or invalid color")
+    catalog_rejects("catalog validation: required fields have their declared types",
+                    lambda m: first_record(m).__setitem__("cx", 1.5),
+                    "missing or invalid cx")
+
+    for kind in ("geometry", "detail"):
+        path = os.path.join(ldata, IP.CACHE_DIRNAME, "continents", "Testland",
+                            kind, "ambi.json")
+        held = path + ".held"
+        os.replace(path, held)
+        try:
+            ok, why = IP.validate_cache(ldata)
+            check("catalog validation: discovered %s file must exist" % kind,
+                  (ok, "missing discovered %s" % kind in why), (False, True))
+        finally:
+            os.replace(held, path)
+
+    catalog_rejects("catalog validation: nameFrom enum",
+                    lambda m: first_record(m).__setitem__("nameFrom", "caption"),
+                    "nameFrom")
+    catalog_rejects("catalog validation: source-layer enum",
+                    lambda m: first_record(m).__setitem__("from", "cache"),
+                    "source")
+    catalog_rejects("catalog validation: edges are non-empty",
+                    lambda m: first_record(m).__setitem__("edges", []),
+                    "edges")
+    catalog_rejects("catalog validation: edges stay within the continent",
+                    lambda m: first_record(m)["edges"][0].__setitem__("z", "elsewhere"),
+                    "leaves continent")
+    catalog_rejects("catalog validation: edge neighbours are unique",
+                    lambda m: first_record(m)["edges"].append(
+                        copy.deepcopy(first_record(m)["edges"][0])),
+                    "duplicate zones")
+    catalog_rejects("catalog validation: named enum",
+                    lambda m: first_record(m)["edges"][0].__setitem__("named", "neither"),
+                    "named value")
+    catalog_rejects("catalog validation: costs are finite",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", float("nan")),
+                    "finite and positive")
+    catalog_rejects("catalog validation: costs are positive",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", 0),
+                    "finite and positive")
+    catalog_rejects("catalog validation: costs use the JS-canonical number dialect",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", 3.0),
+                    "JS-canonical")
+    catalog_rejects("catalog validation: anchor belongs to the edge set",
+                    lambda m: first_record(m).__setitem__("anchor", "beta"),
+                    "not among its edges")
+    catalog_rejects("catalog validation: discovered display names are unique after znorm",
+                    lambda m: m["continents"]["Testland"]["discovered"][1].__setitem__(
+                        "name", first_record(m)["name"]),
+                    "duplicate normalized names")
+
     tiny_manifest = json.loads(json.dumps(lman))
     tiny_manifest["continents"]["Testland"]["discovered"][0]["off"][0] = 0.00001
     with open(manifest_path, "w", encoding="utf-8") as f:

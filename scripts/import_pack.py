@@ -22,6 +22,7 @@ purpose - the JS twin in `no-install-builder` should be a transliteration, not a
 import argparse
 import hashlib
 import json
+import math
 import os
 import shutil
 import sys
@@ -62,6 +63,25 @@ LAYER_SUFFIXES = ("", "_1", "_2", "_3")
 # two rules disagree constantly. A JS port needs an explicit half-to-even helper.
 def _r(x):
     return round(x)
+
+
+JS_SAFE_INTEGER = (1 << 53) - 1
+
+
+def _canon_catalog_number(value):
+    """Return a finite JavaScript-canonical number produced for the discovery catalog."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise SystemExit("non-canonical discovered catalog number %r is not finite" % value)
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and abs(value) > JS_SAFE_INTEGER:
+        raise SystemExit("non-canonical discovered catalog integer %r exceeds JS safe range" % value)
+    return value
+
+
+def _normalise_cost(value):
+    """Plan-1 half-to-even one-decimal cost, then the injected-data number dialect."""
+    return _canon_catalog_number(_r(max(value, 0.1) * 10) / 10)
 
 
 # --------------------------------------------------------------------------- pack reading
@@ -593,6 +613,7 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
     discovered_palette = []
     palette_index = {color: i for i, color in enumerate(palette)}
     azones = authored_zones(meta)
+    targets_by_key = {}
 
     zones = {}
     for key in meta["zoneOrder"]:
@@ -604,6 +625,7 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
     for partial in sorted(candidates, key=lambda record: record["key"]):
         key = partial["key"]
         targets = sorted(partial["_targets"])
+        targets_by_key[key] = targets
         anchor = targets[0]
         srcdir, source = resolve_zone_source(pack, root, key)
         if srcdir is None or source != partial["from"]:
@@ -633,7 +655,8 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
             name_from = "key"
 
         geometry_segs, geometry_z = geometry_records(records, off)
-        cx, cy = _written_centroid(geometry_segs, key)
+        cx, cy = (_canon_catalog_number(value)
+                  for value in _written_centroid(geometry_segs, key))
         dump_compact({"segs": geometry_segs, "segz": geometry_z},
                      os.path.join(cout, "geometry", key + ".json"))
         zone = compose_zone({"name": name, "color": mapgeom.DISCOVERED_ZONE_COLOR,
@@ -673,6 +696,46 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
         for record in collision:
             record["name"] = record["key"]
             record["nameFrom"] = "key"
+
+    # Costs are the final part of candidate assembly.  At this point every candidate's cache
+    # files and composed zone record exist, and name-collision fallback has fixed the same index
+    # identity the runtime will see.
+    edge_index = dict(zone_index)
+    discovered_index = mapgeom.zidx_from(
+        [(cont, record["key"], record["name"]) for record in catalog])
+    for normalized, target in discovered_index.items():
+        edge_index.setdefault(normalized, target)
+    extended_palette = palette + discovered_palette
+    for record in catalog:
+        key = record["key"]
+        candidate_cache = _read_compact(os.path.join(cout, "detail", key + ".json"))
+        candidate_detail = compose_detail(record, candidate_cache, extended_palette)
+        candidate_exits = mapgeom.exit_points_from(key, zones[key], candidate_detail, edge_index)
+        edges = []
+        for neighbour in targets_by_key[key]:
+            neighbour_cache = _read_compact(
+                os.path.join(cout, "detail", neighbour + ".json"))
+            neighbour_detail = compose_detail(
+                azones[neighbour], neighbour_cache, extended_palette)
+            neighbour_exits = mapgeom.exit_points_from(
+                neighbour, zones[neighbour], neighbour_detail, edge_index)
+            exits = dict(candidate_exits)
+            exits.update(neighbour_exits)
+            candidate_named = (key, neighbour) in exits
+            neighbour_named = (neighbour, key) in exits
+            if candidate_named and neighbour_named:
+                named = "both"
+            elif candidate_named:
+                named = "candidate"
+            elif neighbour_named:
+                named = "neighbour"
+            else:
+                raise AssertionError("accepted discovery edge lost both doorway markers: %s/%s"
+                                     % (key, neighbour))
+            raw_cost = mapgeom.cost_between(
+                zones, key, neighbour, transformed=False, exits=exits)
+            edges.append({"z": neighbour, "cost": _normalise_cost(raw_cost), "named": named})
+        record["edges"] = edges
 
     return catalog, discovered_sources, discovered_palette
 
@@ -1026,13 +1089,19 @@ def validate_cache(data=None, world=None):
     if world is None:
         with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
             world = json.load(f)
+    metas = {}
+    authored_keys = set()
+    for cont in world["order"]:
+        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+            metas[cont] = json.load(f)
+        authored_keys.update(zk.casefold() for zk in metas[cont]["zoneOrder"])
+        authored_keys.update(zk.casefold() for zk in metas[cont].get("detailZones", []))
     for cont in world["order"]:
         entry = man.get("continents", {}).get(cont)
         if entry is None:
             return False, "cache has no continent %r" % cont
-        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
-        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        meta = metas[cont]
         want = list(meta["zoneOrder"])
         for zk in meta.get("detailZones", []):
             if zk not in want:
@@ -1075,6 +1144,76 @@ def validate_cache(data=None, world=None):
             if (zk not in skipped and
                     not os.path.exists(os.path.join(gdir, "detail", zk + ".json"))):
                 return False, "cache is missing detail for %s/%s" % (cont, zk)
+
+        discovered = entry.get("discovered", [])
+        if not isinstance(discovered, list):
+            return False, "cache discovered catalog for %r is not a list" % cont
+        keys = []
+        names = []
+        required = {"key": str, "name": str, "nameFrom": str, "color": str,
+                    "cx": int, "cy": int, "off": list, "anchor": str,
+                    "from": str, "edges": list}
+        for record in discovered:
+            if not isinstance(record, dict):
+                return False, "cache discovered record for %r is not an object" % cont
+            for field, kind in required.items():
+                value = record.get(field)
+                if (not isinstance(value, kind) or
+                        (kind is int and isinstance(value, bool))):
+                    return False, ("cache discovered record for %r has missing or invalid %s"
+                                   % (cont, field))
+            key = record["key"]
+            if key != key.casefold():
+                return False, "cache discovered key %r is not case-folded" % key
+            if key.casefold() in authored_keys:
+                return False, "cache discovered key %r collides with the authored roster" % key
+            keys.append(key)
+            names.append(mapgeom.znorm(record["name"]))
+            for kind in ("geometry", "detail"):
+                if not os.path.exists(os.path.join(gdir, kind, key + ".json")):
+                    return False, "cache is missing discovered %s for %s/%s" % (kind, cont, key)
+            if record["nameFrom"] not in ("marker", "key"):
+                return False, "cache discovered nameFrom for %r is invalid" % key
+            if record["from"] not in ("pack", "root"):
+                return False, "cache discovered source for %r is invalid" % key
+            if (len(record["off"]) != 2 or
+                    any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+                        not math.isfinite(v) for v in record["off"])):
+                return False, "cache discovered off for %r is not a finite pair" % key
+            if any(abs(record[field]) > JS_SAFE_INTEGER for field in ("cx", "cy")):
+                return False, "cache discovered centroid for %r exceeds JS safe range" % key
+            edges = record["edges"]
+            if not edges:
+                return False, "cache discovered edges for %r is empty" % key
+            edge_keys = []
+            allowed = set(want)
+            allowed.update(r.get("key") for r in discovered if isinstance(r, dict))
+            for edge in edges:
+                if not isinstance(edge, dict) or not isinstance(edge.get("z"), str):
+                    return False, "cache discovered edge for %r has missing or invalid fields" % key
+                neighbour = edge["z"]
+                edge_keys.append(neighbour)
+                if neighbour not in allowed:
+                    return False, ("cache discovered edge for %r leaves continent %r"
+                                   % (key, cont))
+                if edge.get("named") not in ("both", "candidate", "neighbour"):
+                    return False, "cache discovered edge named value for %r is invalid" % key
+                cost = edge.get("cost")
+                if (isinstance(cost, bool) or not isinstance(cost, (int, float)) or
+                        not math.isfinite(cost) or cost <= 0):
+                    return False, "cache discovered edge cost for %r is not finite and positive" % key
+                if ((isinstance(cost, float) and
+                     (cost.is_integer() or (0 < abs(cost) < 1e-4))) or
+                        (isinstance(cost, int) and abs(cost) > JS_SAFE_INTEGER)):
+                    return False, "cache discovered edge cost for %r is not JS-canonical" % key
+            if len(set(edge_keys)) != len(edge_keys):
+                return False, "cache discovered edges for %r contain duplicate zones" % key
+            if record["anchor"] not in edge_keys:
+                return False, "cache discovered anchor for %r is not among its edges" % key
+        if len(set(keys)) != len(keys):
+            return False, "cache discovered catalog for %r contains duplicate keys" % cont
+        if len(set(names)) != len(names):
+            return False, "cache discovered catalog for %r contains duplicate normalized names" % cont
     return True, "ok"
 
 
