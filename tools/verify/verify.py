@@ -3,6 +3,7 @@
 
 Usage:
     python verify.py datacmp  A.html B.html   # injected-data equivalence + order
+    python verify.py discoveryappend OFF ON   # discovery-on is a non-empty append
     python verify.py numcmp   A.html B.html   # equivalence after numeric type coercion
     python verify.py jsnum    ARTIFACT.html   # JS-canonical numeric spellings
     python verify.py lf       ARTIFACT.html   # no CR bytes in an LF artifact
@@ -116,6 +117,65 @@ def cmd_datacmp(a, b):
             print("zone order DIFF in %s" % c)
             bad += 1
     print("zone draw order OK" if not bad else "")
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_discoveryappend(off_path, on_path):
+    """Require discovery-on ALL/DETAIL to be the manifest-declared append to discovery-off."""
+    off, on = extract(off_path), extract(on_path)
+    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+              "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    bad = 0
+    appended = []
+    for cont, off_entry in off["ALL"].items():
+        on_entry = on["ALL"].get(cont)
+        if on_entry is None:
+            print("FAIL  discovery-on lost continent %s" % cont)
+            bad += 1
+            continue
+        off_other = {k: v for k, v in off_entry.items() if k != "zones"}
+        on_other = {k: v for k, v in on_entry.items() if k != "zones"}
+        if off_other != on_other:
+            print("FAIL  discovery changed non-zone ALL fields in %s" % cont)
+            bad += 1
+        off_keys = list(off_entry["zones"])
+        on_keys = list(on_entry["zones"])
+        expected = [r["key"] for r in
+                    manifest.get("continents", {}).get(cont, {}).get("discovered", [])]
+        observed = on_keys[len(off_keys):]
+        if on_keys[:len(off_keys)] != off_keys or observed != expected:
+            print("FAIL  discovery keys are not the manifest append in %s: %r" %
+                  (cont, observed))
+            bad += 1
+        for key in off_keys:
+            if off_entry["zones"][key] != on_entry["zones"].get(key):
+                print("FAIL  discovery changed pre-existing zone %s/%s" % (cont, key))
+                bad += 1
+        appended.extend((cont, key) for key in observed)
+
+        off_detail = off["DETAIL"].get(cont, {"palette": [], "zones": {}})
+        on_detail = on["DETAIL"].get(cont, {"palette": [], "zones": {}})
+        tail = manifest.get("continents", {}).get(cont, {}).get("discoveredPalette", [])
+        if on_detail["palette"] != off_detail["palette"] + tail:
+            print("FAIL  discovery palette is not the manifest tail in %s" % cont)
+            bad += 1
+        off_dkeys = list(off_detail["zones"])
+        on_dkeys = list(on_detail["zones"])
+        if on_dkeys[:len(off_dkeys)] != off_dkeys or on_dkeys[len(off_dkeys):] != expected:
+            print("FAIL  discovered detail keys are not appended in %s" % cont)
+            bad += 1
+        for key in off_dkeys:
+            if off_detail["zones"][key] != on_detail["zones"].get(key):
+                print("FAIL  discovery changed pre-existing detail %s/%s" % (cont, key))
+                bad += 1
+    if not appended:
+        print("FAIL  discovery-on reference is inert: no appended zone keys")
+        bad += 1
+    else:
+        print("compared %d appended discovered zone(s): %s" %
+              (len(appended), ", ".join("%s/%s" % pair for pair in appended)))
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

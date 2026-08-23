@@ -133,12 +133,16 @@ def read_version(path=VERSION_FILE):
     return version
 
 
-def cred_text(data):
+def cred_text(data, discover=True):
     """Describe the selected pack and any zones supplied by the game's own maps."""
     manifest = load_manifest(data)
     pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
     root_count = sum(len(c.get("rootZones", []))
                      for c in manifest.get("continents", {}).values())
+    if discover:
+        root_count += sum(
+            1 for entry in manifest.get("continents", {}).values()
+            for record in entry.get("discovered", []) if record.get("from") == "root")
     # Canonical format for the browser twin, including separators:
     #   root: EQL · selected maps folder
     #   pack: EQL · <name> map data[ · N zone(s) from the game's own maps]
@@ -283,7 +287,7 @@ def ensure_cache(data, pack):
                          "Re-run: python scripts/import_pack.py --pack %s" % (why, pack))
 
 
-def build(data=None):
+def build(data=None, discover=True):
     data = data or DATA
     world = load(os.path.join(data, "world.json"))
     META = world["meta"]
@@ -301,6 +305,7 @@ def build(data=None):
 
     ALL, DETAIL, HUBS = {}, {}, {}
     skips = import_pack.cache_skips(data)
+    discoveries = import_pack.cache_discoveries(data) if discover else {}
     for cont in order:
         base = cont_dir(cont, data)
         gen = cont_dir(cont, os.path.join(data, import_pack.CACHE_DIRNAME))
@@ -321,6 +326,11 @@ def build(data=None):
             zones[zk] = import_pack.compose_zone(
                 azones[zk], load(os.path.join(gen, "geometry", zk + ".json")),
                 None if is_identity(xf) else xf)
+        catalog = discoveries.get(cont, {"zones": [], "palette": []})
+        for record in catalog["zones"]:
+            az = {field: record[field] for field in ("name", "color", "cx", "cy")}
+            zones[record["key"]] = import_pack.compose_zone(
+                az, load(os.path.join(gen, "geometry", record["key"] + ".json")), None)
 
         # bbox is always the stored continent bbox; the viewer computes a live
         # fit-bbox from transformed segs when a continent has any non-identity xf.
@@ -342,13 +352,17 @@ def build(data=None):
 
         # The palette is pack-derived (indices are assigned during conversion), so it lives in
         # the cache rather than the authored layer.
-        palette = load(os.path.join(gen, "palette.json"))
+        palette = load(os.path.join(gen, "palette.json")) + catalog["palette"]
         dz = {}
         for zk in meta.get("detailZones", []):
             if zk in skipped:
                 continue
             dz[zk] = import_pack.compose_detail(
                 azones[zk], load(os.path.join(gen, "detail", zk + ".json")), palette)
+        for record in catalog["zones"]:
+            az = {field: record[field] for field in ("name", "color", "cx", "cy")}
+            dz[record["key"]] = import_pack.compose_detail(
+                az, load(os.path.join(gen, "detail", record["key"] + ".json")), palette)
         if palette or dz:
             DETAIL[cont] = {"palette": palette, "zones": dz}
 
@@ -394,6 +408,8 @@ def main():
     ap.add_argument("--pack", default=None,
                     help="map-pack directory (e.g. <game install>/maps/Brewall). Remembered "
                          "in <data>/" + PACK_CONFIG + ", so later builds need no flag.")
+    ap.add_argument("--no-discover", action="store_false", dest="discover", default=True,
+                    help="ignore the generated discovery catalog while composing this build")
     args = ap.parse_args()
     out = args.out or DEFAULT_OUT[args.edition]
     data_root = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -405,8 +421,9 @@ def main():
         template = f.read()
 
     template = strip_regions(template, args.edition)     # strip before injecting
-    data = build(data_root)
-    html = inject(template, *data, credit=cred_text(data_root), version=read_version())
+    data = build(data_root, discover=args.discover)
+    html = inject(template, *data, credit=cred_text(data_root, discover=args.discover),
+                  version=read_version())
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8", newline="") as f:

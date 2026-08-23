@@ -112,19 +112,17 @@ function copyAuthoredWithoutCache(target) {
 async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
   const manifest = json(MANIFEST);
   if (!samePath(manifest.pack, pack)) {
-    console.log(`SKIP: Brewall reference cache was built from ${manifest.pack}, not remembered ${pack}; run python scripts/import_pack.py`);
-    return false;
+    throw new Error(`Brewall reference cache was built from ${manifest.pack}, not remembered ${pack}; run python scripts/import_pack.py`);
   }
   const files = trackingReader(selected);
   const result = await convert({ authored: loadAuthored(DATA), files, colors, packDir, rootDir });
   const identity = sourceIdentity(files.reads);
   if (identity.count !== manifest.sourceCount || identity.fingerprint !== manifest.sourceFingerprint) {
-    console.log(`SKIP: Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
-    return false;
+    throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
   if (!fs.existsSync(userReference)) throw new Error('missing Brewall reference ' + userReference);
   compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
-  console.log(`PASS: Brewall real pack (${identity.count} source files, fingerprint current)`);
+  console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
   return true;
 }
 
@@ -141,11 +139,13 @@ async function runRootOnly(mapsRoot, template, colors) {
     copyAuthoredWithoutCache(scratch);
     let run = runPython(['scripts/import_pack.py', '--pack', mapsRoot, '--data', scratch]);
     if (run.status !== 0) throw new Error(`root-only import failed: ${run.stderr.toString('utf8')}`);
-    run = runPython(['scripts/build.py', '--data', scratch, '--out', reference]);
+    // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
+    run = runPython(['scripts/build.py', '--data', scratch, '--out', reference, '--no-discover']);
     if (run.status !== 0) throw new Error(`root-only build failed: ${run.stderr.toString('utf8')}`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
     const result = await convert({ authored: loadAuthored(scratch), files, colors, packDir, rootDir: null });
+    const identity = sourceIdentity(files.reads);
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);
@@ -155,7 +155,7 @@ async function runRootOnly(mapsRoot, template, colors) {
     assert.deepStrictEqual(result.data.ALL['Plane of Hate'].zones, {}, 'zero-zone continent retained');
     assert.strictEqual(result.credit, 'EQL · selected maps folder');
     compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
-    console.log('PASS: maps/ root alone (32 skipped across 5 continents, 88 surviving, Plane of Hate retained empty)');
+    console.log(`PASS: maps/ root alone (${identity.count} source files compared; 32 skipped across 5 continents, 88 surviving, Plane of Hate retained empty)`);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
@@ -188,7 +188,7 @@ async function runRootOnly(mapsRoot, template, colors) {
     await runRootOnly(mapsRoot, template, colors);
     rootRan = true;
   } else {
-    console.log(`SKIP: maps/ root real-pack case needs a remembered pack under maps/ or the maps/ root itself; got ${pack}`);
+    throw new Error(`maps/ root real-pack case needs a remembered pack under maps/ or the maps/ root itself; got ${pack}`);
   }
   const seconds = Number(process.hrtime.bigint() - started) / 1e9;
   const heap = process.memoryUsage();

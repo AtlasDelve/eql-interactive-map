@@ -45,6 +45,7 @@ BUILD_BUILDER = os.path.join(REPO, "scripts", "build_builder.py")
 PACKFX_DATA = os.path.join(HERE, "packfx", "data")
 
 USER = os.path.join(OUT, "user.html")
+USER_ND = os.path.join(OUT, "user-no-discover.html")
 AUTHOR = os.path.join(OUT, "author.html")
 BUILDER = os.path.join(OUT, "builder.html")
 BUILDER_FX = os.path.join(OUT, "builder-fx.html")
@@ -68,8 +69,12 @@ def step(name, argv, cwd=None, optional=False):
     return True
 
 
-def build(edition, out):
-    subprocess.run([sys.executable, BUILD, "--edition", edition, "--out", out],
+def build(edition, out, discover=True):
+    argv = [sys.executable, BUILD, "--edition", edition, "--out", out]
+    if not discover:
+        # Plan 3 removes this parity-only --no-discover once the browser converter consumes catalogs.
+        argv.append("--no-discover")
+    subprocess.run(argv,
                    check=True, stdout=subprocess.DEVNULL)
 
 
@@ -116,7 +121,7 @@ def main():
     if args.list:
         print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
         print("               strip, lf,")
-        print("               datacmp(user,author), jsnum x2, hints, discoveryfresh, travel")
+        print("               datacmp(user,author), discoveryappend, jsnum x2, hints, discoveryfresh, travel")
         print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
@@ -131,6 +136,7 @@ def main():
     print("building both editions and both browser builders into " + os.path.relpath(OUT, REPO))
     build("user", USER)
     build("author", AUTHOR)
+    build("user", USER_ND, discover=False)
     build_builder(BUILDER)
     build_builder(BUILDER_FX, PACKFX_DATA)
 
@@ -150,6 +156,8 @@ def main():
     # against that.
     step("injected data identical across editions",
          [sys.executable, "verify.py", "datacmp", USER, AUTHOR])
+    step("discovery-on is the manifest-declared non-empty append",
+         [sys.executable, "verify.py", "discoveryappend", USER_ND, USER])
     step("JS-canonical numbers (user edition)",
          [sys.executable, "verify.py", "jsnum", USER])
     step("JS-canonical numbers (author edition)",
@@ -173,7 +181,7 @@ def main():
         results.append(("pack converter twin: real pack agreement", "SKIP"))
     elif have_node:
         step("pack converter twin: real pack agreement",
-             ["node", "pack-convert-full.test.js", sys.executable, USER], cwd=JS)
+             ["node", "pack-convert-full.test.js", sys.executable, USER_ND], cwd=JS)
     else:
         results.append(("pack converter twin: real pack agreement", "SKIP"))
 

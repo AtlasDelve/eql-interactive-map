@@ -138,7 +138,8 @@ function copyFixtureData(root) {
 function pythonPipeline(pack, data, ref) {
   const imp = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (imp.status !== 0) throw new Error(`import failed: ${imp.stderr.toString('utf8')}`);
-  return runPython(['scripts/build.py', '--data', data, '--out', ref]);
+  // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
+  return runPython(['scripts/build.py', '--data', data, '--out', ref, '--no-discover']);
 }
 
 function assertNoRootLayer(pack) {

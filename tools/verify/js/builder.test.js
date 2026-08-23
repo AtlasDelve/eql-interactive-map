@@ -92,7 +92,8 @@ function copyFixtureData(root) {
 function pythonReference(pack, data, reference) {
   let run = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (run.status !== 0) throw new Error('fixture import failed: ' + run.stderr);
-  run = runPython(['scripts/build.py', '--data', data, '--out', reference]);
+  // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
+  run = runPython(['scripts/build.py', '--data', data, '--out', reference, '--no-discover']);
   if (run.status !== 0) throw new Error('fixture build failed: ' + run.stderr);
   return fs.readFileSync(reference, 'utf8');
 }

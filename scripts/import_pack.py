@@ -381,6 +381,20 @@ def cache_skips(data=None):
             for cont, entry in man.get("continents", {}).items()}
 
 
+def cache_discoveries(data=None):
+    """Per-continent discovery catalogs and palette tails from the plain manifest dialect."""
+    data = data or DATA
+    with open(os.path.join(data, CACHE_DIRNAME, "manifest.json"),
+              "r", encoding="utf-8") as f:
+        man = json.load(f)
+    return {
+        cont: {"zones": entry.get("discovered", []),
+               "palette": entry.get("discoveredPalette", [])}
+        for cont, entry in man.get("continents", {}).items()
+        if entry.get("discovered")
+    }
+
+
 class CachePromotionError(Exception):
     """The staged cache could not replace the live one. Typed so callers can tell this apart
     from a conversion failure: the conversion succeeded, only the swap did not."""

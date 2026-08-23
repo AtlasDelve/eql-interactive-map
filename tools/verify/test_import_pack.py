@@ -637,6 +637,35 @@ try:
           (0.2, 0.1))
     lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the ordinary authored fixture
 
+    cached_discovery = IP.cache_discoveries(ldata)["Testland"]
+    check("the plain manifest helper returns the catalog and ordered palette tail",
+          (cached_discovery["zones"], cached_discovery["palette"]),
+          (expected_discovered, ["#cd9a4d", "#5fcd16"]))
+    built_on = BUILD.build(ldata, discover=True)
+    built_off = BUILD.build(ldata, discover=False)
+    on_all, on_detail = built_on[0]["Testland"], built_on[2]["Testland"]
+    off_all, off_detail = built_off[0]["Testland"], built_off[2]["Testland"]
+    check("discovery-on appends catalog keys after the authored zone order",
+          list(on_all["zones"]), ["alpha", "beta", "gamma"] + discovered_keys)
+    check("discovery-off leaves the authored zone order byte-for-byte",
+          list(off_all["zones"]), ["alpha", "beta", "gamma"])
+    check("discovery-on injects the same extended palette used for detail composition",
+          (on_detail["palette"], on_detail["zones"]["kappa"]["segs"][0][4],
+           on_detail["zones"]["kappa"]["labels"][0][2]),
+          (["#08ce08", "#ffffff", "#ff4545", "#4f94cd", "#cd9a4d", "#5fcd16"],
+           4, 5))
+    check("discovery-off injects the unextended palette and no discovered detail",
+          (off_detail["palette"], [key for key in discovered_keys
+                                   if key in off_detail["zones"]]),
+          (["#08ce08", "#ffffff", "#ff4545", "#4f94cd"], []))
+    check("placed and unplaced remain authored bookkeeping in both modes",
+          (on_all["placed"], on_all["unplaced"], off_all["placed"], off_all["unplaced"]),
+          (["alpha", "beta", "gamma"], [], ["alpha", "beta", "gamma"], []))
+    check("the credit counts discovered root geometry only when enabled",
+          (BUILD.cred_text(ldata), BUILD.cred_text(ldata, discover=False)),
+          ("EQL · Layered map data · 6 zones from the game's own maps",
+           "EQL · Layered map data · 1 zone from the game's own maps"))
+
     no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
     check("discovery-off records false per refreshed continent",
           no_discovery["continents"]["Testland"]["discovery"], False)
