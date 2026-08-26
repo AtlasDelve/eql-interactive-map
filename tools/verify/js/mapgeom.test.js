@@ -41,6 +41,11 @@ def zone_pair(dx, dy):
     return zones, exits
 
 p = json.load(sys.stdin)
+pinned_zones, pinned_exits = zone_pair(p['pinned']['dx'], p['pinned']['dy'])
+pinned = {
+    'norm': bits(mapgeom.norm(p['pinned']['dx'], p['pinned']['dy'])),
+    'cost': bits(mapgeom.cost_between(pinned_zones, 'a', 'b', False, pinned_exits)),
+}
 numeric_norm = []
 numeric_cost = []
 for r in p['corpus']['numeric']:
@@ -59,6 +64,20 @@ for r in p['corpus']['affine']:
     affine.append([[rounded_bits(x) for x in tp],
                    [rounded_bits(x) for x in ti],
                    [rounded_bits(x) for x in rt]])
+
+xf_edges = []
+for r in p['xfEdges']:
+    z = r['zone']
+    x, y = r['point']
+    tp = mapgeom.tpoint(z, x, y)
+    ti = mapgeom.tinv(z, x, y)
+    rt = mapgeom.tinv(z, tp[0], tp[1])
+    xf_edges.append({
+        'name': r['name'],
+        'tpoint': [rounded_bits(v) for v in tp],
+        'tinv': [rounded_bits(v) for v in ti],
+        'roundTrip': [rounded_bits(v) for v in rt],
+    })
 
 entries = [tuple(x) for x in p['entries']]
 idx = mapgeom.zidx_from(entries)
@@ -84,10 +103,13 @@ for mode in ('both', 'forward', 'reverse', 'none'):
 thin_zone = p['geometry']['thinZone']
 thin_a = mapgeom.cost_points(thin_zone, False)
 thin_b = mapgeom.cost_points(thin_zone, False)
+thin_t_a = mapgeom.cost_points(thin_zone, True)
+thin_t_b = mapgeom.cost_points(thin_zone, True)
 late = mapgeom.nearest_outline_point(p['geometry']['lateZone'], 9999, 9999, False)
 
 out = {
-  'numericNorm': numeric_norm, 'numericCost': numeric_cost, 'affine': affine,
+  'pinned': pinned, 'numericNorm': numeric_norm, 'numericCost': numeric_cost,
+  'affine': affine, 'xfEdges': xf_edges,
   'constants': {
     'COST_SAMPLE': mapgeom.COST_SAMPLE, 'UNITS_PER_COST': mapgeom.UNITS_PER_COST,
     'ZALIAS': mapgeom.ZALIAS, 'DISCOVERY_EXCLUDE': sorted(mapgeom.DISCOVERY_EXCLUDE),
@@ -109,6 +131,8 @@ out = {
     'offset': list(mapgeom.detail_offset(zone, detail)),
     'badOffset': mapgeom.detail_offset(zone, bad_detail), 'exits': exit_list,
     'costs': costs, 'thinLength': len(thin_a), 'memoized': thin_a is thin_b,
+    'thinTransformed': [[rounded_bits(v) for v in point] for point in thin_t_a],
+    'thinTransformedLength': len(thin_t_a), 'transformedMemoized': thin_t_a is thin_t_b,
     'privateKeys': sorted(k for k in thin_zone if k.startswith('_')), 'late': list(late),
   },
 }
@@ -166,7 +190,10 @@ const geometry = {
     b: { cx: 1000, cy: 1000, segs: [[990, 990, 1000, 990], [990, 1000, 1000, 1000]] },
   },
   costExits: [['a', 'b', [10, 10]], ['b', 'a', [990, 990]]],
-  thinZone: { cx: 0, cy: 0, segs: Array.from({ length: 201 }, (_, i) => [i, i, i + 0.5, i + 0.5]) },
+  thinZone: {
+    cx: 0, cy: 0, xf: { s: 1.31, rot: 0.9, tx: 11, ty: -4 },
+    segs: Array.from({ length: 201 }, (_, i) => [i, i, i + 0.5, i + 0.5]),
+  },
   lateZone: { cx: 0, cy: 0, segs: Array.from({ length: 300 }, (_, i) => [i, i, i + 0.25, i + 0.25]) },
 };
 geometry.lateZone.segs[299][2] = 9999;
@@ -177,9 +204,19 @@ const discovery = {
   derived: ['chardokb', 'kaeltwo', 'oldkithicor', 'lavastorm_original', 'unrelated'],
   display: ['to_Kappa_Expedition_(click)', 'FROM_New_Sebilis_(exit)'],
 };
+const xfEdges = [
+  { name: 'xf absent', zone: { cx: -2, cy: 3, segs: [] }, point: [-11, 17] },
+  { name: 'xf empty', zone: { cx: -4, cy: -3, segs: [], xf: {} }, point: [9, -13] },
+  { name: 'null scale', zone: { cx: -6, cy: 2, segs: [], xf: { s: null } }, point: [-15, -8] },
+  { name: 'unit scale', zone: { cx: -8, cy: -5, segs: [], xf: { s: 1 } }, point: [12, -19] },
+  { name: 'translation only', zone: { cx: -10, cy: 7, segs: [], xf: { tx: 4, ty: -7 } }, point: [-21, 5] },
+  { name: 'rotation only', zone: { cx: -12, cy: -9, segs: [], xf: { rot: 0.75 } }, point: [3, -17] },
+  { name: 'scale and rotation', zone: { cx: -14, cy: 11, segs: [], xf: { s: 2, rot: -0.5 } }, point: [-25, 9] },
+];
 
 const generated = corpus();
-const payload = { corpus: generated, entries, transitions, geometry, discovery };
+const payload = { pinned: { dx: DX, dy: DY }, corpus: generated, xfEdges,
+  entries, transitions, geometry, discovery };
 const corpusHash = crypto.createHash('sha256').update(JSON.stringify(generated)).digest('hex');
 assert.strictEqual(corpusHash, EXPECTED_CORPUS_SHA256, 'fixed corpus SHA-256 drifted');
 const discriminating = generated.numeric.filter(r =>
@@ -201,8 +238,13 @@ const productionExits = new Map([
 ]);
 assert.strictEqual(MapGeom.norm(DX, DY), SQRT_VALUE, 'pinned explicit-sqrt value');
 assert.strictEqual(bits(MapGeom.norm(DX, DY)), bits(SQRT_VALUE), 'pinned norm bits');
+assert.strictEqual(python.pinned.norm, bits(MapGeom.norm(DX, DY)),
+  'pinned norm bits from CPython');
 assert.strictEqual(MapGeom.costBetween(productionZones, 'a', 'b', false, productionExits), COST_VALUE,
   'production cost fixture');
+assert.strictEqual(python.pinned.cost,
+  bits(MapGeom.costBetween(productionZones, 'a', 'b', false, productionExits)),
+  'pinned production cost bits from CPython');
 const jsNorm = generated.numeric.map(r => bits(MapGeom.norm(r.dx, r.dy)));
 const jsCost = generated.numeric.map(r => {
   const zones = { a: { cx: 0, cy: 0, segs: [] }, b: { cx: 0, cy: 0, segs: [] } };
@@ -211,7 +253,7 @@ const jsCost = generated.numeric.map(r => {
 });
 assert.deepStrictEqual(jsNorm, python.numericNorm, 'raw norm bit corpus');
 assert.deepStrictEqual(jsCost, python.numericCost, 'raw untransformed cost bit corpus');
-pass('numeric', `${generated.numeric.length + 1} norms, ${generated.numeric.length + 1} costs; corpus ${corpusHash}; ${discriminating} hypot-discriminating`);
+pass('numeric', `${generated.numeric.length} corpus norms, ${generated.numeric.length} corpus costs; 1 pinned norm, 1 pinned cost; corpus ${corpusHash}; ${discriminating} hypot-discriminating`);
 
 const affine = generated.affine.map(r => {
   const z = { cx: r.ox, cy: r.oy, segs: [], xf: {
@@ -222,13 +264,16 @@ const affine = generated.affine.map(r => {
   const rt = MapGeom.tinv(z, tp[0], tp[1]);
   return [tp.map(roundedBits), ti.map(roundedBits), rt.map(roundedBits)];
 });
+const xfEdgeActual = xfEdges.map(({ name, zone, point: [x, y] }) => {
+  const tp = MapGeom.tpoint(zone, x, y);
+  const ti = MapGeom.tinv(zone, x, y);
+  const rt = MapGeom.tinv(zone, tp[0], tp[1]);
+  return { name, tpoint: tp.map(roundedBits), tinv: ti.map(roundedBits),
+    roundTrip: rt.map(roundedBits) };
+});
+assert.deepStrictEqual(xfEdgeActual, python.xfEdges, 'rounded xf-edge Python parity');
 assert.deepStrictEqual(affine, python.affine, 'rounded affine corpus');
-for (const xf of [undefined, { s: null }, { tx: 4, ty: -7 }, { rot: 0.75 }, { s: 2, rot: -0.5 }]) {
-  const z = { cx: -2, cy: 3, segs: [], ...(xf === undefined ? {} : { xf }) };
-  const point = MapGeom.tpoint(z, -11, 17);
-  assert.deepStrictEqual(MapGeom.tinv(z, point[0], point[1]).map(MapGeom.round1), [-11, 17]);
-}
-pass('transforms', `${generated.affine.length} affine records plus missing/null/full round trips`);
+pass('transforms', `${generated.affine.length} affine records plus ${xfEdges.length} degenerate-xf records`);
 
 const wantExports = ['COST_SAMPLE', 'UNITS_PER_COST', 'ZALIAS', 'DISCOVERY_EXCLUDE',
   'DISCOVERED_ZONE_COLOR', 'LINK_OVERRIDE', 'roundHalfEven', 'round1', 'norm', 'tpoint', 'tinv',
@@ -282,6 +327,9 @@ const costs = ['both', 'forward', 'reverse', 'none'].map(mode =>
   bits(MapGeom.costBetween(structuredClone(geometry.costZones), 'a', 'b', false, chosen(mode))));
 const thin = structuredClone(geometry.thinZone);
 const firstPoints = MapGeom.costPoints(thin, false), secondPoints = MapGeom.costPoints(thin, false);
+const firstTransformed = MapGeom.costPoints(thin, true);
+const secondTransformed = MapGeom.costPoints(thin, true);
+const transformedBits = firstTransformed.map(point => point.map(roundedBits));
 const late = MapGeom.nearestOutlinePoint(geometry.lateZone, 9999, 9999, false);
 assert.deepStrictEqual(offset, python.geometry.offset);
 assert.strictEqual(MapGeom.detailOffset(geometry.zone, geometry.badDetail), null);
@@ -291,13 +339,23 @@ assert.deepStrictEqual(exits.get('alpha\0beta'), [6, 9], 'first duplicate exit p
 assert.deepStrictEqual(costs, python.geometry.costs, 'all doorway/fallback cost branches');
 assert.strictEqual(firstPoints.length, 200, '200-point thinning');
 assert.strictEqual(firstPoints, secondPoints, 'memoized array identity');
-assert.deepStrictEqual(Object.keys(thin).filter(k => k.startsWith('_')).sort(), ['_cpts']);
-assert(!JSON.stringify({ cx: thin.cx, cy: thin.cy, segs: thin.segs }).includes('_cpts'));
+assert.strictEqual(firstTransformed.length, 200, 'transformed 200-point thinning');
+assert.strictEqual(firstTransformed, secondTransformed, 'transformed memoized array identity');
+assert.deepStrictEqual(transformedBits, python.geometry.thinTransformed,
+  'rounded transformed cost-point parity');
+const privateKeys = Object.keys(thin).filter(k => k.startsWith('_')).sort();
+assert.deepStrictEqual(privateKeys, ['_cpts', '_cpts_t']);
+const serializedThin = JSON.stringify(Object.fromEntries(
+  Object.entries(thin).filter(([key]) => !key.startsWith('_'))));
+assert(!serializedThin.includes('_cpts') && !serializedThin.includes('_cpts_t'),
+  'serialized thin zone excludes both private caches');
 assert.deepStrictEqual(late, [9999, 9999], 'nearest outline scans every endpoint');
 assert.deepStrictEqual({ offset, badOffset: null, exits: exitList, costs, thinLength: firstPoints.length,
-  memoized: firstPoints === secondPoints, privateKeys: ['_cpts'], late }, python.geometry);
+  memoized: firstPoints === secondPoints, thinTransformed: transformedBits,
+  thinTransformedLength: firstTransformed.length,
+  transformedMemoized: firstTransformed === secondTransformed, privateKeys, late }, python.geometry);
 pass('detail/exit geometry', 'confirmed offset, rejection, duplicate first-wins, exhaustive nearest scan');
-pass('cost paths', 'four doorway/fallback branches, 200-point thinning, _cpts memoization');
+pass('cost paths', 'four doorway/fallback branches, 200-point thinning, _cpts/_cpts_t memoization');
 
 const ties = [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5];
 assert.deepStrictEqual(ties.map(MapGeom.roundHalfEven), [-4, -2, -2, 0, 0, 2, 2, 4]);

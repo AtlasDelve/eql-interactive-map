@@ -41,11 +41,14 @@ Written down because each one is a mistake worth not repeating:
   compares raw IEEE-754 bits for explicit-sqrt `norm` and untransformed `costBetween`, while
   `tpoint`/`tinv` compare at the injected half-even one-decimal boundary. It also covers all
   resolver tables, discovery classifiers, detail/exit recovery, the four doorway/fallback cost
-  paths, exhaustive nearest-outline scanning and memoization. Deliberate mutations proved the
+  paths, exhaustive nearest-outline scanning, both `_cpts`/`_cpts_t` caches, and Python parity for
+  degenerate `xf` shapes. Deliberate mutations proved the
   checks reject `Math.hypot` in either the helper or its production caller, `Math.round`, broken
   affine directions, last-wins resolution, unused aliases/overrides/exclusions, broadened filters,
   normalized display names, weakened offset/exit recovery, sampled nearest points and bypassed
-  caches. The real-pack marker bridge separately injects an instrumented `MapGeom` resolver and
+  caches, including a colliding transformed-cache key, a removed transformed-point mapping, wrong
+  missing-scale and rotation defaults, and reversed supplied rotation. The real-pack marker bridge
+  separately injects an instrumented `MapGeom` resolver and
   requires tagged index and target consumption; its source grep is only a secondary signal. This
   closes the partial-resolver defect that could certify a verifier-local replica instead of the
   runtime resolution contract.
