@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { convert, buildHTML } = require('../../../src/pack_convert.js');
+const MapGeom = require('../../../src/mapgeom.js');
 
 const REPO = path.resolve(__dirname, '../../..');
 const DATA = path.join(REPO, 'data');
@@ -128,29 +129,18 @@ function extract(text, prefix, opener) {
   throw new Error(`unterminated ${prefix}`);
 }
 
-function znorm(s) {
-  s = s.toLowerCase().replace(/`/g, "'").replace(/_/g, ' ');
-  s = s.replace(/^\s*(to|from)\s+/, '').replace(/\(.*?\)/g, '').replace(/:.*$/, '');
-  s = s.replace(/\bone[- ]way\b/g, '').replace(/&/g, ' ').replace(/ - /g, ' ');
-  for (const [a, b] of [['forrest', 'forest'], ['excile', 'exile'], ['cablis', 'cabilis'],
-    ['toxullia', 'toxxulia'], ['feerott', 'feerrott'], ['aquaduct', 'aqueduct'],
-    ['northern', 'north'], ['southern', 'south'], ['eastern', 'east'], ['western', 'west']]) {
-    s = s.split(a).join(b);
-  }
-  s = s.split('plains of karana').join('karana').replace(/^(the|clan)\s+/, '');
-  return s.replace(/\s+/g, ' ').replace(/^[ -]+|[ -]+$/g, '');
-}
-
-function assertMarkerBridge(artifact, manifest) {
+function assertMarkerBridge(artifact, manifest, geom = MapGeom) {
   const detail = extract(fs.readFileSync(artifact, 'utf8'), ', DETAIL=', '{');
-  const zidx = {};
+  const entries = [], keyContinents = new Map();
   for (const [cont, block] of Object.entries(detail)) {
     for (const [key, zone] of Object.entries(block.zones)) {
-      const n = znorm(zone.name);
-      if (n && !(n in zidx)) zidx[n] = { cont, key };
+      entries.push([cont, key, zone.name]);
+      if (!keyContinents.has(key)) keyContinents.set(key, new Set());
+      keyContinents.get(key).add(cont);
     }
   }
-  let count = 0;
+  const zidx = geom.zidxFrom(entries);
+  let count = 0, resolutions = [];
   for (const [cont, meta] of Object.entries(manifest.continents || {})) {
     for (const record of meta.discovered || []) {
       if (record.nameFrom !== 'marker') continue;
@@ -160,20 +150,19 @@ function assertMarkerBridge(artifact, manifest) {
       const targets = [];
       for (const label of anchor.labels) {
         const full = label[4];
-        if (!/^(to|from)_/i.test(full)) continue;
-        const amp = full.indexOf('&');
-        const pieces = amp < 0 ? [full] : [full.slice(0, amp), full.slice(amp + 1)];
-        for (const piece of pieces) {
-          const target = zidx[znorm(piece)];
-          if (target) targets.push(target);
+        for (const target of geom.transitionTargets(zidx, record.anchor, full)) {
+          targets.push({ key: String(target), source: target });
         }
       }
-      assert(targets.some(t => t.cont === cont && t.key === record.key),
+      const matched = targets.filter(t => t.key === record.key &&
+        keyContinents.get(t.key) && keyContinents.get(t.key).has(cont));
+      resolutions = resolutions.concat(matched);
+      assert(matched.length > 0,
         `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
     }
   }
   assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
-  return count;
+  return { count, resolutions };
 }
 
 function copyAuthoredWithoutCache(target) {
@@ -220,9 +209,36 @@ async function runRootOnly(mapsRoot, template, colors) {
     run = runPython(['scripts/build.py', '--data', scratch, '--out', discoveryReference]);
     if (run.status !== 0) throw new Error(`root-only discovery build failed: ${run.stderr.toString('utf8')}`);
 
-    const bridgeCount = assertMarkerBridge(
+    const bridge = assertMarkerBridge(
       discoveryReference, json(path.join(scratch, '_generated', 'manifest.json')));
-    console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridgeCount} checked)`);
+    const INDEX_TAG = Symbol('instrumented MapGeom index');
+    const TARGET_TAG = Symbol('instrumented MapGeom target');
+    let indexCalls = 0, transitionCalls = 0, taggedIndex;
+    const instrumented = {
+      zidxFrom(entries) {
+        indexCalls++;
+        taggedIndex = MapGeom.zidxFrom(entries);
+        taggedIndex[INDEX_TAG] = true;
+        return taggedIndex;
+      },
+      transitionTargets(index, zoneKey, label) {
+        transitionCalls++;
+        assert.strictEqual(index, taggedIndex, 'marker bridge bypassed the injected MapGeom index');
+        assert(index[INDEX_TAG], 'marker bridge used an untagged index');
+        return MapGeom.transitionTargets(index, zoneKey, label).map(key => {
+          const tagged = new String(key);
+          tagged[TARGET_TAG] = true;
+          return tagged;
+        });
+      },
+    };
+    const observed = assertMarkerBridge(
+      discoveryReference, json(path.join(scratch, '_generated', 'manifest.json')), instrumented);
+    assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
+    assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
+    assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
+      'a marker resolution did not come from the injected MapGeom transition result');
+    console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
     const result = await convert({ authored: loadAuthored(scratch), files, colors, packDir, rootDir: null });

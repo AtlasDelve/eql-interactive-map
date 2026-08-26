@@ -316,6 +316,14 @@ assert(parityCall > dependencyBlock && parityCall < quickGate,
 assert(parityCall < npmGate, 'mapgeom parity registration must precede the node_modules gate');
 assert(runner.includes('results.append(("mapgeom Python/JavaScript parity", "SKIP"))'),
   'no-Node branch must append the exact named SKIP result');
+const bridgeSource = fs.readFileSync(path.join(REPO, 'tools', 'verify', 'js',
+  'pack-convert-full.test.js'), 'utf8');
+assert(bridgeSource.includes("const MapGeom = require('../../../src/mapgeom.js')"),
+  'real-pack bridge must import MapGeom');
+assert(bridgeSource.includes('geom = MapGeom') && bridgeSource.includes('geom.zidxFrom(entries)') &&
+  bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
+  'real-pack bridge must expose and consume the injected MapGeom seam');
+assert(!/function\s+znorm\b/.test(bridgeSource), 'real-pack bridge must not restore local znorm');
 assert.deepStrictEqual(families, ['numeric', 'transforms', 'resolution', 'discovery classifiers',
   'detail/exit geometry', 'cost paths'], 'all named PASS families must execute in order');
 

@@ -45,7 +45,10 @@ Written down because each one is a mistake worth not repeating:
   checks reject `Math.hypot` in either the helper or its production caller, `Math.round`, broken
   affine directions, last-wins resolution, unused aliases/overrides/exclusions, broadened filters,
   normalized display names, weakened offset/exit recovery, sampled nearest points and bypassed
-  caches.
+  caches. The real-pack marker bridge separately injects an instrumented `MapGeom` resolver and
+  requires tagged index and target consumption; its source grep is only a secondary signal. This
+  closes the partial-resolver defect that could certify a verifier-local replica instead of the
+  runtime resolution contract.
 
 - **Both front ends' LF bytes are asserted independently.** `test_markers.py` requires the inline
   `build.main()` writer to disable newline translation explicitly, while `verify.py lf` scans the
