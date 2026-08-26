@@ -37,6 +37,16 @@ profile, never yours.
 
 Written down because each one is a mistake worth not repeating:
 
+- **Map geometry parity is live across CPython and dependency-free Node.** `mapgeom.test.js`
+  compares raw IEEE-754 bits for explicit-sqrt `norm` and untransformed `costBetween`, while
+  `tpoint`/`tinv` compare at the injected half-even one-decimal boundary. It also covers all
+  resolver tables, discovery classifiers, detail/exit recovery, the four doorway/fallback cost
+  paths, exhaustive nearest-outline scanning and memoization. Deliberate mutations proved the
+  checks reject `Math.hypot` in either the helper or its production caller, `Math.round`, broken
+  affine directions, last-wins resolution, unused aliases/overrides/exclusions, broadened filters,
+  normalized display names, weakened offset/exit recovery, sampled nearest points and bypassed
+  caches.
+
 - **Both front ends' LF bytes are asserted independently.** `test_markers.py` requires the inline
   `build.main()` writer to disable newline translation explicitly, while `verify.py lf` scans the
   built CLI artifact's bytes. The builder jsdom test separately rejects CR in the page-composed

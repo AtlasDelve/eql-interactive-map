@@ -19,6 +19,17 @@ Adjacency *is* derivable from committed geometry — measured on current data, c
 
 **The reusable cost model lives in `scripts/mapgeom.py`, and arithmetic that can reach injected data must use its explicit `sqrt(dx*dx + dy*dy)` norm, never `hypot`.** CPython `math.hypot` and JavaScript `Math.hypot` disagreed on **21,015 / 60,000 (35%)** continent-scale inputs measured 2026-08-08; the explicit Python/JavaScript `sqrt` forms disagreed on **0 / 60,000**. The adjacent cross-language rules are part of the same boundary: one decimal place is half-even rounding of `x*10`, then division by 10 — not Python `round(x, 1)` or JavaScript `toFixed(1)`. **No trig on the cost path.** Nothing that produces a `cost` may use `cos`/`sin`; they diverged on about **2.4%** of random angles. `tpoint`/`tinv` are the deliberate exception — they are frame transforms, not cost arithmetic, and every value they produce is rounded to one decimal before it can reach the injected data, which absorbs the divergence by many orders of magnitude. **A JavaScript twin of `tpoint`/`tinv` does not inherit that safety for free: it must be checked for parity against Python, not assumed.** `mapgeom.py` states the executable contract beside the implementation; this reference owns why those operations are forbidden.
 
+**`src/mapgeom.js` is the dependency-free classic-script/CommonJS twin of that module.** Its
+non-trig `norm` and untransformed `costBetween` boundary is raw IEEE-754 bit equality with Python;
+its `tpoint`/`tinv` boundary is half-even `round1` output with negative zero canonicalized. The
+module is verifier-only at present: no production converter or builder consumes it, so adding or
+changing it cannot alter a built map until that seam is deliberately connected.
+
+The zone resolver consequently has three named copies: `scripts/mapgeom.py`, `src/template.html`,
+and `src/mapgeom.js`. `travel-full.test.js` guards the template/Python edge through authored-cost
+parity; `mapgeom.test.js` guards the Python/JavaScript edge across the full tables and first-wins
+index behavior.
+
 **`links[].deleted` is an editor rigid-group signal, not a statement that two zones don't connect.** Do not subtract deletes blindly when deriving adjacency — on current data that shatters Antonica into 4 components and strands `arena`, `cazicthule`, `guktop`. The working rule is *deleted **and** a connector is drawn ⇒ still adjacent; deleted **and** no connector ⇒ proximity false positive*. It is right on most of the 14 deleted entries, not all: `guktop`↔`innothule` is real and the rule rejects it, because that connector's endpoint resolves to Lower Guk instead. Which is why the bootstrap reports every ruling instead of trusting itself.
 
 **`META.gscale` is not a physical scale and must not be used to normalise distance.** It is a cosmetic globe-fit factor: Plane of Fear's 2 813 continent units and Antonica's 57 118 both land at 14–25 globe units. Raw stored units are the distance proxy, with the caveat that per-continent frames were assembled independently, so cross-continent comparability is assumed rather than established.
