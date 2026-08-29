@@ -68,6 +68,37 @@ function reader(selected) {
   };
 }
 
+function assertNoDerivedTies(label, files, authored, packDir, rootDir) {
+  const roster = [];
+  for (const cont of authored.world.order) {
+    const meta = authored.continents[cont].meta;
+    for (const key of meta.zoneOrder) if (!roster.includes(key)) roster.push(key);
+    for (const key of meta.detailZones || []) if (!roster.includes(key)) roster.push(key);
+  }
+  const rosterSet = new Set(roster.map(key => key.toLowerCase())), candidates = new Set();
+  for (const dir of [packDir, rootDir]) {
+    if (!dir) continue;
+    const prefix = dir.toLowerCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') + '/';
+    for (const raw of files.keys()) {
+      const key = String(raw).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (!key.startsWith(prefix)) continue;
+      let name = key.slice(prefix.length);
+      if (name.includes('/') || !name.endsWith('.txt')) continue;
+      name = name.slice(0, -4).replace(/_(?:1|2|3)$/, '');
+      if (!rosterSet.has(name)) candidates.add(name);
+    }
+  }
+  for (const key of candidates) {
+    const matches = roster.filter(parent => {
+      const folded = parent.toLowerCase(), tail = key.startsWith(folded) ? key.slice(folded.length) : null;
+      return (tail != null && /^(b|c|two|twoa|twob)$/.test(tail)) ||
+        key === `old${folded}` || key === `${folded}_original`;
+    });
+    assert(matches.length <= 1, `${label}: derived-parent tie for ${key}: ${matches.join(', ')}`);
+  }
+  console.log(`PASS: ${label} derived-parent tie precondition (${candidates.size} candidate keys, none tied)`);
+}
+
 function strippedTemplate() {
   const code = "import sys;sys.path.insert(0,'scripts');import build;sys.stdout.buffer.write(build.strip_regions(open('src/template.html',encoding='utf-8').read(),'user').encode('utf-8'))";
   return mustPython(['-c', code]).toString('utf8');
@@ -231,7 +262,19 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (_d, result) => {
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
         assert.strictEqual(result.credit, 'EQL · Layered map data · 1 zone from the game\'s own maps');
+        assert.deepStrictEqual(result.report.discoveryRejected, [
+          { key: 'alphab', reason: 'derived', detail: 'alpha' },
+          { key: 'betab', reason: 'derived', detail: 'beta' },
+          { key: 'delta', reason: 'unresolved', detail: 'no resolved outward transition' },
+          { key: 'eta', reason: 'baseless', detail: 'pack' },
+          { key: 'sraa', reason: 'series', detail: 'sra' },
+          { key: 'srab', reason: 'series', detail: 'sra' },
+          { key: 'srac', reason: 'series', detail: 'sra' },
+          { key: 'zeta', reason: 'baseless', detail: 'root' },
+        ]);
       });
+      assertNoDerivedTies('layered fixture', reader(selected), loadAuthored(data),
+        'maps/Layered', 'maps');
     }
 
     // 3: one skipped zone, one filtered link, one surviving link.

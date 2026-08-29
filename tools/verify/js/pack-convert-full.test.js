@@ -64,8 +64,9 @@ function trackingReader(selected) {
     async read(key) {
       const absolute = disk.get(key);
       if (!absolute) throw new Error('reader missing key ' + key);
-      reads.set(key, absolute);
-      return new Uint8Array(fs.readFileSync(absolute));
+      const bytes = fs.readFileSync(absolute);
+      reads.set(key, { absolute, bytes: Buffer.from(bytes) });
+      return new Uint8Array(bytes);
     },
     reads,
   };
@@ -73,14 +74,64 @@ function trackingReader(selected) {
 
 function sourceIdentity(reads) {
   const sources = [];
-  for (const absolute of reads.values()) {
-    const sha = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
-    sources.push([path.basename(absolute), sha]);
+  for (const [key, read] of reads) {
+    const sha = crypto.createHash('sha256').update(read.bytes).digest('hex');
+    sources.push([path.posix.basename(key), sha]);
   }
   sources.sort((a, b) => a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : (a[1] < b[1] ? -1 : (a[1] > b[1] ? 1 : 0))));
   const hash = crypto.createHash('sha256');
   for (const [name, sha] of sources) hash.update(`${name} ${sha}\n`, 'utf8');
   return { count: sources.length, fingerprint: hash.digest('hex') };
+}
+
+function authoredReads(files, manifest) {
+  const declared = new Set();
+  for (const entry of Object.values(manifest.continents || {})) {
+    for (const name of Object.keys(entry.sources || {})) declared.add(name);
+  }
+  const found = new Map();
+  for (const [key, read] of files.reads) {
+    const name = path.posix.basename(key);
+    if (!declared.has(name)) continue;
+    assert(!found.has(name), `authored source ${name} was read more than once`);
+    found.set(key, read);
+  }
+  assert.deepStrictEqual([...found.keys()].map(key => path.posix.basename(key)).sort(), [...declared].sort(),
+    'every manifest-declared authored source was read exactly once');
+  return found;
+}
+
+function assertNoDerivedTies(label, files, authored, packDir, rootDir) {
+  const roster = [];
+  for (const cont of authored.world.order) {
+    const meta = authored.continents[cont].meta;
+    for (const key of meta.zoneOrder) if (!roster.includes(key)) roster.push(key);
+    for (const key of meta.detailZones || []) if (!roster.includes(key)) roster.push(key);
+  }
+  const rosterSet = new Set(roster.map(key => key.toLowerCase()));
+  const candidates = new Set();
+  for (const dir of [packDir, rootDir]) {
+    if (!dir) continue;
+    const prefix = dir.toLowerCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') + '/';
+    for (const raw of files.keys()) {
+      const key = String(raw).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (!key.startsWith(prefix)) continue;
+      let name = key.slice(prefix.length);
+      if (name.includes('/') || !name.endsWith('.txt')) continue;
+      name = name.slice(0, -4).replace(/_(?:1|2|3)$/, '');
+      if (!rosterSet.has(name)) candidates.add(name);
+    }
+  }
+  for (const key of candidates) {
+    const matches = roster.filter(parent => {
+      const folded = parent.toLowerCase();
+      const tail = key.startsWith(folded) ? key.slice(folded.length) : null;
+      return (tail != null && /^(b|c|two|twoa|twob)$/.test(tail)) ||
+        key === `old${folded}` || key === `${folded}_original`;
+    });
+    assert(matches.length <= 1, `${label}: derived-parent tie for ${key}: ${matches.join(', ')}`);
+  }
+  console.log(`PASS: ${label} derived-parent tie precondition (${candidates.size} candidate keys, none tied)`);
 }
 
 function samePath(a, b) {
@@ -178,8 +229,10 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
     throw new Error(`Brewall reference cache was built from ${manifest.pack}, not remembered ${pack}; run python scripts/import_pack.py`);
   }
   const files = trackingReader(selected);
-  const result = await convert({ authored: loadAuthored(DATA), files, colors, packDir, rootDir });
-  const identity = sourceIdentity(files.reads);
+  const authored = loadAuthored(DATA);
+  assertNoDerivedTies('Brewall real pack', files, authored, packDir, rootDir);
+  const result = await convert({ authored, files, colors, packDir, rootDir });
+  const identity = sourceIdentity(authoredReads(files, manifest));
   if (identity.count !== manifest.sourceCount || identity.fingerprint !== manifest.sourceFingerprint) {
     throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
@@ -209,8 +262,8 @@ async function runRootOnly(mapsRoot, template, colors) {
     run = runPython(['scripts/build.py', '--data', scratch, '--out', discoveryReference]);
     if (run.status !== 0) throw new Error(`root-only discovery build failed: ${run.stderr.toString('utf8')}`);
 
-    const bridge = assertMarkerBridge(
-      discoveryReference, json(path.join(scratch, '_generated', 'manifest.json')));
+    const rootManifest = json(path.join(scratch, '_generated', 'manifest.json'));
+    const bridge = assertMarkerBridge(discoveryReference, rootManifest);
     const INDEX_TAG = Symbol('instrumented MapGeom index');
     const TARGET_TAG = Symbol('instrumented MapGeom target');
     let indexCalls = 0, transitionCalls = 0, taggedIndex;
@@ -241,8 +294,10 @@ async function runRootOnly(mapsRoot, template, colors) {
     console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
-    const result = await convert({ authored: loadAuthored(scratch), files, colors, packDir, rootDir: null });
-    const identity = sourceIdentity(files.reads);
+    const authored = loadAuthored(scratch);
+    assertNoDerivedTies('maps/ root real pack', files, authored, packDir, null);
+    const result = await convert({ authored, files, colors, packDir, rootDir: null });
+    const identity = sourceIdentity(authoredReads(files, rootManifest));
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);

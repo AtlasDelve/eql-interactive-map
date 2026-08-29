@@ -276,6 +276,120 @@ function looksLikeRootMaps(index, packDir) {
   return reasons;
 }
 
+function discoveryIndexEntries(index, authored, packDir, rootDir) {
+  const entries = [];
+  for (const cont of authored.world.order) {
+    const meta = authored.continents[cont].meta;
+    const roster = meta.zoneOrder.slice();
+    for (const zk of meta.detailZones || []) if (!roster.includes(zk)) roster.push(zk);
+    const resolved = new Set();
+    for (const zk of roster) {
+      const [srcDir] = resolveZoneSource(index, packDir, rootDir, zk);
+      if (srcDir) resolved.add(zk);
+    }
+    for (const zk of meta.detailZones || []) {
+      if (resolved.has(zk)) entries.push([cont, zk, meta.zones[zk].name]);
+    }
+  }
+  return entries;
+}
+
+function discoveryBaseKeys(index, packDir, rootDir) {
+  const keys = new Set();
+  const suffixes = LAYER_SUFFIXES.filter(Boolean).map(s => s.toLowerCase());
+  for (const srcDir of [packDir, rootDir]) {
+    if (!srcDir) continue;
+    const prefix = pathJoin(srcDir).toLowerCase() + '/';
+    for (const actual of index.keys()) {
+      const folded = actual.toLowerCase();
+      if (!folded.startsWith(prefix)) continue;
+      const name = folded.slice(prefix.length);
+      if (name.includes('/') || !name.endsWith('.txt')) continue;
+      let stem = name.slice(0, -4);
+      for (const suffix of suffixes) {
+        if (stem.endsWith(suffix)) { stem = stem.slice(0, -suffix.length); break; }
+      }
+      keys.add(stem);
+    }
+  }
+  return [...keys].sort();
+}
+
+async function detectDiscoveries(files, index, packDir, rootDir, roster, zoneIndex) {
+  const rosterSet = new Set([...roster].map(key => key.toLowerCase()));
+  const keyContinent = new Map();
+  for (const { cont, key } of Object.values(zoneIndex)) keyContinent.set(key, cont);
+  const candidates = [], rejected = [];
+  const reject = (key, reason, detail) => rejected.push({ key, reason, detail });
+
+  for (const key of discoveryBaseKeys(index, packDir, rootDir)) {
+    if (rosterSet.has(key)) continue;
+    const [srcDir, source] = resolveZoneSource(index, packDir, rootDir, key);
+    if (!srcDir) continue;
+    if (!index.has(pathJoin(srcDir, key + '.txt'))) {
+      reject(key, 'baseless', source);
+      continue;
+    }
+    const [records] = await parseZone(files, index, srcDir, key);
+    const targets = new Set();
+    for (const [layer, kind, record] of records) {
+      if (layer === 1 && kind === 'P') {
+        for (const target of GEOM.transitionTargets(zoneIndex, key, record[3])) {
+          if (keyContinent.has(target)) targets.add(target);
+        }
+      }
+    }
+    const sortedTargets = [...targets].sort();
+    const continents = [...new Set(sortedTargets.map(target => keyContinent.get(target)))].sort();
+    if (!sortedTargets.length) {
+      reject(key, 'unresolved', 'no resolved outward transition');
+      continue;
+    }
+    if (continents.length !== 1) {
+      reject(key, 'ambiguous', continents.join(', '));
+      continue;
+    }
+    candidates.push({ key, from: source, continent: continents[0], targets: sortedTargets });
+  }
+
+  const groups = new Map();
+  for (const candidate of candidates) {
+    const stem = GEOM.discoverySeriesStem(candidate.key);
+    if (!stem) continue;
+    if (!groups.has(stem)) groups.set(stem, []);
+    groups.get(stem).push(candidate);
+  }
+  const seriesKeys = new Set();
+  for (const [stem, members] of groups) {
+    if (members.length >= 3 && members.every(member => member.targets.length === 1) &&
+        new Set(members.map(member => member.targets[0])).size === 1) {
+      for (const member of members) {
+        seriesKeys.add(member.key);
+        reject(member.key, 'series', stem);
+      }
+    }
+  }
+
+  const accepted = Object.create(null);
+  for (const candidate of candidates) {
+    if (seriesKeys.has(candidate.key)) continue;
+    const parent = GEOM.discoveryDerivedParent(candidate.key, rosterSet);
+    if (parent != null) {
+      reject(candidate.key, 'derived', parent);
+      continue;
+    }
+    if (GEOM.DISCOVERY_EXCLUDE.has(candidate.key)) {
+      reject(candidate.key, 'excluded', 'DISCOVERY_EXCLUDE');
+      continue;
+    }
+    if (!accepted[candidate.continent]) accepted[candidate.continent] = [];
+    accepted[candidate.continent].push(candidate);
+  }
+  for (const records of Object.values(accepted)) records.sort((a, b) => a.key.localeCompare(b.key));
+  rejected.sort((a, b) => a.key.localeCompare(b.key));
+  return { accepted, rejected };
+}
+
 function htmlEscape(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 }
@@ -321,6 +435,16 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const collisions = index.collisions.map(pair => `file key collision: ${pair[0]} | ${pair[1]}`);
   const unknownRecords = {};
   let rootCount = 0;
+
+  const discoveryRoster = new Set();
+  for (const cont of order) {
+    const meta = authored.continents[cont].meta;
+    for (const zk of meta.zoneOrder) discoveryRoster.add(zk);
+    for (const zk of meta.detailZones || []) discoveryRoster.add(zk);
+  }
+  const discoveryIndex = GEOM.zidxFrom(discoveryIndexEntries(index, authored, packDir, rootDir));
+  const discoveries = await detectDiscoveries(
+    files, index, packDir, rootDir, discoveryRoster, discoveryIndex);
 
   for (const cont of order) {
     const entry = authored.continents[cont];
@@ -409,7 +533,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const report = {
     skipped: skippedReport, rootZones: rootReport, baseless,
     unseenColors: [...new Set(unseen)].sort(), warnings, collisions: [...new Set(collisions)].sort(),
-    unknownRecords,
+    unknownRecords, discoveryRejected: discoveries.rejected,
   };
   return { data, credit: creditText(packDir, rootCount), report };
 }
