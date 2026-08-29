@@ -390,6 +390,159 @@ async function detectDiscoveries(files, index, packDir, rootDir, roster, zoneInd
   return { accepted, rejected };
 }
 
+function candidateDoorway(records, zoneIndex, key, target) {
+  for (const [layer, kind, record] of records) {
+    if (layer !== 1 || kind !== 'P') continue;
+    const [nums, , , label] = record;
+    if (GEOM.transitionTargets(zoneIndex, key, label).includes(target)) {
+      return [roundHalfEven(nums[0]), roundHalfEven(-nums[1])];
+    }
+  }
+  throw new Error(`discovery target ${key} -> ${target} lost its source marker`);
+}
+
+function reciprocalMarker(records, zoneIndex, anchor) {
+  const unresolved = [];
+  for (const [layer, kind, record] of records) {
+    if (layer !== 1 || kind !== 'P') continue;
+    const [nums, , , label] = record;
+    if (!/^(to|from)_/i.test(label)) continue;
+    if (!GEOM.transitionTargets(zoneIndex, anchor, label).length) {
+      unresolved.push([roundHalfEven(nums[0]), roundHalfEven(-nums[1]), label]);
+    }
+  }
+  return unresolved.length === 1 ? unresolved[0] : null;
+}
+
+function writtenCentroid(segs, key) {
+  if (!segs.length) throw new Error(`discovered zone ${JSON.stringify(key)} has no base-layer line geometry`);
+  let sx = 0, sy = 0;
+  for (const seg of segs) {
+    sx += seg[0] + seg[2];
+    sy += seg[1] + seg[3];
+  }
+  const count = segs.length * 2;
+  return [roundHalfEven(sx / count), roundHalfEven(sy / count)];
+}
+
+async function assembleDiscoveries({ files, index, cont, candidates, packDir, rootDir,
+  parsed, meta, zoneIndex, palette, colors, unseen, authoredDetails }) {
+  const catalog = [], sources = [], discoveredPalette = [];
+  const paletteIndex = new Map(palette.map((color, i) => [color, i]));
+  const azones = meta.zones || {}, targetsByKey = new Map(), candidateDetails = new Map();
+
+  // Cost calculations own their records: costBetween memoizes on zone objects.
+  const costZones = Object.create(null);
+  for (const key of meta.zoneOrder) {
+    if (!parsed.has(key)) continue;
+    const geometry = geometryRecords(parsed.get(key).records, azones[key].off, `${cont}/${key}`);
+    costZones[key] = composeZone(azones[key], geometry, null);
+  }
+
+  for (const partial of [...candidates].sort((a, b) => a.key.localeCompare(b.key))) {
+    const key = partial.key, targets = [...partial.targets].sort(), anchor = targets[0];
+    targetsByKey.set(key, targets);
+    const [srcDir, source] = resolveZoneSource(index, packDir, rootDir, key);
+    if (!srcDir || source !== partial.from) {
+      throw new Error(`discovered source changed during conversion for ${key}`);
+    }
+    const [records] = await parseZone(files, index, srcDir, key);
+    const doorway = candidateDoorway(records, zoneIndex, key, anchor);
+    const reciprocal = reciprocalMarker(parsed.get(anchor).records, zoneIndex, anchor);
+    let off, name, nameFrom;
+    if (reciprocal) {
+      off = [azones[anchor].off[0] + reciprocal[0] - doorway[0],
+        azones[anchor].off[1] + reciprocal[1] - doorway[1]];
+      name = GEOM.discoveryDisplayName(reciprocal[2]);
+      if (GEOM.znorm(name) !== GEOM.znorm(reciprocal[2])) {
+        throw new Error(`discovered display name changed marker identity for ${key}`);
+      }
+      if (GEOM.resolveZone(zoneIndex, name) != null) {
+        throw new Error(`discovered marker name collides with authored content: ${name}`);
+      }
+      nameFrom = 'marker';
+    } else {
+      const anchorZone = costZones[anchor];
+      const point = GEOM.nearestOutlinePoint(anchorZone, anchorZone.cx, anchorZone.cy, false);
+      off = [point[0] - doorway[0], point[1] - doorway[1]];
+      name = key;
+      nameFrom = 'key';
+    }
+
+    const geometry = geometryRecords(records, off, `${cont}/${key}`);
+    const [cx, cy] = writtenCentroid(geometry.segs, key);
+    const zone = composeZone({ name, color: GEOM.DISCOVERED_ZONE_COLOR, cx, cy }, geometry, null);
+    costZones[key] = zone;
+
+    const detail = detailRecords(records, `${cont}/${key}`);
+    for (const [item, slot] of [
+      ...detail.segs.map(item => [item, 4]),
+      ...detail.labels.map(item => [item, 2]),
+    ]) {
+      const color = colorFor(item[slot], colors, unseen);
+      if (!paletteIndex.has(color)) {
+        paletteIndex.set(color, palette.length + discoveredPalette.length);
+        discoveredPalette.push(color);
+      }
+      item[slot] = paletteIndex.get(color);
+    }
+    detail.bbox = bboxOf(detail.rawX, detail.rawY);
+    candidateDetails.set(key, detail);
+    for (const fileKey of zoneFileKeys(index, srcDir, key)) {
+      sources.push({ name: basename(fileKey), from: source });
+    }
+    catalog.push({ key, name, nameFrom, color: GEOM.DISCOVERED_ZONE_COLOR, cx, cy,
+      off, anchor, from: source });
+  }
+
+  const byName = new Map();
+  for (const record of catalog) {
+    const normalized = GEOM.znorm(record.name);
+    if (!byName.has(normalized)) byName.set(normalized, []);
+    byName.get(normalized).push(record);
+  }
+  for (const collision of [...byName.values()].filter(records => records.length > 1)) {
+    const keyNorms = collision.map(record => GEOM.znorm(record.key));
+    if (new Set(keyNorms).size !== keyNorms.length) {
+      throw new Error(`discovered zone keys still collide after name fallback: ${collision.map(record => record.key).join(', ')}`);
+    }
+    for (const record of collision) {
+      record.name = record.key;
+      record.nameFrom = 'key';
+    }
+  }
+
+  const edgeIndex = Object.assign(Object.create(null), zoneIndex);
+  const discoveredIndex = GEOM.zidxFrom(catalog.map(record => [cont, record.key, record.name]));
+  for (const [normalized, target] of Object.entries(discoveredIndex)) {
+    if (!Object.prototype.hasOwnProperty.call(edgeIndex, normalized)) edgeIndex[normalized] = target;
+  }
+  const extendedPalette = palette.concat(discoveredPalette);
+  for (const record of catalog) {
+    const key = record.key;
+    const candidateDetail = composeDetail(record, candidateDetails.get(key), extendedPalette);
+    const candidateExits = GEOM.exitPointsFrom(key, costZones[key], candidateDetail, edgeIndex);
+    const edges = [];
+    for (const neighbour of targetsByKey.get(key)) {
+      const neighbourExits = GEOM.exitPointsFrom(
+        neighbour, costZones[neighbour], authoredDetails[neighbour], edgeIndex);
+      const exits = new Map(candidateExits);
+      for (const [pair, point] of neighbourExits) exits.set(pair, point);
+      const candidateNamed = exits.has(`${key}\0${neighbour}`);
+      const neighbourNamed = exits.has(`${neighbour}\0${key}`);
+      let named;
+      if (candidateNamed && neighbourNamed) named = 'both';
+      else if (candidateNamed) named = 'candidate';
+      else if (neighbourNamed) named = 'neighbour';
+      else throw new Error(`accepted discovery edge lost both doorway markers: ${key}/${neighbour}`);
+      const rawCost = GEOM.costBetween(costZones, key, neighbour, false, exits);
+      edges.push({ z: neighbour, cost: GEOM.round1(Math.max(rawCost, 0.1)), named });
+    }
+    record.edges = edges;
+  }
+  return { catalog, sources, discoveredPalette };
+}
+
 function htmlEscape(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 }
@@ -433,7 +586,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const TRAVEL = authored.travel || {}, XPACS = world.xpacs || {};
   const skippedReport = {}, rootReport = {}, baseless = [], unseen = [], warnings = looksLikeRootMaps(index, packDir);
   const collisions = index.collisions.map(pair => `file key collision: ${pair[0]} | ${pair[1]}`);
-  const unknownRecords = {};
+  const unknownRecords = {}, discoveredReport = {}, discoveredSourcesReport = {};
   let rootCount = 0;
 
   const discoveryRoster = new Set();
@@ -523,6 +676,12 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       for (const lab of (azones[zk].labels || [])) if (traced.has(lab[4])) collisions.push(`${cont}/${zk}: ${lab[4]}`);
       dz[zk] = composeDetail(azones[zk], d, palette);
     }
+    const assembled = await assembleDiscoveries({
+      files, index, cont, candidates: discoveries.accepted[cont] || [], packDir, rootDir,
+      parsed, meta, zoneIndex: discoveryIndex, palette, colors, unseen, authoredDetails: dz,
+    });
+    discoveredReport[cont] = assembled.catalog;
+    discoveredSourcesReport[cont] = assembled.sources;
     if (palette.length || Object.keys(dz).length) DETAIL[cont] = { palette, zones: dz };
     const hubs = layout.hubs || [];
     if (hubs.length && Object.keys(zones).length) HUBS[cont] = hubs;
@@ -533,7 +692,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const report = {
     skipped: skippedReport, rootZones: rootReport, baseless,
     unseenColors: [...new Set(unseen)].sort(), warnings, collisions: [...new Set(collisions)].sort(),
-    unknownRecords, discoveryRejected: discoveries.rejected,
+    unknownRecords, discovered: discoveredReport, discoveryRejected: discoveries.rejected,
+    discoveredSources: discoveredSourcesReport,
   };
   return { data, credit: creditText(packDir, rootCount), report };
 }

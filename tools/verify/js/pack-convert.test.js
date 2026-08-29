@@ -13,6 +13,7 @@ const {
 const REPO = path.resolve(__dirname, '../../..');
 const FX = path.join(REPO, 'tools', 'verify', 'packfx');
 const VERSION = fs.readFileSync(path.join(REPO, 'VERSION'), 'ascii').trim();
+const PINS = json(path.join(REPO, 'docs', 'internal', 'session-2026-08-23', 'plan3-pins.json'));
 const py = process.argv[2] || process.env.EQL_PYTHON || 'python';
 
 function runPython(args, options = {}) {
@@ -141,6 +142,15 @@ assert.deepStrictEqual(
 );
 console.log('PASS: extractor skips a prose declaration mention');
 
+const converterSource = fs.readFileSync(path.join(REPO, 'src', 'pack_convert.js'), 'utf8');
+const convertArgs = converterSource.match(/async function convert\(\{([^}]+)\}\)/);
+assert(convertArgs, 'convert argument boundary is directly inspectable');
+assert.deepStrictEqual(convertArgs[1].split(',').map(value => value.trim()),
+  ['authored', 'files', 'colors', 'packDir', 'rootDir'], 'convert argument boundary stays closed');
+for (const token of ['createHash', 'crypto.subtle']) {
+  assert(!converterSource.includes(token), `production converter contains forbidden crypto token ${token}`);
+}
+
 function blobs(text) {
   return {
     ALL: extract(text, 'const ALL=', '{'),
@@ -260,8 +270,16 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       const data = copyFixtureData(root);
       const selected = path.join(FX, 'layered', 'maps'), pack = path.join(selected, 'Layered');
       await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (_d, result) => {
+        assert.deepStrictEqual(Object.keys(result).sort(), ['credit', 'data', 'report']);
+        assert.deepStrictEqual(Object.keys(result.report).sort(), [
+          'baseless', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
+          'rootZones', 'skipped', 'unknownRecords', 'unseenColors', 'warnings',
+        ]);
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
         assert.strictEqual(result.credit, 'EQL · Layered map data · 1 zone from the game\'s own maps');
+        assert.deepStrictEqual(result.report.discovered.Testland, PINS.discovered);
+        assert.deepStrictEqual(result.report.discoveredSources.Testland,
+          PINS.discoveredSources_names.map(name => ({ name, from: 'root' })));
         assert.deepStrictEqual(result.report.discoveryRejected, [
           { key: 'alphab', reason: 'derived', detail: 'alpha' },
           { key: 'betab', reason: 'derived', detail: 'beta' },
