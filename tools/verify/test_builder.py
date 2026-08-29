@@ -80,7 +80,7 @@ def close_only_json(value):
 def replacement_values(data, encoder):
     map_source = open(builder.MAP_TEMPLATE, encoding="utf-8").read()
     return {
-        "__BUILDER_CONVERTER__": builder.read_converter(),
+        "__BUILDER_CONVERTER__": builder.converter_payload(),
         "__BUILDER_TEMPLATE__": encoder(build.strip_regions(map_source, "user")),
         "__BUILDER_AUTHORED__": encoder(builder.load_authored(data)),
         "__BUILDER_COLORS__": encoder(builder.color_table()),
@@ -253,12 +253,21 @@ def main():
         dropped = dict(embedded_colors); dropped.pop(next(iter(dropped)))
         check("control: dropping one embedded colour differs", dropped == cli_colors, False)
 
+        mapgeom = open(builder.MAPGEOM, encoding="utf-8").read()
         converter = open(builder.CONVERTER, encoding="utf-8").read()
+        converter_payload = mapgeom + "\n" + converter
         embedded_converter = builder.extract_payload(real_html, "converter")
-        check("embedded converter is byte-identical source text", embedded_converter, converter)
+        check("embedded converter is exact ordered module payload",
+              embedded_converter, converter_payload)
+        check("embedded converter begins with mapgeom", embedded_converter.startswith(mapgeom))
+        check("embedded converter ends with pack converter", embedded_converter.endswith(converter))
+        check("control: omitting mapgeom differs", converter == embedded_converter, False)
+        check("control: reversing module order differs",
+              converter + "\n" + mapgeom == embedded_converter, False)
         check("embedded converter retains raw less-than regex", ".replace(/</g," in embedded_converter)
-        rewritten_converter = converter.replace("</", "<\\/")
-        check("control: converter rewrite changes bytes", rewritten_converter == converter, False)
+        rewritten_converter = converter_payload.replace("</", "<\\/")
+        check("control: converter rewrite changes bytes",
+              rewritten_converter == converter_payload, False)
         check("control: converter rewrite corrupts raw regex",
               ".replace(/</g," in rewritten_converter, False)
 

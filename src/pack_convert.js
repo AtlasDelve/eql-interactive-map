@@ -3,6 +3,8 @@
 // DOM-free twin of scripts/import_pack.py plus scripts/build.py's composition/injection.
 // I/O is supplied by the caller so the same converter runs under Node and in builder.html.
 
+const GEOM = (typeof require === 'function') ? require('./mapgeom.js') : MapGeom;
+
 const LAYER_SUFFIXES = ['', '_1', '_2', '_3'];
 const PY_WS = '[\\t\\n\\v\\f\\r \\x1c-\\x1f\\x85\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]';
 const PY_STRIP = new RegExp('^' + PY_WS + '+|' + PY_WS + '+$', 'g');
