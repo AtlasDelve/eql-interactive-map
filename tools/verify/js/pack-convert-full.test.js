@@ -18,6 +18,40 @@ const MANIFEST = path.join(DATA, '_generated', 'manifest.json');
 const VERSION = fs.readFileSync(path.join(REPO, 'VERSION'), 'ascii').trim();
 const py = process.argv[2] || process.env.EQL_PYTHON || 'python';
 const userReference = process.argv[3] || path.join(OUT, 'user.html');
+const ROOT_ONLY_EXPECTED = {
+  skippedContinents: ['Antonica', 'Odus', 'Kunark', 'Velious', 'Plane of Hate'],
+  skipped: {
+    Antonica: ['runnyeye'], Faydwer: [], Odus: ['hole'],
+    Kunark: ['kurn', 'kaesora', 'warslikswood', 'lakeofillomen', 'dalnir', 'trakanon',
+      'citymist', 'frontiermtns', 'charasis', 'skyfire', 'veksar', 'sebilis', 'nurga',
+      'droga', 'veeshan', 'karnor', 'chardok'],
+    Velious: ['eastwastes', 'iceclad', 'crystal', 'sleeper', 'frozenshadow', 'velketor',
+      'wakening', 'skyshrine', 'sirens', 'westwastes', 'templeveeshan', 'necropolis'],
+    'Ocean of Tears': [], "Erud's Crossing": [], 'Timorous Deep': [], 'Plane of Fear': [],
+    'Plane of Hate': ['hateplane'], 'Plane of Sky': [],
+  },
+  surviving: {
+    Antonica: ['ecommons', 'commons', 'kithicor', 'highpass', 'eastkarana', 'northkarana',
+      'southkarana', 'lakerathe', 'rathemtn', 'feerrott', 'innothule', 'freportw', 'freporte',
+      'freportn', 'rivervale', 'misty', 'beholder', 'nro', 'oasis', 'sro', 'nektulos',
+      'befallen', 'highkeep', 'qey2hh1', 'paw', 'arena', 'oggok', 'cazicthule', 'gukbottom',
+      'grobb', 'lavastorm', 'neriaka', 'qeytoqrg', 'guktop', 'soldunga', 'soldungb',
+      'soltemple', 'najena', 'neriakb', 'blackburrow', 'qrg', 'qeynos2', 'neriakc',
+      'everfrost', 'qeynos', 'qcat', 'permafrost', 'halas', 'newsebexp'],
+    Faydwer: ['gfaydark', 'butcher', 'crushbone', 'lfaydark', 'felwithea', 'cauldron',
+      'kaladima', 'mistmoore', 'steamfont', 'felwitheb', 'kedge', 'unrest', 'kaladimb', 'akanon'],
+    Odus: ['erudnext', 'tox', 'erudnint', 'kerraridge', 'paineel', 'warrens', 'stonebrunt'],
+    Kunark: ['fieldofbone', 'cabeast', 'swampofnohope', 'emeraldjungle', 'cabwest',
+      'overthere', 'firiona', 'dreadlands', 'burningwood'],
+    Velious: ['greatdivide', 'kael', 'thurgadina', 'thurgadinb', 'cobaltscar'],
+    'Ocean of Tears': ['oot'], "Erud's Crossing": ['erudsxing'],
+    'Timorous Deep': ['timorous'], 'Plane of Fear': ['fearplane'], 'Plane of Hate': [],
+    'Plane of Sky': ['airplane'],
+  },
+  discovered: [{ cont: 'Antonica', key: 'newsebexp', anchor: 'nro', nameFrom: 'marker',
+    name: 'New Sebilis Expedition', from: 'pack' }],
+  credit: 'EQL · selected maps folder',
+};
 
 function runPython(args) {
   return spawnSync(py, args, { cwd: REPO, encoding: 'buffer', shell: false });
@@ -101,6 +135,22 @@ function authoredReads(files, manifest) {
   return found;
 }
 
+function discoveredReads(files, manifestEntry, reportSources, label) {
+  const declared = Object.keys(manifestEntry.discoveredSources || {});
+  assert.deepStrictEqual(reportSources.map(record => record.name), declared,
+    `${label}: discovered source names/order differ from manifest`);
+  const wanted = new Set(declared), found = new Map();
+  for (const [key, read] of files.reads) {
+    const name = path.posix.basename(key);
+    if (!wanted.has(name)) continue;
+    assert(!found.has(name), `${label}: discovered source ${name} was read more than once`);
+    found.set(key, read);
+  }
+  assert.deepStrictEqual([...found.keys()].map(key => path.posix.basename(key)).sort(), [...declared].sort(),
+    `${label}: every manifest-declared discovered source was read`);
+  return found;
+}
+
 function assertNoDerivedTies(label, files, authored, packDir, rootDir) {
   const roster = [];
   for (const cont of authored.world.order) {
@@ -180,7 +230,7 @@ function extract(text, prefix, opener) {
   throw new Error(`unterminated ${prefix}`);
 }
 
-function assertMarkerBridge(artifact, manifest, geom = MapGeom) {
+function assertMarkerBridge(artifact, manifest, geom = MapGeom, requireMarkers = true) {
   const detail = extract(fs.readFileSync(artifact, 'utf8'), ', DETAIL=', '{');
   const entries = [], keyContinents = new Map();
   for (const [cont, block] of Object.entries(detail)) {
@@ -212,8 +262,10 @@ function assertMarkerBridge(artifact, manifest, geom = MapGeom) {
         `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
     }
   }
-  assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
-  return { count, resolutions };
+  if (requireMarkers) assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
+  const crossContinent = [...keyContinents].filter(([, continents]) => continents.size > 1)
+    .map(([key, continents]) => ({ key, continents: [...continents].sort() }));
+  return { count, resolutions, keyCount: keyContinents.size, crossContinent };
 }
 
 function copyAuthoredWithoutCache(target) {
@@ -237,6 +289,19 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
     throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
   if (!fs.existsSync(userReference)) throw new Error('missing Brewall reference ' + userReference);
+  for (const cont of authored.world.order) {
+    const entry = manifest.continents[cont], label = `Brewall ${cont}`;
+    assert.deepStrictEqual(result.report.discovered[cont], entry.discovered || [], `${label}: catalog`);
+    const discoveredIdentity = sourceIdentity(discoveredReads(
+      files, entry, result.report.discoveredSources[cont], label));
+    assert.strictEqual(discoveredIdentity.count, entry.discoveredSourceCount || 0, `${label}: discovered count`);
+    assert.strictEqual(discoveredIdentity.fingerprint,
+      entry.discoveredSourceFingerprint || sourceIdentity(new Map()).fingerprint,
+      `${label}: discovered fingerprint`);
+  }
+  const bridge = assertMarkerBridge(userReference, manifest, MapGeom, false);
+  assert.deepStrictEqual(bridge.crossContinent, [], 'Brewall detail keys span continents');
+  console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
   compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
   console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
   return true;
@@ -247,7 +312,6 @@ async function runRootOnly(mapsRoot, template, colors) {
   fs.mkdirSync(OUT, { recursive: true });
   const scratch = fs.mkdtempSync(path.join(FX, 'rootonly-data-'));
   const reference = path.join(OUT, 'rootonly.html');
-  const discoveryReference = path.join(OUT, 'rootonly-discover.html');
   const resolvedFx = path.resolve(FX) + path.sep;
   if (!path.resolve(scratch).startsWith(resolvedFx) || !path.basename(scratch).startsWith('rootonly-data-')) {
     throw new Error('refusing unsafe root-only scratch path ' + scratch);
@@ -256,14 +320,13 @@ async function runRootOnly(mapsRoot, template, colors) {
     copyAuthoredWithoutCache(scratch);
     let run = runPython(['scripts/import_pack.py', '--pack', mapsRoot, '--data', scratch]);
     if (run.status !== 0) throw new Error(`root-only import failed: ${run.stderr.toString('utf8')}`);
-    // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
-    run = runPython(['scripts/build.py', '--data', scratch, '--out', reference, '--no-discover']);
+    run = runPython(['scripts/build.py', '--data', scratch, '--out', reference]);
     if (run.status !== 0) throw new Error(`root-only build failed: ${run.stderr.toString('utf8')}`);
-    run = runPython(['scripts/build.py', '--data', scratch, '--out', discoveryReference]);
-    if (run.status !== 0) throw new Error(`root-only discovery build failed: ${run.stderr.toString('utf8')}`);
 
     const rootManifest = json(path.join(scratch, '_generated', 'manifest.json'));
-    const bridge = assertMarkerBridge(discoveryReference, rootManifest);
+    const bridge = assertMarkerBridge(reference, rootManifest);
+    assert.deepStrictEqual(bridge.crossContinent, [], 'root-only detail keys span continents');
+    console.log(`PASS: root-only marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
     const INDEX_TAG = Symbol('instrumented MapGeom index');
     const TARGET_TAG = Symbol('instrumented MapGeom target');
     let indexCalls = 0, transitionCalls = 0, taggedIndex;
@@ -286,7 +349,7 @@ async function runRootOnly(mapsRoot, template, colors) {
       },
     };
     const observed = assertMarkerBridge(
-      discoveryReference, json(path.join(scratch, '_generated', 'manifest.json')), instrumented);
+      reference, json(path.join(scratch, '_generated', 'manifest.json')), instrumented);
     assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
     assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
     assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
@@ -298,16 +361,38 @@ async function runRootOnly(mapsRoot, template, colors) {
     assertNoDerivedTies('maps/ root real pack', files, authored, packDir, null);
     const result = await convert({ authored, files, colors, packDir, rootDir: null });
     const identity = sourceIdentity(authoredReads(files, rootManifest));
+    for (const cont of authored.world.order) {
+      const entry = rootManifest.continents[cont], label = `root-only ${cont}`;
+      const discoveredIdentity = sourceIdentity(discoveredReads(
+        files, entry, result.report.discoveredSources[cont], label));
+      assert.strictEqual(discoveredIdentity.count, entry.discoveredSourceCount || 0, `${label}: discovered count`);
+      assert.strictEqual(discoveredIdentity.fingerprint,
+        entry.discoveredSourceFingerprint || sourceIdentity(new Map()).fingerprint,
+        `${label}: discovered fingerprint`);
+    }
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);
     assert.strictEqual(skipped.length, 5, 'root-only skipped continent count');
     assert.strictEqual(skippedCount, 32, 'root-only skipped zone count');
-    assert.strictEqual(surviving, 88, 'root-only surviving zone count');
+    assert.strictEqual(surviving, 89, 'root-only surviving zone count');
     assert.deepStrictEqual(result.data.ALL['Plane of Hate'].zones, {}, 'zero-zone continent retained');
     assert.strictEqual(result.credit, 'EQL · selected maps folder');
+    const snapshot = {
+      skippedContinents: authored.world.order.filter(cont => result.report.skipped[cont].length),
+      skipped: result.report.skipped,
+      surviving: Object.fromEntries(authored.world.order.map(cont =>
+        [cont, Object.keys(result.data.ALL[cont].zones)])),
+      discovered: authored.world.order.flatMap(cont => result.report.discovered[cont].map(record => ({
+        cont, key: record.key, anchor: record.anchor, nameFrom: record.nameFrom,
+        name: record.name, from: record.from,
+      }))),
+      credit: result.credit,
+    };
+    assert.deepStrictEqual(snapshot, ROOT_ONLY_EXPECTED, 'root-only named-set snapshot');
+    console.log('PASS: root-only named skip, survivor, discovery and credit sets match the reviewed pins');
     compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
-    console.log(`PASS: maps/ root alone (${identity.count} source files compared; 32 skipped across 5 continents, 88 surviving, Plane of Hate retained empty)`);
+    console.log(`PASS: maps/ root alone (${identity.count} source files compared; 32 skipped across 5 continents, 89 surviving, Plane of Hate retained empty)`);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }

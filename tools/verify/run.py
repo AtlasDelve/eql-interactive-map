@@ -191,7 +191,7 @@ def main():
         results.append(("pack converter twin: real pack agreement", "SKIP"))
     elif have_node:
         step("pack converter twin: real pack agreement",
-             ["node", "pack-convert-full.test.js", sys.executable, USER_ND], cwd=JS)
+             ["node", "pack-convert-full.test.js", sys.executable, USER], cwd=JS)
     else:
         results.append(("pack converter twin: real pack agreement", "SKIP"))
 

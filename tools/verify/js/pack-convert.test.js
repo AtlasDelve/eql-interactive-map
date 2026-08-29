@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -50,7 +51,7 @@ function loadAuthored(dataRoot) {
 }
 
 function reader(selected) {
-  const parent = path.dirname(selected), keys = [], disk = new Map();
+  const parent = path.dirname(selected), keys = [], disk = new Map(), reads = new Map();
   function walk(dir) {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const absolute = path.join(dir, ent.name);
@@ -65,8 +66,22 @@ function reader(selected) {
   return {
     keys() { return keys; },
     has(key) { return disk.has(key); },
-    async read(key) { return new Uint8Array(fs.readFileSync(disk.get(key))); },
+    async read(key) {
+      const bytes = fs.readFileSync(disk.get(key));
+      reads.set(key, Buffer.from(bytes));
+      return new Uint8Array(bytes);
+    },
+    reads,
   };
+}
+
+function sourceIdentity(reads) {
+  const sources = [...reads].map(([key, bytes]) => [
+    path.posix.basename(key), crypto.createHash('sha256').update(bytes).digest('hex'),
+  ]).sort((a, b) => a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : (a[1] < b[1] ? -1 : (a[1] > b[1] ? 1 : 0))));
+  const hash = crypto.createHash('sha256');
+  for (const [name, sha] of sources) hash.update(`${name} ${sha}\n`, 'utf8');
+  return { count: sources.length, fingerprint: hash.digest('hex') };
 }
 
 function assertNoDerivedTies(label, files, authored, packDir, rootDir) {
@@ -179,8 +194,7 @@ function copyFixtureData(root) {
 function pythonPipeline(pack, data, ref) {
   const imp = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (imp.status !== 0) throw new Error(`import failed: ${imp.stderr.toString('utf8')}`);
-  // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
-  return runPython(['scripts/build.py', '--data', data, '--out', ref, '--no-discover']);
+  return runPython(['scripts/build.py', '--data', data, '--out', ref]);
 }
 
 function assertNoRootLayer(pack) {
@@ -193,9 +207,10 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   const build = pythonPipeline(pack, data, ref);
   if (build.status !== 0) throw new Error(`${label}: build failed: ${build.stderr.toString('utf8')}`);
   const reference = fs.readFileSync(ref, 'utf8');
-  const result = await convert({ authored: loadAuthored(data), files: reader(selected), colors, packDir, rootDir });
+  const files = reader(selected);
+  const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
   const actual = buildHTML(template, result.data, result.credit, VERSION);
-  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')));
+  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   assertSame(label, actual, reference);
   console.log(`PASS: ${label}`);
 }
@@ -269,17 +284,44 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       const root = path.join(scratch, 'layered'); fs.mkdirSync(root);
       const data = copyFixtureData(root);
       const selected = path.join(FX, 'layered', 'maps'), pack = path.join(selected, 'Layered');
-      await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (_d, result) => {
+      await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (d, result, manifest, files) => {
         assert.deepStrictEqual(Object.keys(result).sort(), ['credit', 'data', 'report']);
         assert.deepStrictEqual(Object.keys(result.report).sort(), [
           'baseless', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
           'rootZones', 'skipped', 'unknownRecords', 'unseenColors', 'warnings',
         ]);
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
-        assert.strictEqual(result.credit, 'EQL · Layered map data · 1 zone from the game\'s own maps');
+        assert.strictEqual(result.credit, PINS.cred_on);
         assert.deepStrictEqual(result.report.discovered.Testland, PINS.discovered);
         assert.deepStrictEqual(result.report.discoveredSources.Testland,
           PINS.discoveredSources_names.map(name => ({ name, from: 'root' })));
+        const discoveredNames = new Set(PINS.discoveredSources_names);
+        const acceptedReads = new Map([...files.reads].filter(([key]) => discoveredNames.has(path.posix.basename(key))));
+        const identity = sourceIdentity(acceptedReads);
+        assert.deepStrictEqual(identity, {
+          count: PINS.discoveredSourceCount,
+          fingerprint: PINS.discoveredSourceFingerprint,
+        });
+        assert.strictEqual(manifest.continents.Testland.discoveredSourceCount, identity.count);
+        assert.strictEqual(manifest.continents.Testland.discoveredSourceFingerprint, identity.fingerprint);
+        assert.deepStrictEqual(Object.keys(d.ALL.Testland.zones), PINS.build_on.ALL_zone_keys);
+        assert.deepStrictEqual(Object.keys(d.DETAIL.Testland.zones), PINS.build_on.DETAIL_zone_keys);
+        assert.deepStrictEqual(d.DETAIL.Testland.palette, PINS.build_on.DETAIL_palette);
+        assert.deepStrictEqual(result.data.TRAVEL, {});
+        assert.deepStrictEqual(result.data.ALL.Testland.placed, ['alpha', 'beta', 'gamma']);
+        assert.deepStrictEqual(result.data.ALL.Testland.unplaced, []);
+        assert.deepStrictEqual(result.data.ALL.Testland.links, PINS.build_on.ALL_links);
+        assert(!Object.prototype.hasOwnProperty.call(result.data.ALL.Testland, 'skipped'));
+        const privateKeys = [];
+        function scan(value, at) {
+          if (!value || typeof value !== 'object') return;
+          for (const [key, child] of Object.entries(value)) {
+            if (key.startsWith('_')) privateKeys.push(`${at}.${key}`);
+            scan(child, `${at}.${key}`);
+          }
+        }
+        scan(result.data.ALL, 'ALL'); scan(result.data.DETAIL, 'DETAIL'); scan(result.data.TRAVEL, 'TRAVEL');
+        assert.deepStrictEqual(privateKeys, [], 'private discovery state leaked into injected data');
         assert.deepStrictEqual(result.report.discoveryRejected, [
           { key: 'alphab', reason: 'derived', detail: 'alpha' },
           { key: 'betab', reason: 'derived', detail: 'beta' },

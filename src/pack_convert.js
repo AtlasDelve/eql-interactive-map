@@ -518,6 +518,7 @@ async function assembleDiscoveries({ files, index, cont, candidates, packDir, ro
     if (!Object.prototype.hasOwnProperty.call(edgeIndex, normalized)) edgeIndex[normalized] = target;
   }
   const extendedPalette = palette.concat(discoveredPalette);
+  const outputZones = Object.create(null), outputDetails = Object.create(null);
   for (const record of catalog) {
     const key = record.key;
     const candidateDetail = composeDetail(record, candidateDetails.get(key), extendedPalette);
@@ -539,8 +540,10 @@ async function assembleDiscoveries({ files, index, cont, candidates, packDir, ro
       edges.push({ z: neighbour, cost: GEOM.round1(Math.max(rawCost, 0.1)), named });
     }
     record.edges = edges;
+    outputZones[key] = composeZone(record, { segs: costZones[key].segs }, null);
+    outputDetails[key] = candidateDetail;
   }
-  return { catalog, sources, discoveredPalette };
+  return { catalog, sources, discoveredPalette, outputZones, outputDetails };
 }
 
 function htmlEscape(value) {
@@ -583,7 +586,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const world = authored.world, order = world.order;
   const ALL = {}, META = world.meta, DETAIL = {}, HUBS = {};
   const UNIVERSE = world.universe || [], WORLDLINKS = world.worldLinks || [];
-  const TRAVEL = authored.travel || {}, XPACS = world.xpacs || {};
+  let TRAVEL = authored.travel || {};
+  const XPACS = world.xpacs || {};
   const skippedReport = {}, rootReport = {}, baseless = [], unseen = [], warnings = looksLikeRootMaps(index, packDir);
   const collisions = index.collisions.map(pair => `file key collision: ${pair[0]} | ${pair[1]}`);
   const unknownRecords = {}, discoveredReport = {}, discoveredSourcesReport = {};
@@ -682,9 +686,32 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
     });
     discoveredReport[cont] = assembled.catalog;
     discoveredSourcesReport[cont] = assembled.sources;
-    if (palette.length || Object.keys(dz).length) DETAIL[cont] = { palette, zones: dz };
+    for (const record of assembled.catalog) {
+      zones[record.key] = assembled.outputZones[record.key];
+      dz[record.key] = assembled.outputDetails[record.key];
+      if (record.from === 'root') rootCount++;
+    }
+    const extendedPalette = palette.concat(assembled.discoveredPalette);
+    if (extendedPalette.length || Object.keys(dz).length) DETAIL[cont] = { palette: extendedPalette, zones: dz };
     const hubs = layout.hubs || [];
     if (hubs.length && Object.keys(zones).length) HUBS[cont] = hubs;
+  }
+
+  if (Object.keys(TRAVEL).length) {
+    TRAVEL = { ...TRAVEL };
+    const authoredPairs = new Set((TRAVEL.walk || []).map(edge => [...edge.z].sort().join('\0')));
+    const records = Object.values(discoveredReport).flat().sort((a, b) => a.key.localeCompare(b.key));
+    const derived = [];
+    for (const record of records) {
+      for (const edge of [...record.edges].sort((a, b) => a.z.localeCompare(b.z))) {
+        const pair = [record.key, edge.z].sort().join('\0');
+        if (authoredPairs.has(pair)) {
+          throw new Error(`discovered walk edge duplicates authored pair: ${pair.replace('\0', '|')}`);
+        }
+        derived.push({ z: [record.key, edge.z], cost: edge.cost });
+      }
+    }
+    TRAVEL.walk = (TRAVEL.walk || []).concat(derived);
   }
 
   const data = { ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS };
