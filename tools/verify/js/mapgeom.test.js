@@ -403,8 +403,9 @@ assert(runner.includes('results.append(("mapgeom Python/JavaScript parity", "SKI
   'no-Node branch must append the exact named SKIP result');
 const bridgeSource = fs.readFileSync(path.join(REPO, 'tools', 'verify', 'js',
   'pack-convert-full.test.js'), 'utf8');
-assert(bridgeSource.includes("const MapGeom = require('../../../src/mapgeom.js')"),
-  'real-pack bridge must import MapGeom');
+assert(bridgeSource.includes(
+  "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
+  'real-pack bridge must import MapGeom through the step-1 seam');
 assert(bridgeSource.includes('geom = MapGeom') && bridgeSource.includes('geom.zidxFrom(entries)') &&
   bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
   'real-pack bridge must expose and consume the injected MapGeom seam');
