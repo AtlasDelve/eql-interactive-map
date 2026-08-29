@@ -152,8 +152,10 @@ Written down because each one is a mistake worth not repeating:
   root-only and browser-builder comparisons all use the same discovery-bearing Python artifact.
   The fixture's two-manifest differential removes only `discovered` and `discoveredPalette` from a
   copied manifest, then proves the catalog is an append that preserves authored records and palette
-  indices. `derivedtravel` separately proves the authored `TRAVEL.walk` prefix and exact non-empty
-  catalog tail.
+  indices. The Brewall pass also compares JavaScript and Python `znorm` over every accepted/rejected
+  discovery key and every transition-marker label actually read, so real pack spellings exercise
+  the shared resolver boundary. `derivedtravel` separately proves the authored `TRAVEL.walk` prefix
+  and exact non-empty catalog tail.
 - **The derived-travel check reads the artifact, not the authored graph verifier.** `verify.py travel`
   stays bare-clone-safe and owns only `data/travel.json`. `derivedtravel` instead extracts the built
   `ALL` and `TRAVEL`, requires the authored walk array as an unchanged prefix, and compares the

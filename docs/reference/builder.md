@@ -85,7 +85,7 @@ The stripped template contains seven astral-plane characters, so its JavaScript 
 seven greater than its Unicode code-point count. Cross-language length comparisons are therefore
 invalid; compare the text in one language. The authored object is 41,981 code points as compact
 Unicode JSON and 42,241 bytes in the emitted ASCII-only literal; the 83-entry colour table is 1,813
-bytes; and the ordered MapGeom-plus-converter payload is 27,809 characters or 27,812 UTF-8 bytes.
+bytes; and the ordered MapGeom-plus-converter payload is 41,329 characters or 41,332 UTF-8 bytes.
 Summary sizes describe the bytes actually embedded.
 
 The two-module converter payload is different: applying the JSON rewrite to raw JavaScript would
@@ -115,7 +115,7 @@ The result remains usable after the source folder is no longer available.
 The input is large enough that selection is part of the architecture. The supported maps tree is
 340 MB on disk across 4,093 text files, while roster-and-layer filtering reads 361 files / 25.9 MB
 for Brewall. Reading the entire selection first would multiply the browser's I/O for data the
-converter will never inspect. The assembled builder itself is 266,740 bytes. Of that closed input,
+converter will never inspect. The assembled builder itself is 280,260 bytes. Of that closed input,
 the authored payload is 41,981 Unicode code points and 42,241 emitted bytes; the two units are kept
 separate because compact Unicode JSON and the ASCII-only embedded literal are not byte-equivalent.
 

@@ -285,10 +285,10 @@ async function main() {
     const layered = await pageBuild(page, layeredFiles, layeredChoice.record);
     check('layered report pins root-sourced gamma', () =>
       assert.deepStrictEqual(hostArray(layered.built.report.rootZones.Testland), ['gamma']));
-    check('layered credit pins six game-root zones', () =>
-      assert.strictEqual(layered.built.credit, "EQL · Layered map data · 6 zones from the game's own maps"));
     check('page output is byte-identical to Python over layered pack', () =>
       assertSame('layered builder', layered.built.html, layeredReference));
+    check('layered credit pins six game-root zones', () =>
+      assert.strictEqual(layered.built.credit, "EQL · Layered map data · 6 zones from the game's own maps"));
 
     const rootChoice = choice(page, layeredFiles, 'maps (root alone)');
     const rootPageFiles = layeredFiles.map(file => ({

@@ -185,6 +185,19 @@ function assertSame(label, actual, expected) {
   }
 }
 
+function assertNoPrivateKeys(data) {
+  const privateKeys = [];
+  function scan(value, at) {
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      if (key.startsWith('_')) privateKeys.push(`${at}.${key}`);
+      scan(child, `${at}.${key}`);
+    }
+  }
+  scan(data.ALL, 'ALL'); scan(data.DETAIL, 'DETAIL'); scan(data.TRAVEL, 'TRAVEL');
+  assert.deepStrictEqual(privateKeys, [], 'private discovery state leaked into injected data');
+}
+
 function copyFixtureData(root) {
   const data = path.join(root, 'data');
   fs.cpSync(path.join(FX, 'data'), data, { recursive: true });
@@ -210,8 +223,9 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   const files = reader(selected);
   const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
   const actual = buildHTML(template, result.data, result.credit, VERSION);
-  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
+  assertNoPrivateKeys(result.data);
   assertSame(label, actual, reference);
+  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   console.log(`PASS: ${label}`);
 }
 
@@ -312,16 +326,6 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         assert.deepStrictEqual(result.data.ALL.Testland.unplaced, []);
         assert.deepStrictEqual(result.data.ALL.Testland.links, PINS.build_on.ALL_links);
         assert(!Object.prototype.hasOwnProperty.call(result.data.ALL.Testland, 'skipped'));
-        const privateKeys = [];
-        function scan(value, at) {
-          if (!value || typeof value !== 'object') return;
-          for (const [key, child] of Object.entries(value)) {
-            if (key.startsWith('_')) privateKeys.push(`${at}.${key}`);
-            scan(child, `${at}.${key}`);
-          }
-        }
-        scan(result.data.ALL, 'ALL'); scan(result.data.DETAIL, 'DETAIL'); scan(result.data.TRAVEL, 'TRAVEL');
-        assert.deepStrictEqual(privateKeys, [], 'private discovery state leaked into injected data');
         assert.deepStrictEqual(result.report.discoveryRejected, [
           { key: 'alphab', reason: 'derived', detail: 'alpha' },
           { key: 'betab', reason: 'derived', detail: 'beta' },

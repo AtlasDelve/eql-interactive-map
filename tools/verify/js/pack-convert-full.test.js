@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { convert, buildHTML } = require('../../../src/pack_convert.js');
-const MapGeom = require('../../../src/mapgeom.js');
+const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js');
 
 const REPO = path.resolve(__dirname, '../../..');
 const DATA = path.join(REPO, 'data');
@@ -53,8 +53,8 @@ const ROOT_ONLY_EXPECTED = {
   credit: 'EQL · selected maps folder',
 };
 
-function runPython(args) {
-  return spawnSync(py, args, { cwd: REPO, encoding: 'buffer', shell: false });
+function runPython(args, options = {}) {
+  return spawnSync(py, args, { cwd: REPO, encoding: 'buffer', shell: false, ...options });
 }
 
 function mustPython(args) {
@@ -133,6 +133,36 @@ function authoredReads(files, manifest) {
   assert.deepStrictEqual([...found.keys()].map(key => path.posix.basename(key)).sort(), [...declared].sort(),
     'every manifest-declared authored source was read exactly once');
   return found;
+}
+
+function markerLabels(reads) {
+  const labels = [];
+  for (const { bytes } of reads.values()) {
+    for (const line of bytes.toString('utf8').split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/)) {
+      const stripped = line.trim();
+      if (!stripped.startsWith('P')) continue;
+      const raw = stripped.slice(1).split(',');
+      if (raw.length < 8) continue;
+      const label = raw.slice(7).join(',').trim();
+      if (/^(to|from)_/i.test(label)) labels.push(label);
+    }
+  }
+  return labels;
+}
+
+function assertZnormParity(result, reads) {
+  const keys = Object.values(result.report.discovered).flat().map(record => record.key)
+    .concat(result.report.discoveryRejected.map(record => record.key));
+  const labels = markerLabels(reads), inputs = keys.concat(labels);
+  const code = "import json,sys;sys.path.insert(0,'scripts');import mapgeom;json.dump([mapgeom.znorm(v) for v in json.load(sys.stdin)],sys.stdout,ensure_ascii=False)";
+  const run = runPython(['-c', code], {
+    input: Buffer.from(JSON.stringify(inputs), 'utf8'),
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+  });
+  if (run.status !== 0) throw new Error(`znorm Python adapter failed: ${run.stderr.toString('utf8')}`);
+  assert.deepStrictEqual(inputs.map(MapGeom.znorm), JSON.parse(run.stdout.toString('utf8')),
+    'real discovery znorm differs across JavaScript and Python');
+  console.log(`PASS: real discovery znorm parity (${keys.length} accepted/rejected keys, ${labels.length} marker labels)`);
 }
 
 function discoveredReads(files, manifestEntry, reportSources, label) {
@@ -284,11 +314,13 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
   const authored = loadAuthored(DATA);
   assertNoDerivedTies('Brewall real pack', files, authored, packDir, rootDir);
   const result = await convert({ authored, files, colors, packDir, rootDir });
+  assertZnormParity(result, files.reads);
   const identity = sourceIdentity(authoredReads(files, manifest));
   if (identity.count !== manifest.sourceCount || identity.fingerprint !== manifest.sourceFingerprint) {
     throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
   if (!fs.existsSync(userReference)) throw new Error('missing Brewall reference ' + userReference);
+  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
   for (const cont of authored.world.order) {
     const entry = manifest.continents[cont], label = `Brewall ${cont}`;
     assert.deepStrictEqual(result.report.discovered[cont], entry.discovered || [], `${label}: catalog`);
@@ -302,7 +334,6 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
   const bridge = assertMarkerBridge(userReference, manifest, MapGeom, false);
   assert.deepStrictEqual(bridge.crossContinent, [], 'Brewall detail keys span continents');
   console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
-  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
   console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
   return true;
 }
@@ -370,6 +401,7 @@ async function runRootOnly(mapsRoot, template, colors) {
         entry.discoveredSourceFingerprint || sourceIdentity(new Map()).fingerprint,
         `${label}: discovered fingerprint`);
     }
+    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);
@@ -391,7 +423,6 @@ async function runRootOnly(mapsRoot, template, colors) {
     };
     assert.deepStrictEqual(snapshot, ROOT_ONLY_EXPECTED, 'root-only named-set snapshot');
     console.log('PASS: root-only named skip, survivor, discovery and credit sets match the reviewed pins');
-    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
     console.log(`PASS: maps/ root alone (${identity.count} source files compared; 32 skipped across 5 continents, 89 surviving, Plane of Hate retained empty)`);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
