@@ -173,11 +173,14 @@ broken pack and remains a hard error: falling through or treating it as absent w
 pack file silently select another source, reintroducing the cross-source mixing that per-zone
 all-or-nothing resolution makes unrepresentable.
 
-**The measured root-only result is 83 surviving zones and 37 skips across six continents.** The
-skips are Antonica 4, Faydwer 1, Odus 2, Kunark 17, Velious 12 and Plane of Hate 1. Plane of Hate
-therefore remains in `ALL` with an empty `zones` object and its one-key skip list, while `DETAIL`
-and `HUBS` omit it. Keeping every continent preserves authored order and keeps the partial-build
-author interlock observable even when a whole continent is missing.
+**The measured root-only result is 89 surviving zones and 32 skips across five continents.** The
+skips are Antonica `runnyeye`; Odus `hole`; Kunark 17 named keys; Velious 12 named keys; and Plane
+of Hate `hateplane`. The 89 survivors are 88 authored root-supplied zones plus the discovered
+`Antonica/newsebexp` append. Plane of Hate therefore remains in `ALL` with an empty `zones` object
+and its one-key skip list, while `DETAIL` and `HUBS` omit it. The real-pack parity test pins the
+complete per-continent skip and survivor arrays, not only these counts. Keeping every continent
+preserves authored order and keeps the partial-build author interlock observable even when a whole
+continent is missing.
 
 **Composition filters only structures whose identity depends on a surviving zone.** Detail and
 geometry skip the absent key. `HUBS` is never compacted because travel anchors address the
@@ -259,8 +262,8 @@ with the current run's top-level `root` would confidently give the wrong remedia
 both the list and hint to the current `order` makes their provenance agree by construction.
 
 **`looks_like_root_maps` warns about a mistake, not about a licensing regime — word it from
-usability, never from provenance.** Its durable costs are that the root supplies **83 of the 120
-rostered zones** — none of Kunark, none of Velious — and that the pack's tracings are lost on the
+usability, never from provenance.** Its durable costs are that the root supplies **88 of the 120
+rostered zones** — only 9 of Kunark and 5 of Velious — and that the pack's tracings are lost on the
 **69 zones where both directories hold a same-named file**, when pointing `--pack` at the pack would
 have yielded both layers. Its own message ends by saying so. "Root geometry is Daybreak-authored
 rather than community-pack" describes a root build accurately but is **not** a reason to warn, since
@@ -291,12 +294,11 @@ either way; the provenance record is `sources[].from`, and the pair
 (`sourceFingerprint`, `rootZones`) already answers "same content, different provenance".
 
 **Two consequences of a root-sourced zone, neither a fault.** Palette allocation is first-seen
-over `detailZones`, so a root-sourced zone early in that list **renumbers the tail** — exactly why
-the whole-continent minimum exists. And root `newsebexp` uses 7 distinct RGB values, **2 absent
-from `pack_colors.PACK_COLORS`** — `(160,120,60)` → `#cd9a4d` and `(85,184,20)` → `#5fcd16` — so
-the first rostered fallback zone makes `unseenColors` non-empty for the first time since that
-table was recovered. That is the report path working. (Confirmed by converting a scratch tree with
-`newsebexp` rostered; it cannot fire in the repo's own `data/`, where no zone is rostered.)
+over `detailZones`, so a root-sourced authored zone early in that list **renumbers the tail** —
+exactly why the whole-continent minimum exists. And root `newsebexp` uses 7 distinct RGB values,
+**2 absent from `pack_colors.PACK_COLORS`** — `(160,120,60)` → `#cd9a4d` and `(85,184,20)` →
+`#5fcd16` — so its discovered palette tail makes `unseenColors` non-empty. That is the report
+path working without changing existing authored palette indices.
 
 ## The discovered-zone catalog
 
@@ -319,20 +321,21 @@ them. A user overlay cannot: it exists only at runtime, while the catalog was al
 
 **Discovered provenance is a second digest namespace.** `discoveredSources` uses the same
 `{bytes, sha256, from}` records as `sources`, with its own count and fingerprint. Keeping it separate
-preserves `sources` as the authored roster inputs compared by the temporarily discovery-free browser
-converter; folding the files into that digest would make the parity check disappear as a stale-cache
-skip. The split's own gap is closed by `verify.py discoveryfresh`, which recomputes and requires the
-discovered digest on the Python side. Plan 3 inherits extending that check across the browser seam.
-`rootZones` still unions root-sourced authored and discovered keys, so release provenance counts the
-artifact rather than only the roster.
+preserves `sources` as the authored-roster inputs. The Node adapter hashes captured bytes for each
+namespace independently and compares both to the Python manifest; `verify.py discoveryfresh`
+recomputes the discovered digest from disk. Production browser conversion is one in-memory pass and
+returns only its ephemeral catalog/source report—it computes no hashes, writes no manifest, and
+injects no report-only state. Manifest `rootZones` remains authored-only; credit and
+`root_layer_zones()` additionally count root-sourced discovered records.
 
 **Discovered colours never enter `palette.json`.** The shared palette and its `paletteSize` remain
 the authored-roster conversion result. New colours form `discoveredPalette` in sorted candidate-key
 order and first-seen written-detail order within each candidate. Their detail indices begin at
-`paletteSize`; a discovery-on build composes and injects `palette.json + discoveredPalette`, while a
-discovery-off build retains the byte-identical shared palette. This allocation point keeps existing
-indices stable and makes a permuted tail observable through literal-order tests rather than only
-range checks.
+`paletteSize`; the build always composes and injects `palette.json + discoveredPalette`. A
+two-manifest differential strips only the catalog and tail from a copied fixture manifest to prove
+the authored palette and records remain byte-identical. This allocation point keeps existing indices
+stable and makes a permuted tail observable through literal-order tests rather than only range
+checks.
 
 ## Anything geometry-derived is a fact about ONE pack, and must say which
 

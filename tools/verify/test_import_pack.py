@@ -641,40 +641,52 @@ try:
     check("the plain manifest helper returns the catalog and ordered palette tail",
           (cached_discovery["zones"], cached_discovery["palette"]),
           (expected_discovered, ["#cd9a4d", "#5fcd16"]))
-    built_on = BUILD.build(ldata, discover=True)
-    built_off = BUILD.build(ldata, discover=False)
+    manifest_path = os.path.join(ldata, IP.CACHE_DIRNAME, "manifest.json")
+    built_on = BUILD.build(ldata)
+    credit_on = BUILD.cred_text(ldata)
+    without_catalog = copy.deepcopy(lman)
+    for entry in without_catalog["continents"].values():
+        entry.pop("discovered", None)
+        entry.pop("discoveredPalette", None)
+    try:
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(without_catalog, f, sort_keys=True)
+        built_without = BUILD.build(ldata)
+        credit_without = BUILD.cred_text(ldata)
+    finally:
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(lman, f, sort_keys=True)
     on_all, on_detail = built_on[0]["Testland"], built_on[2]["Testland"]
-    off_all, off_detail = built_off[0]["Testland"], built_off[2]["Testland"]
-    check("discovery-on appends catalog keys after the authored zone order",
+    base_all, base_detail = built_without[0]["Testland"], built_without[2]["Testland"]
+    check("the catalog appends keys after the authored zone order",
           list(on_all["zones"]), ["alpha", "beta", "gamma"] + discovered_keys)
-    check("discovery-off leaves the authored zone order byte-for-byte",
-          list(off_all["zones"]), ["alpha", "beta", "gamma"])
-    check("discovery-on injects the same extended palette used for detail composition",
+    check("a manifest without catalog fields retains the authored zone prefix",
+          list(base_all["zones"]), ["alpha", "beta", "gamma"])
+    check("the catalog injects the same extended palette used for detail composition",
           (on_detail["palette"], on_detail["zones"]["kappa"]["segs"][0][4],
            on_detail["zones"]["kappa"]["labels"][0][2]),
           (["#08ce08", "#ffffff", "#ff4545", "#4f94cd", "#cd9a4d", "#5fcd16"],
            4, 5))
-    check("discovery-off injects the unextended palette and no discovered detail",
-          (off_detail["palette"], [key for key in discovered_keys
-                                   if key in off_detail["zones"]]),
+    check("a manifest without catalog fields has the authored palette and no discovered detail",
+          (base_detail["palette"], [key for key in discovered_keys
+                                    if key in base_detail["zones"]]),
           (["#08ce08", "#ffffff", "#ff4545", "#4f94cd"], []))
-    check("placed and unplaced remain authored bookkeeping in both modes",
-          (on_all["placed"], on_all["unplaced"], off_all["placed"], off_all["unplaced"]),
+    check("catalog composition leaves authored zone and detail records byte-for-byte",
+          ([on_all["zones"][key] for key in ("alpha", "beta", "gamma")],
+           [on_detail["zones"][key] for key in ("beta", "alpha", "gamma")]),
+          ([base_all["zones"][key] for key in ("alpha", "beta", "gamma")],
+           [base_detail["zones"][key] for key in ("beta", "alpha", "gamma")]))
+    check("placed and unplaced remain authored bookkeeping in both manifests",
+          (on_all["placed"], on_all["unplaced"], base_all["placed"], base_all["unplaced"]),
           (["alpha", "beta", "gamma"], [], ["alpha", "beta", "gamma"], []))
     check("a discovery catalog does not manufacture a schema-incomplete travel graph",
           built_on[6], {})
-    check("the credit counts discovered root geometry only when enabled",
-          (BUILD.cred_text(ldata), BUILD.cred_text(ldata, discover=False)),
+    check("credit varies only with the manifest catalog contents",
+          (credit_on, credit_without),
           ("EQL · Layered map data · 6 zones from the game's own maps",
            "EQL · Layered map data · 1 zone from the game's own maps"))
-
-    no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
-    check("discovery-off records false per refreshed continent",
-          no_discovery["continents"]["Testland"]["discovery"], False)
-    check("discovery-off writes neither accepted nor rejected catalog",
-          ("discovered" in no_discovery["continents"]["Testland"],
-           "discoveryRejected" in no_discovery), (False, False))
-    lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the discovery-on cache below
+    check("the manifest records discovery as the only conversion mode",
+          lman["continents"]["Testland"]["discovery"], True)
 
     # The anchor for the whole section: confirmed NON-empty, which is what makes the paired
     # empty-assertions on the flat pack at the end of this block mean anything.
@@ -747,7 +759,6 @@ try:
     check("the freshness command compares the fixture instead of skipping",
           VERIFY.cmd_discoveryfresh(ldata), 0)
 
-    manifest_path = os.path.join(ldata, IP.CACHE_DIRNAME, "manifest.json")
 
     def catalog_rejects(label, mutate, needle):
         broken = copy.deepcopy(lman)
@@ -762,6 +773,9 @@ try:
     def first_record(manifest):
         return manifest["continents"]["Testland"]["discovered"][0]
 
+    catalog_rejects("cache validation refuses a disabled discovery continent",
+                    lambda m: m["continents"]["Testland"].__setitem__("discovery", False),
+                    "absent or disabled")
     catalog_rejects("catalog validation: discovered must be a list",
                     lambda m: m["continents"]["Testland"].__setitem__("discovered", {}),
                     "not a list")
