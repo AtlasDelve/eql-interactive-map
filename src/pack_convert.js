@@ -14,6 +14,14 @@ const PLACEHOLDERS = ['__WORLDLINKS__', '__UNIVERSE__', '__DETAIL__', '__TRAVEL_
 const LIFT_MAX = 205.0;
 const LIFT_LUMA = 124.3;
 
+// Discovery ordering must match Python's `sorted()`, which is Unicode code-point order. This is
+// UTF-16 CODE-UNIT order, which is the same thing for the ASCII zone keys discovery can produce
+// (see the boundary note below) and is what the surrounding bare `.sort()` calls already use.
+// It is NOT localeCompare: that is ICU collation under the HOST DEFAULT LOCALE, which in
+// builder.html is the end user's. See Amendment 2.
+function cmpStr(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+function byKey(a, b) { return cmpStr(a.key, b.key); }
+
 function roundHalfEven(x) {
   // Coordinates use Python round(): half-to-even, not JavaScript Math.round.
   const f = Math.floor(x), d = x - f;
@@ -385,8 +393,8 @@ async function detectDiscoveries(files, index, packDir, rootDir, roster, zoneInd
     if (!accepted[candidate.continent]) accepted[candidate.continent] = [];
     accepted[candidate.continent].push(candidate);
   }
-  for (const records of Object.values(accepted)) records.sort((a, b) => a.key.localeCompare(b.key));
-  rejected.sort((a, b) => a.key.localeCompare(b.key));
+  for (const records of Object.values(accepted)) records.sort(byKey);
+  rejected.sort(byKey);
   return { accepted, rejected };
 }
 
@@ -439,7 +447,7 @@ async function assembleDiscoveries({ files, index, cont, candidates, packDir, ro
     costZones[key] = composeZone(azones[key], geometry, null);
   }
 
-  for (const partial of [...candidates].sort((a, b) => a.key.localeCompare(b.key))) {
+  for (const partial of [...candidates].sort(byKey)) {
     const key = partial.key, targets = [...partial.targets].sort(), anchor = targets[0];
     targetsByKey.set(key, targets);
     const [srcDir, source] = resolveZoneSource(index, packDir, rootDir, key);
@@ -700,10 +708,10 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   if (Object.keys(TRAVEL).length) {
     TRAVEL = { ...TRAVEL };
     const authoredPairs = new Set((TRAVEL.walk || []).map(edge => [...edge.z].sort().join('\0')));
-    const records = Object.values(discoveredReport).flat().sort((a, b) => a.key.localeCompare(b.key));
+    const records = Object.values(discoveredReport).flat().sort(byKey);
     const derived = [];
     for (const record of records) {
-      for (const edge of [...record.edges].sort((a, b) => a.z.localeCompare(b.z))) {
+      for (const edge of [...record.edges].sort((a, b) => cmpStr(a.z, b.z))) {
         const pair = [record.key, edge.z].sort().join('\0');
         if (authoredPairs.has(pair)) {
           throw new Error(`discovered walk edge duplicates authored pair: ${pair.replace('\0', '|')}`);

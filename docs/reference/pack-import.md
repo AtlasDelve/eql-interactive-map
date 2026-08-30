@@ -97,6 +97,14 @@ The browser twin also uses a function replacement so JavaScript cannot reinterpr
 tokens such as `$&`; exact parity would not reveal either error until an input happened to carry
 one of those spellings.
 
+**Discovery ordering is ordinal, never locale-sensitive.** Python's `sorted()` uses Unicode
+code-point order; the browser twin uses JavaScript's deterministic UTF-16 code-unit order, which
+agrees for the ASCII filename stems discovery can produce. `localeCompare` is wrong on this path
+because it uses ICU collation under the end user's host-default locale and can therefore change
+injected key, palette and travel-edge order. The two ordinal orders diverge only for non-BMP keys,
+whose surrogate pairs sort before U+E000–U+FFFF in UTF-16; observing such a key is a stop-and-ask,
+not permission to silently introduce a second comparator convention.
+
 **A zone's `off` is a FLOAT pair and translation happens before rounding.** Only 14 of 118
 offsets are integral. This is what `AGENTS.md` previously recorded as "exact-integer agreement
 is only 20/120" between the detail and continent frames — that figure is *not* evidence of the
