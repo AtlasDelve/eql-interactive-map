@@ -688,10 +688,16 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       for (const lab of (azones[zk].labels || [])) if (traced.has(lab[4])) collisions.push(`${cont}/${zk}: ${lab[4]}`);
       dz[zk] = composeDetail(azones[zk], d, palette);
     }
-    const assembled = await assembleDiscoveries({
-      files, index, cont, candidates: discoveries.accepted[cont] || [], packDir, rootDir,
-      parsed, meta, zoneIndex: discoveryIndex, palette, colors, unseen, authoredDetails: dz,
-    });
+    const candidates = discoveries.accepted[cont] || [];
+    let assembled = {
+      catalog: [], sources: [], discoveredPalette: [], outputZones: {}, outputDetails: {},
+    };
+    if (candidates.length) {
+      assembled = await assembleDiscoveries({
+        files, index, cont, candidates, packDir, rootDir,
+        parsed, meta, zoneIndex: discoveryIndex, palette, colors, unseen, authoredDetails: dz,
+      });
+    }
     discoveredReport[cont] = assembled.catalog;
     discoveredSourcesReport[cont] = assembled.sources;
     for (const record of assembled.catalog) {
