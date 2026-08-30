@@ -216,7 +216,8 @@ function assertNoRootLayer(pack) {
   if (run.status !== 0) throw new Error(`temporary pack unexpectedly acquired a root layer: ${run.stderr.toString('utf8')}`);
 }
 
-async function compareCase(label, pack, selected, packDir, rootDir, data, ref, template, colors, inspect) {
+async function compareCase(label, pack, selected, packDir, rootDir, data, ref, template, colors,
+  inspect, beforeCompare) {
   const build = pythonPipeline(pack, data, ref);
   if (build.status !== 0) throw new Error(`${label}: build failed: ${build.stderr.toString('utf8')}`);
   const reference = fs.readFileSync(ref, 'utf8');
@@ -224,6 +225,7 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
   const actual = buildHTML(template, result.data, result.credit, VERSION);
   assertNoPrivateKeys(result.data);
+  if (beforeCompare) beforeCompare(result);
   assertSame(label, actual, reference);
   if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   console.log(`PASS: ${label}`);
@@ -336,12 +338,45 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
           { key: 'srac', reason: 'series', detail: 'sra' },
           { key: 'zeta', reason: 'baseless', detail: 'root' },
         ]);
+      }, result => {
+        const palettePins = PINS.build_on.DETAIL_zone_palette_indices.kappa;
+        assert.strictEqual(result.data.DETAIL.Testland.zones.kappa.segs[0][4],
+          palettePins.seg_palette_indices[0], 'browser kappa seg palette index');
+        assert.strictEqual(result.data.DETAIL.Testland.zones.kappa.labels[0][2],
+          palettePins.label_palette_indices[0], 'browser kappa label palette index');
       });
       assertNoDerivedTies('layered fixture', reader(selected), loadAuthored(data),
         'maps/Layered', 'maps');
     }
 
-    // 3: one skipped zone, one filtered link, one surviving link.
+    // 3: ordinal discovery order differs from host-default ICU collation.
+    {
+      const root = path.join(scratch, 'collate'); fs.mkdirSync(root);
+      const data = copyFixtureData(root), pack = path.join(FX, 'collate');
+      await compareCase('discovery collation fixture', pack, pack, 'collate', null, data,
+        path.join(root, 'ref.html'), template, colors, null, result => {
+          const records = result.report.discovered.Testland;
+          const keys = records.map(record => record.key);
+          assert.deepStrictEqual(keys, ['nu0a', 'nu_a'], 'emitted discovery key set and order');
+          assert.deepStrictEqual(result.report.discoveryRejected, [], 'collation candidates accepted');
+
+          const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+          assert.notDeepStrictEqual([...keys].sort(cmp),
+            [...keys].sort((a, b) => a.localeCompare(b)),
+            'collation fixture distinguishes ordinal order from host-default ICU order');
+          assert.deepStrictEqual(Object.keys(result.data.ALL.Testland.zones).slice(-keys.length), keys,
+            'ALL discovered tail follows emitted order');
+          assert.deepStrictEqual(Object.keys(result.data.DETAIL.Testland.zones).slice(-keys.length), keys,
+            'DETAIL discovered tail follows emitted order');
+          const sourceKeys = [...new Set(result.report.discoveredSources.Testland.map(source =>
+            source.name.replace(/_(?:1|2|3)(?=\.txt$)/, '').replace(/\.txt$/, '')))];
+          assert.deepStrictEqual(sourceKeys, keys, 'discovered source tail follows emitted order');
+          assert(result.report.discoveredSources.Testland.every(source => source.from === 'pack'),
+            'flat collation fixture reports pack provenance');
+        });
+    }
+
+    // 4: one skipped zone, one filtered link, one surviving link.
     {
       const root = path.join(scratch, 'skip-one'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'selected-pack');
@@ -356,7 +391,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       });
     }
 
-    // 4: no rostered source file, but the zero-zone continent remains in ALL.
+    // 5: no rostered source file, but the zero-zone continent remains in ALL.
     {
       const root = path.join(scratch, 'skip-all'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'empty-pack'); fs.mkdirSync(pack);
@@ -371,7 +406,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       });
     }
 
-    // 5: Python cache load and the no-cache twin reject the same tiny nonzero Z.
+    // 6: Python cache load and the no-cache twin reject the same tiny nonzero Z.
     {
       const root = path.join(scratch, 'number-domain'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'number-pack');

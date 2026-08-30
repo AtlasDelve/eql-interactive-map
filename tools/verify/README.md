@@ -131,12 +131,15 @@ Written down because each one is a mistake worth not repeating:
   sweep, and compares the JavaScript fallback with Python. Keeping the table out of JavaScript
   leaves one behavioural function—not 83 rendering decisions—as the drift surface.
 - **Fixture-scale pack conversion compares the complete artifact.** `pack-convert.test.js` runs
-  flat and layered packs, one-zone and all-zone skips, and a rejected sub-`1e-4` Z through both
-  languages. The skip cases pin conditional `skipped`/`links`/`DETAIL`/`HUBS` presence and the
-  retained zero-zone continent; the layered case alone pins mixed-source credit and its apostrophe
-  escape. It normalizes CRLF to LF because Windows text-mode output is the only permitted wrapper
-  difference; every placeholder, ordered payload, and script-close escape remains in the one exact
-  comparison. Wrong half-to-even rounding and Windows-1252 fallback decoding are mutation-tested.
+  flat and layered packs, a flat collation pack, one-zone and all-zone skips, and a rejected
+  sub-`1e-4` Z through both languages. The collation case uses `nu0a`/`nu_a`, whose ordinal and
+  host-default ICU orders differ, and checks the JavaScript discovery, zone, detail and source
+  tails before byte identity. The skip cases pin conditional
+  `skipped`/`links`/`DETAIL`/`HUBS` presence and the retained zero-zone continent; the layered case
+  alone pins mixed-source credit and its apostrophe escape. It normalizes CRLF to LF because Windows
+  text-mode output is the only permitted wrapper difference; every placeholder, ordered payload,
+  and script-close escape remains in the one exact comparison. Wrong half-to-even rounding and
+  Windows-1252 fallback decoding are mutation-tested.
 - **Real-pack parity owns scale and source freshness.** `pack-convert-full.test.js` covers authored
   continent/zone order and the thousands of exact-half coordinates that a three-zone fixture
   cannot. Once invoked, Brewall must match the remembered cache fingerprint and the root-only case
