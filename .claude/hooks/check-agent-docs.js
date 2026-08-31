@@ -34,6 +34,7 @@ const BUILDER = 'docs/reference/builder.md';
 const PATH_RULES = [
   [/^data\/travel\.json$/, [T_GRAPH]],
   [/^scripts\/derive_travel_graph\.py$/, [T_GRAPH]],
+  [/^scripts\/mapgeom\.py$/, [T_GRAPH]],
   [/^scripts\/(import_pack|pack_colors)\.py$/, [PACK]],
   [/^src\/pack_convert\.js$/, [PACK, BUILD]],
   [/^src\/builder\.html$/, [BUILDER, LICENSING]],

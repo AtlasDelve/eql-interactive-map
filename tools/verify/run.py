@@ -114,7 +114,8 @@ def main():
     have_mods = os.path.isdir(os.path.join(JS, "node_modules"))
 
     if args.list:
-        print("1 python     test_builder, test_markers, test_import_pack, test_verify, strip, lf,")
+        print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
+        print("               strip, lf,")
         print("               datacmp(user,author), jsnum x2, hints, travel")
         print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
@@ -141,6 +142,7 @@ def main():
     step("import_pack.py against the synthetic pack fixture",
          [sys.executable, "test_import_pack.py"])
     step("verify.py robustness unit tests", [sys.executable, "test_verify.py"])
+    step("mapgeom standalone numeric contract", [sys.executable, "test_mapgeom.py"])
     step("strip completeness (user edition)", [sys.executable, "verify.py", "strip", USER])
     step("platform-independent LF artifact", [sys.executable, "verify.py", "lf", USER])
     # No committed baseline: the two editions must inject byte-identical data as each
