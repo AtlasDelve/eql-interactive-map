@@ -25,7 +25,7 @@ def check(name, got, want):
 
 # This pinned input is a cross-language fixture, not a runtime search. CPython's hypot is the
 # outlier: explicit sqrt produces SQRT_REPR in both CPython and JavaScript, while Python hypot
-# produces HYPOT_REPR. Plan 3 still owes the live Python-vs-Node comparison.
+# produces HYPOT_REPR. tools/verify/js/mapgeom.test.js performs the live Python-vs-Node comparison.
 DX = -22407.44944409043
 DY = 14778.172561699554
 HYPOT_REPR = "26841.910789897916"

@@ -10,8 +10,8 @@ Layers, cheapest first:
 
   1. Python      browser-builder assembly/input guards, marker-walker unit tests, strip
                  completeness, injected-data equivalence, ref-hint collision check.
-  N. Node        dependency-free pack-converter/lift parity; fixture scale always runs when
-                 Node exists, real-pack scale follows the 18 MB --quick gate.
+  N. Node        dependency-free map-geometry, pack-converter and lift parity; fixture scale
+                 always runs when Node exists, real-pack scale follows the 18 MB --quick gate.
   2. jsdom/small browser-builder end-to-end plus ~100 KB synthetic map fixtures, so canonical
                  data can be MUTATED to simulate shipping an update.
   3. jsdom/full  the real ~18 MB artifact: smoke on both editions, the untouched-overlay
@@ -123,7 +123,8 @@ def main():
         print("               strip, lf,")
         print("               datacmp(user,author), discoveryappend, jsnum x2, hints, discoveryfresh, travel")
         print("1/artifact     derivedtravel  [--quick skips]")
-        print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
+        print("N node/small mapgeom Python/JavaScript parity, pack-convert fixture parity,")
+        print("               lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
         print("2 jsdom/small builder, overlay, hide-io, ghost-alpha, author-guards, script-escape,")
@@ -175,11 +176,14 @@ def main():
     # Dependency-free twin gates run before the npm-module gate. Fixture scale is cheap and
     # always runs when Node exists; real-pack scale follows the other 18 MB --quick gates.
     if have_node:
+        step("mapgeom Python/JavaScript parity",
+             ["node", "mapgeom.test.js", sys.executable], cwd=JS)
         step("pack converter twin: fixture-scale agreement",
              ["node", "pack-convert.test.js", sys.executable], cwd=JS)
         step("lift() twin agrees with pack_colors.lift",
              ["node", "lift.test.js", sys.executable], cwd=JS)
     else:
+        results.append(("mapgeom Python/JavaScript parity", "SKIP"))
         results.append(("pack converter twin: fixture-scale agreement", "SKIP"))
         results.append(("lift() twin agrees with pack_colors.lift", "SKIP"))
 
