@@ -3,15 +3,19 @@
 
 Usage:
     python verify.py datacmp  A.html B.html   # injected-data equivalence + order
+    python verify.py discoveryappend OFF ON   # discovery-on is a non-empty append
     python verify.py numcmp   A.html B.html   # equivalence after numeric type coercion
     python verify.py jsnum    ARTIFACT.html   # JS-canonical numeric spellings
     python verify.py lf       ARTIFACT.html   # no CR bytes in an LF artifact
     python verify.py strip    USER.html       # strip-completeness greps
     python verify.py linediff A.html B.html   # show changed lines (for small deltas)
     python verify.py hints                    # ref-hint collision check over data/
+    python verify.py discoveryfresh           # discovered source bytes + fingerprints
+    python verify.py derivedtravel ARTIFACT    # catalog edges appended to injected travel
     python verify.py travel                   # authored travel graph + expansion declaration
     python verify.py xpacs                    # just the expansion half (run.py folds it in)
 """
+import hashlib
 import json
 import math
 import os
@@ -114,6 +118,126 @@ def cmd_datacmp(a, b):
             print("zone order DIFF in %s" % c)
             bad += 1
     print("zone draw order OK" if not bad else "")
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_discoveryappend(off_path, on_path):
+    """Require discovery-on ALL/DETAIL to be the manifest-declared append to discovery-off."""
+    off, on = extract(off_path), extract(on_path)
+    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+              "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    bad = 0
+    appended = []
+    for cont, off_entry in off["ALL"].items():
+        on_entry = on["ALL"].get(cont)
+        if on_entry is None:
+            print("FAIL  discovery-on lost continent %s" % cont)
+            bad += 1
+            continue
+        off_other = {k: v for k, v in off_entry.items() if k != "zones"}
+        on_other = {k: v for k, v in on_entry.items() if k != "zones"}
+        if off_other != on_other:
+            print("FAIL  discovery changed non-zone ALL fields in %s" % cont)
+            bad += 1
+        off_keys = list(off_entry["zones"])
+        on_keys = list(on_entry["zones"])
+        expected = [r["key"] for r in
+                    manifest.get("continents", {}).get(cont, {}).get("discovered", [])]
+        observed = on_keys[len(off_keys):]
+        if on_keys[:len(off_keys)] != off_keys or observed != expected:
+            print("FAIL  discovery keys are not the manifest append in %s: %r" %
+                  (cont, observed))
+            bad += 1
+        for key in off_keys:
+            if off_entry["zones"][key] != on_entry["zones"].get(key):
+                print("FAIL  discovery changed pre-existing zone %s/%s" % (cont, key))
+                bad += 1
+        appended.extend((cont, key) for key in observed)
+
+        off_detail = off["DETAIL"].get(cont, {"palette": [], "zones": {}})
+        on_detail = on["DETAIL"].get(cont, {"palette": [], "zones": {}})
+        tail = manifest.get("continents", {}).get(cont, {}).get("discoveredPalette", [])
+        if on_detail["palette"] != off_detail["palette"] + tail:
+            print("FAIL  discovery palette is not the manifest tail in %s" % cont)
+            bad += 1
+        off_dkeys = list(off_detail["zones"])
+        on_dkeys = list(on_detail["zones"])
+        if on_dkeys[:len(off_dkeys)] != off_dkeys or on_dkeys[len(off_dkeys):] != expected:
+            print("FAIL  discovered detail keys are not appended in %s" % cont)
+            bad += 1
+        for key in off_dkeys:
+            if off_detail["zones"][key] != on_detail["zones"].get(key):
+                print("FAIL  discovery changed pre-existing detail %s/%s" % (cont, key))
+                bad += 1
+    if not appended:
+        print("FAIL  discovery-on reference is inert: no appended zone keys")
+        bad += 1
+    else:
+        print("compared %d appended discovered zone(s): %s" %
+              (len(appended), ", ".join("%s/%s" % pair for pair in appended)))
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_derivedtravel(path):
+    """Require the artifact's travel tail to be the non-empty manifest catalog append."""
+    data = extract(path)
+    travel = data["TRAVEL"]
+    with open(os.path.join(REPO, "data", "travel.json"), encoding="utf-8") as f:
+        authored = json.load(f)
+    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+              encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    bad = 0
+    schema = (isinstance(travel, dict)
+              and isinstance(travel.get("groups"), dict)
+              and isinstance(travel.get("capabilities"), list)
+              and isinstance(travel.get("walk"), list)
+              and isinstance(travel.get("routes"), list))
+    if not schema:
+        print("FAIL  injected travel graph is schema-incomplete")
+        bad += 1
+
+    authored_walk = authored.get("walk", [])
+    walk = travel.get("walk", []) if isinstance(travel, dict) else []
+    if walk[:len(authored_walk)] != authored_walk:
+        print("FAIL  injected travel graph changed or interleaved the authored walk prefix")
+        bad += 1
+    derived = walk[len(authored_walk):]
+
+    expected = []
+    records = sorted(
+        (record for entry in manifest.get("continents", {}).values()
+         for record in entry.get("discovered", [])),
+        key=lambda record: record["key"])
+    for record in records:
+        for edge in sorted(record.get("edges", []), key=lambda edge: edge["z"]):
+            expected.append({"z": [record["key"], edge["z"]], "cost": edge["cost"]})
+    if derived != expected:
+        print("FAIL  injected derived walk tail does not equal the ordered catalog edges")
+        bad += 1
+
+    zones = {key for cont in data["ALL"].values() for key in cont.get("zones", {})}
+    authored_pairs = {tuple(sorted(edge["z"])) for edge in authored_walk}
+    for edge in derived:
+        pair = tuple(edge.get("z", []))
+        if len(pair) != 2 or any(key not in zones for key in pair):
+            print("FAIL  derived walk edge names a zone absent from ALL: %r" % (edge,))
+            bad += 1
+            continue
+        if tuple(sorted(pair)) in authored_pairs:
+            print("FAIL  derived walk edge duplicates an authored pair: %s|%s" % pair)
+            bad += 1
+    if not derived:
+        print("FAIL  discovery-on artifact has no derived walk edges")
+        bad += 1
+    else:
+        print("compared %d derived walk edge(s): %s" %
+              (len(derived), ", ".join("%s>%s" % tuple(edge["z"]) for edge in derived)))
+
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 
@@ -282,6 +406,69 @@ def cmd_hints():
                                          "" if u == len(wh) else "  <-- COLLISION"))
     if u != len(wh):
         bad += 1
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def cmd_discoveryfresh(data=None):
+    """Recompute every discovered input's metadata and per-continent content digest."""
+    data = data or os.path.join(REPO, "data")
+    mpath = os.path.join(data, "_generated", "manifest.json")
+    try:
+        with open(mpath, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError) as exc:
+        print("FAIL  cannot read discovery manifest: %s" % exc)
+        print("\nRESULT: FAIL (1)")
+        return 1
+
+    bad = compared = catalogs = 0
+    for cont, entry in manifest.get("continents", {}).items():
+        sources = entry.get("discoveredSources")
+        if sources is None:
+            if entry.get("discovered"):
+                print("FAIL  %s has discovered entries but no discoveredSources" % cont)
+                bad += 1
+            continue
+        catalogs += 1
+        pairs = []
+        for name, expected in sorted(sources.items()):
+            tag = expected.get("from")
+            srcdir = manifest.get("pack") if tag == "pack" else manifest.get("root")
+            if tag not in ("pack", "root") or not srcdir:
+                print("FAIL  %s/%s has unusable source tag %r" % (cont, name, tag))
+                bad += 1
+                continue
+            path = os.path.join(srcdir, name)
+            try:
+                size = os.path.getsize(path)
+                h = hashlib.sha256()
+                with open(path, "rb") as f:
+                    for chunk in iter(lambda: f.read(65536), b""):
+                        h.update(chunk)
+                digest = h.hexdigest()
+            except OSError as exc:
+                print("FAIL  cannot read %s/%s: %s" % (cont, name, exc))
+                bad += 1
+                continue
+            compared += 1
+            pairs.append((name, digest))
+            if size != expected.get("bytes") or digest != expected.get("sha256"):
+                print("FAIL  discovered source changed: %s/%s" % (cont, name))
+                bad += 1
+        digest = hashlib.sha256()
+        for name, source_hash in pairs:
+            digest.update(("%s %s\n" % (name, source_hash)).encode("utf-8"))
+        if entry.get("discoveredSourceCount") != len(pairs):
+            print("FAIL  %s discoveredSourceCount: %r vs recomputed %d"
+                  % (cont, entry.get("discoveredSourceCount"), len(pairs)))
+            bad += 1
+        if entry.get("discoveredSourceFingerprint") != digest.hexdigest():
+            print("FAIL  %s discoveredSourceFingerprint differs from disk" % cont)
+            bad += 1
+
+    print("compared %d discovered source file(s) across %d continent catalog(s)"
+          % (compared, catalogs))
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

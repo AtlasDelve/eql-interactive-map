@@ -110,6 +110,18 @@ def load(path):
             raise SystemExit("%s: %s" % (path, e)) from None
 
 
+def load_manifest(data):
+    """Read manifest metadata without applying the injected-data number dialect.
+
+    Catalog ``off`` values are audit metadata and may legitimately be smaller than the lower
+    bound enforced for numbers that reach JavaScript.  Geometry, detail, and palette files keep
+    using ``load()`` above; widening this reader would disarm their canonical-number guard.
+    """
+    path = os.path.join(data, import_pack.CACHE_DIRNAME, "manifest.json")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def read_version(path=VERSION_FILE):
     """Read the one-line, raw-substitution-safe release version."""
     with open(path, "r", encoding="ascii") as f:
@@ -121,12 +133,16 @@ def read_version(path=VERSION_FILE):
     return version
 
 
-def cred_text(data):
+def cred_text(data, discover=True):
     """Describe the selected pack and any zones supplied by the game's own maps."""
-    manifest = load(os.path.join(data, import_pack.CACHE_DIRNAME, "manifest.json"))
+    manifest = load_manifest(data)
     pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
     root_count = sum(len(c.get("rootZones", []))
                      for c in manifest.get("continents", {}).values())
+    if discover:
+        root_count += sum(
+            1 for entry in manifest.get("continents", {}).values()
+            for record in entry.get("discovered", []) if record.get("from") == "root")
     # Canonical format for the browser twin, including separators:
     #   root: EQL · selected maps folder
     #   pack: EQL · <name> map data[ · N zone(s) from the game's own maps]
@@ -271,7 +287,7 @@ def ensure_cache(data, pack):
                          "Re-run: python scripts/import_pack.py --pack %s" % (why, pack))
 
 
-def build(data=None):
+def build(data=None, discover=True):
     data = data or DATA
     world = load(os.path.join(data, "world.json"))
     META = world["meta"]
@@ -282,13 +298,14 @@ def build(data=None):
     # than hardcoded in the template; nothing at runtime mutates them.
     XPACS = world.get("xpacs", {})
 
-    # Travel graph: authored, never derived here. scripts/derive_travel_graph.py bootstraps and
-    # audits it; deriving at build time would let a cosmetic zone nudge change a route silently.
+    # The authored graph is the stable prefix.  Catalog edges already carry their conversion-time
+    # costs; build only appends those records and never derives geometry or cost here.
     travel_path = os.path.join(data, "travel.json")
     TRAVEL = load(travel_path) if os.path.exists(travel_path) else {}
 
     ALL, DETAIL, HUBS = {}, {}, {}
     skips = import_pack.cache_skips(data)
+    discoveries = import_pack.cache_discoveries(data) if discover else {}
     for cont in order:
         base = cont_dir(cont, data)
         gen = cont_dir(cont, os.path.join(data, import_pack.CACHE_DIRNAME))
@@ -309,6 +326,11 @@ def build(data=None):
             zones[zk] = import_pack.compose_zone(
                 azones[zk], load(os.path.join(gen, "geometry", zk + ".json")),
                 None if is_identity(xf) else xf)
+        catalog = discoveries.get(cont, {"zones": [], "palette": []})
+        for record in catalog["zones"]:
+            az = {field: record[field] for field in ("name", "color", "cx", "cy")}
+            zones[record["key"]] = import_pack.compose_zone(
+                az, load(os.path.join(gen, "geometry", record["key"] + ".json")), None)
 
         # bbox is always the stored continent bbox; the viewer computes a live
         # fit-bbox from transformed segs when a continent has any non-identity xf.
@@ -330,19 +352,45 @@ def build(data=None):
 
         # The palette is pack-derived (indices are assigned during conversion), so it lives in
         # the cache rather than the authored layer.
-        palette = load(os.path.join(gen, "palette.json"))
+        palette = load(os.path.join(gen, "palette.json")) + catalog["palette"]
         dz = {}
         for zk in meta.get("detailZones", []):
             if zk in skipped:
                 continue
             dz[zk] = import_pack.compose_detail(
                 azones[zk], load(os.path.join(gen, "detail", zk + ".json")), palette)
+        for record in catalog["zones"]:
+            az = {field: record[field] for field in ("name", "color", "cx", "cy")}
+            dz[record["key"]] = import_pack.compose_detail(
+                az, load(os.path.join(gen, "detail", record["key"] + ".json")), palette)
         if palette or dz:
             DETAIL[cont] = {"palette": palette, "zones": dz}
 
         hubs = layout.get("hubs", [])
         if hubs and zones:
             HUBS[cont] = hubs
+
+    if TRAVEL:
+        # Copy before appending so the loaded authored graph remains a distinct value.  A user
+        # overlay cannot affect these costs; reconverting against another pack can move only this
+        # catalog-derived tail.
+        TRAVEL = dict(TRAVEL)
+        authored_pairs = {
+            tuple(sorted(edge["z"])) for edge in TRAVEL.get("walk", [])
+        }
+        derived = []
+        records = sorted(
+            (record for catalog in discoveries.values() for record in catalog["zones"]),
+            key=lambda record: record["key"])
+        for record in records:
+            for edge in sorted(record["edges"], key=lambda edge: edge["z"]):
+                pair = tuple(sorted((record["key"], edge["z"])))
+                # Fence 1 makes this unreachable today.  Keep it as an assertion so a future
+                # discovery-rule change cannot silently duplicate an authored edge.
+                assert pair not in authored_pairs, (
+                    "discovered walk edge duplicates authored pair: %s|%s" % pair)
+                derived.append({"z": [record["key"], edge["z"]], "cost": edge["cost"]})
+        TRAVEL["walk"] = list(TRAVEL.get("walk", [])) + derived
 
     return ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS
 
@@ -382,6 +430,8 @@ def main():
     ap.add_argument("--pack", default=None,
                     help="map-pack directory (e.g. <game install>/maps/Brewall). Remembered "
                          "in <data>/" + PACK_CONFIG + ", so later builds need no flag.")
+    ap.add_argument("--no-discover", action="store_false", dest="discover", default=True,
+                    help="ignore the generated discovery catalog while composing this build")
     args = ap.parse_args()
     out = args.out or DEFAULT_OUT[args.edition]
     data_root = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -393,8 +443,9 @@ def main():
         template = f.read()
 
     template = strip_regions(template, args.edition)     # strip before injecting
-    data = build(data_root)
-    html = inject(template, *data, credit=cred_text(data_root), version=read_version())
+    data = build(data_root, discover=args.discover)
+    html = inject(template, *data, credit=cred_text(data_root, discover=args.discover),
+                  version=read_version())
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8", newline="") as f:

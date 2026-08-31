@@ -45,6 +45,7 @@ BUILD_BUILDER = os.path.join(REPO, "scripts", "build_builder.py")
 PACKFX_DATA = os.path.join(HERE, "packfx", "data")
 
 USER = os.path.join(OUT, "user.html")
+USER_ND = os.path.join(OUT, "user-no-discover.html")
 AUTHOR = os.path.join(OUT, "author.html")
 BUILDER = os.path.join(OUT, "builder.html")
 BUILDER_FX = os.path.join(OUT, "builder-fx.html")
@@ -68,8 +69,12 @@ def step(name, argv, cwd=None, optional=False):
     return True
 
 
-def build(edition, out):
-    subprocess.run([sys.executable, BUILD, "--edition", edition, "--out", out],
+def build(edition, out, discover=True):
+    argv = [sys.executable, BUILD, "--edition", edition, "--out", out]
+    if not discover:
+        # Plan 3 removes this parity-only --no-discover once the browser converter consumes catalogs.
+        argv.append("--no-discover")
+    subprocess.run(argv,
                    check=True, stdout=subprocess.DEVNULL)
 
 
@@ -116,12 +121,13 @@ def main():
     if args.list:
         print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
         print("               strip, lf,")
-        print("               datacmp(user,author), jsnum x2, hints, travel")
+        print("               datacmp(user,author), discoveryappend, jsnum x2, hints, discoveryfresh, travel")
+        print("1/artifact     derivedtravel  [--quick skips]")
         print("N node/small pack-convert fixture parity, lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
         print("2 jsdom/small builder, overlay, hide-io, ghost-alpha, author-guards, script-escape,")
-        print("               travel, world-anchor")
+        print("               travel, discovered-runtime, world-anchor")
         print("3 jsdom/full  smoke x2, travel-full, untouched, perf"
               + ("  [--quick skips]" if True else ""))
         print("4 browser     browser.test.js" + ("  [--no-browser skips]" if True else ""))
@@ -131,6 +137,7 @@ def main():
     print("building both editions and both browser builders into " + os.path.relpath(OUT, REPO))
     build("user", USER)
     build("author", AUTHOR)
+    build("user", USER_ND, discover=False)
     build_builder(BUILDER)
     build_builder(BUILDER_FX, PACKFX_DATA)
 
@@ -150,12 +157,20 @@ def main():
     # against that.
     step("injected data identical across editions",
          [sys.executable, "verify.py", "datacmp", USER, AUTHOR])
+    step("discovery-on is the manifest-declared non-empty append",
+         [sys.executable, "verify.py", "discoveryappend", USER_ND, USER])
     step("JS-canonical numbers (user edition)",
          [sys.executable, "verify.py", "jsnum", USER])
     step("JS-canonical numbers (author edition)",
          [sys.executable, "verify.py", "jsnum", AUTHOR])
     step("ref-hint collision check over data/", [sys.executable, "verify.py", "hints"])
+    step("discovered input freshness", [sys.executable, "verify.py", "discoveryfresh"])
     step("travel graph integrity over data/", [sys.executable, "verify.py", "travel"])
+    if args.quick:
+        results.append(("catalog-derived travel edges in the artifact", "SKIP"))
+    else:
+        step("catalog-derived travel edges in the artifact",
+             [sys.executable, "verify.py", "derivedtravel", USER])
 
     # Dependency-free twin gates run before the npm-module gate. Fixture scale is cheap and
     # always runs when Node exists; real-pack scale follows the other 18 MB --quick gates.
@@ -172,7 +187,7 @@ def main():
         results.append(("pack converter twin: real pack agreement", "SKIP"))
     elif have_node:
         step("pack converter twin: real pack agreement",
-             ["node", "pack-convert-full.test.js", sys.executable, USER], cwd=JS)
+             ["node", "pack-convert-full.test.js", sys.executable, USER_ND], cwd=JS)
     else:
         results.append(("pack converter twin: real pack agreement", "SKIP"))
 
@@ -199,7 +214,7 @@ def main():
          ["node", "builder.test.js", sys.executable], cwd=JS)
     for f in ("overlay.test.js", "hide-io.test.js", "ghost-alpha.test.js",
               "author-guards.test.js", "script-escape.test.js", "travel.test.js",
-              "world-anchor.test.js"):
+              "discovered-runtime.test.js", "world-anchor.test.js"):
         step("jsdom fixtures: " + f, ["node", f], cwd=JS)
 
     # ---- 3. jsdom, the real artifact -------------------------------------

@@ -8,6 +8,7 @@ a UTF-8 BOM, a Latin-1 label - which a generated fixture would round-trip away.
 Every expectation below is written out by hand. The point is that a converter change which
 alters output has to change a number here too, so the diff says what moved.
 """
+import copy
 import json
 import io
 import os
@@ -23,6 +24,7 @@ import import_pack as IP                                       # noqa: E402
 import pack_colors                                             # noqa: E402
 import build as BUILD                                          # noqa: E402
 import derive_travel_graph as DTG                              # noqa: E402
+import verify as VERIFY                                        # noqa: E402
 
 FX = os.path.join(HERE, "packfx")
 PACK = os.path.join(FX, "pack")
@@ -93,6 +95,48 @@ tmp = tempfile.mkdtemp(prefix="packfx-")
 try:
     data = os.path.join(tmp, "data")
     shutil.copytree(os.path.join(FX, "data"), data)
+
+    # -- pass-A discovery index --------------------------------------
+    # The viewer builds ZIDX from DETAIL, so conversion must use detailZones order and omit
+    # roster entries whose selected source is absent.  Pin the first-wins collision too: a
+    # plausible index can still resolve the wrong zone if either ordering rule drifts.
+    with open(os.path.join(data, "world.json"), encoding="utf-8") as f:
+        iworld = json.load(f)
+    ientries = IP.discovery_index_entries(PACK, None, data, iworld)
+    check("discovery index follows detailZones order",
+          ientries,
+          [("Testland", "beta", "Beta"),
+           ("Testland", "alpha", "Alpha"),
+           ("Testland", "gamma", "Gamma")])
+    check("discovery index resolves a known authored name",
+          IP.mapgeom.resolve_zone(IP.mapgeom.zidx_from(ientries), "Beta"),
+          ("Testland", "beta"))
+
+    index_cpath = os.path.join(data, "continents", "Testland", "continent.json")
+    with open(index_cpath, encoding="utf-8") as f:
+        index_meta = json.load(f)
+    original_index_meta = json.loads(json.dumps(index_meta))
+    index_meta["zoneOrder"].append("epsilon")
+    index_meta["detailZones"].append("epsilon")
+    index_meta["zones"]["epsilon"] = {
+        "name": "Epsilon", "color": "#5fb95f", "cx": 0, "cy": 0, "off": [0, 0]}
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(index_meta, f)
+    check("discovery index omits a detail zone whose source is missing",
+          [e[1] for e in IP.discovery_index_entries(PACK, None, data, iworld)],
+          ["beta", "alpha", "gamma"])
+
+    collision_meta = json.loads(json.dumps(original_index_meta))
+    collision_meta["zones"]["alpha"]["name"] = "Beta"
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(collision_meta, f)
+    collision_entries = IP.discovery_index_entries(PACK, None, data, iworld)
+    check("discovery index collision is first-wins in detailZones order",
+          IP.mapgeom.resolve_zone(IP.mapgeom.zidx_from(collision_entries), "Beta"),
+          ("Testland", "beta"))
+    with open(index_cpath, "w", encoding="utf-8") as f:
+        json.dump(original_index_meta, f)
+
     manifest = IP.convert(PACK, data, quiet=True)
     gen = os.path.join(data, IP.CACHE_DIRNAME, "continents", "Testland")
 
@@ -449,6 +493,189 @@ try:
         with open(os.path.join(lgen, *parts), encoding="utf-8") as f:
             return json.load(f)
 
+    # -- pass-B discovery --------------------------------------------
+    with open(os.path.join(ldata, "world.json"), encoding="utf-8") as f:
+        lworld = json.load(f)
+    lentries = IP.discovery_index_entries(LAYERED, ROOTA, ldata, lworld)
+    lindex = IP.mapgeom.zidx_from(lentries)
+    lroster = ["alpha", "beta", "gamma"]
+    detected, drejected = IP.detect_discoveries(LAYERED, ROOTA, lroster, lindex)
+    check("detection accepts only partial key/from records, sorted",
+          detected,
+          {"Testland": [{"key": "ambi", "from": "root"},
+                         {"key": "excluded", "from": "root"},
+                         {"key": "kappa", "from": "root"},
+                         {"key": "multi", "from": "root"},
+                         {"key": "theta", "from": "root"}]})
+    by_key = {record["key"]: record for record in drejected}
+    check("series members are rejected with their common stem",
+          [(key, by_key[key]["reason"], by_key[key]["detail"])
+           for key in ("sraa", "srab", "srac")],
+          [("sraa", "series", "sra"), ("srab", "series", "sra"),
+           ("srac", "series", "sra")])
+    check("a derived-key candidate names its authored parent",
+          by_key["alphab"], {"key": "alphab", "reason": "derived", "detail": "alpha"})
+    check("grammar alone rejects a derived key that does not exit its parent",
+          by_key["betab"], {"key": "betab", "reason": "derived", "detail": "beta"})
+    betab_records, _ = IP.parse_zone(ROOTA, "betab")
+    betab_targets = sorted({target
+                            for layer, kind, record, _name, _lineno in betab_records
+                            if layer == 1 and kind == "P"
+                            for target in IP.mapgeom.transition_targets(
+                                lindex, "betab", record[3])})
+    check("the removed parent-exit conjunct would flip betab",
+          (IP.mapgeom.discovery_derived_parent("betab", lroster), betab_targets,
+           "beta" in betab_targets),
+          ("beta", ["gamma"], False))
+    check("baseless rejection precedes marker resolution",
+          [(key, by_key[key]["reason"]) for key in ("eta", "zeta")],
+          [("eta", "baseless"), ("zeta", "baseless")])
+    check("the bare Beta fixture label is still rejected by the transition prefix gate",
+          by_key["delta"]["reason"], "unresolved")
+
+    ambiguous_index = dict(lindex)
+    ambiguous_index[IP.mapgeom.znorm("Other")] = ("Elsewhere", "other")
+    _accepted_amb, rejected_amb = IP.detect_discoveries(
+        LAYERED, ROOTA, lroster + ["other"], ambiguous_index)
+    check("resolved neighbours spanning continents are ambiguous",
+          {r["key"]: r for r in rejected_amb}["ambi"]["reason"], "ambiguous")
+
+    saved_exclude = IP.mapgeom.DISCOVERY_EXCLUDE
+    try:
+        IP.mapgeom.DISCOVERY_EXCLUDE = {"excluded"}
+        _accepted_exc, rejected_exc = IP.detect_discoveries(
+            LAYERED, ROOTA, lroster, lindex)
+    finally:
+        IP.mapgeom.DISCOVERY_EXCLUDE = saved_exclude
+    check("the authored residue table emits its closed rejection record",
+          {r["key"]: r for r in rejected_exc}["excluded"],
+          {"key": "excluded", "reason": "excluded", "detail": "DISCOVERY_EXCLUDE"})
+    all_reasons = {r["reason"] for r in drejected + rejected_amb + rejected_exc}
+    check("fixtures exercise the complete rejection reason schema",
+          all_reasons,
+          {"ambiguous", "unresolved", "series", "derived", "excluded", "baseless"})
+
+    empty_accepted, empty_rejected = IP.detect_discoveries(
+        PACK, None, ["alpha", "beta", "gamma"], IP.mapgeom.zidx_from(ientries))
+    check("a source with no unrostered maps has paired empty detection results",
+          (empty_accepted, empty_rejected), ({}, []))
+
+    check("the manifest records discovery mode per continent", lman["continents"]["Testland"]["discovery"], True)
+    expected_discovered = [
+        {"key": "ambi", "name": "ambi", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 4, "cy": 4, "off": [4, 4], "anchor": "alpha", "from": "root",
+         "edges": [{"z": "alpha", "cost": 0.1, "named": "candidate"}]},
+        {"key": "excluded", "name": "excluded", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 251, "cy": 7, "off": [1, 7], "anchor": "beta", "from": "root",
+         "edges": [{"z": "beta", "cost": 1, "named": "candidate"}]},
+        {"key": "kappa", "name": "Kappa Expedition", "nameFrom": "marker",
+         "color": "#8f78d4", "cx": 5, "cy": 5, "off": [2.0, 2.0],
+         "anchor": "gamma", "from": "root",
+         "edges": [{"z": "gamma", "cost": 0.1, "named": "both"}]},
+        {"key": "multi", "name": "multi", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 4, "cy": 4, "off": [3, 3], "anchor": "alpha", "from": "root",
+         "edges": [{"z": "alpha", "cost": 0.1, "named": "candidate"},
+                   {"z": "gamma", "cost": 0.1, "named": "candidate"}]},
+        {"key": "theta", "name": "theta", "nameFrom": "key", "color": "#8f78d4",
+         "cx": 38, "cy": 7, "off": [1, 7], "anchor": "beta", "from": "root",
+         "edges": [{"z": "beta", "cost": 0.2, "named": "candidate"}]},
+    ]
+    check("the manifest stores the complete discovered catalog in sorted key order",
+          lman["continents"]["Testland"]["discovered"], expected_discovered)
+    check("the manifest stores structured top-level rejections",
+          lman["discoveryRejected"], drejected)
+    discovered_keys = [record["key"] for record in expected_discovered]
+    check("every accepted candidate has geometry and detail cache files",
+          [(key,
+            os.path.exists(os.path.join(lgen, "geometry", key + ".json")),
+            os.path.exists(os.path.join(lgen, "detail", key + ".json")))
+           for key in discovered_keys],
+          [(key, True, True) for key in discovered_keys])
+    check("the marker and key naming paths both bite",
+          [(record["key"], record["name"], record["nameFrom"])
+           for record in expected_discovered if record["key"] in ("kappa", "theta")],
+          [("kappa", "Kappa Expedition", "marker"), ("theta", "theta", "key")])
+    check("multi-neighbour placement chooses the lexicographically first anchor",
+          expected_discovered[3]["anchor"], "alpha")
+    integral_cost = next(record for record in
+                         lman["continents"]["Testland"]["discovered"]
+                         if record["key"] == "excluded")["edges"][0]["cost"]
+    check("an integral normalized cost is emitted as an integer",
+          (integral_cost, type(integral_cost)), (1, int))
+
+    # Make theta's real doorway reach exactly 37.5 units: the candidate contributes 37 and
+    # beta's temporary half-unit centroid contributes 0.5.  This is a committed pipeline
+    # candidate, not a direct call to the rounding helper, so the cost ordering and composition
+    # seam participate in the control.
+    lcpath = os.path.join(ldata, "continents", "Testland", "continent.json")
+    with open(lcpath, encoding="utf-8") as f:
+        tie_meta = json.load(f)
+    original_meta = copy.deepcopy(tie_meta)
+    tie_meta["zones"]["beta"]["cx"] = 1.5
+    tie_meta["zones"]["beta"]["cy"] = 7
+    with open(lcpath, "w", encoding="utf-8") as f:
+        json.dump(tie_meta, f)
+    seen_costs = []
+    original_normalise = IP._normalise_cost
+    try:
+        def record_normalise(value):
+            seen_costs.append(value)
+            return original_normalise(value)
+        IP._normalise_cost = record_normalise
+        tie_manifest = IP.convert(LAYERED, ldata, quiet=True)
+    finally:
+        IP._normalise_cost = original_normalise
+        with open(lcpath, "w", encoding="utf-8") as f:
+            json.dump(original_meta, f)
+    theta_tie = next(record for record in
+                     tie_manifest["continents"]["Testland"]["discovered"]
+                     if record["key"] == "theta")
+    check("the one-decimal tie candidate reaches cost_between through the real pipeline",
+          seen_costs[-1], 0.15)
+    check("the half-to-even multiply/round/divide contract resolves the tie",
+          (theta_tie["edges"][0]["cost"], round(seen_costs[-1], 1)),
+          (0.2, 0.1))
+    lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the ordinary authored fixture
+
+    cached_discovery = IP.cache_discoveries(ldata)["Testland"]
+    check("the plain manifest helper returns the catalog and ordered palette tail",
+          (cached_discovery["zones"], cached_discovery["palette"]),
+          (expected_discovered, ["#cd9a4d", "#5fcd16"]))
+    built_on = BUILD.build(ldata, discover=True)
+    built_off = BUILD.build(ldata, discover=False)
+    on_all, on_detail = built_on[0]["Testland"], built_on[2]["Testland"]
+    off_all, off_detail = built_off[0]["Testland"], built_off[2]["Testland"]
+    check("discovery-on appends catalog keys after the authored zone order",
+          list(on_all["zones"]), ["alpha", "beta", "gamma"] + discovered_keys)
+    check("discovery-off leaves the authored zone order byte-for-byte",
+          list(off_all["zones"]), ["alpha", "beta", "gamma"])
+    check("discovery-on injects the same extended palette used for detail composition",
+          (on_detail["palette"], on_detail["zones"]["kappa"]["segs"][0][4],
+           on_detail["zones"]["kappa"]["labels"][0][2]),
+          (["#08ce08", "#ffffff", "#ff4545", "#4f94cd", "#cd9a4d", "#5fcd16"],
+           4, 5))
+    check("discovery-off injects the unextended palette and no discovered detail",
+          (off_detail["palette"], [key for key in discovered_keys
+                                   if key in off_detail["zones"]]),
+          (["#08ce08", "#ffffff", "#ff4545", "#4f94cd"], []))
+    check("placed and unplaced remain authored bookkeeping in both modes",
+          (on_all["placed"], on_all["unplaced"], off_all["placed"], off_all["unplaced"]),
+          (["alpha", "beta", "gamma"], [], ["alpha", "beta", "gamma"], []))
+    check("a discovery catalog does not manufacture a schema-incomplete travel graph",
+          built_on[6], {})
+    check("the credit counts discovered root geometry only when enabled",
+          (BUILD.cred_text(ldata), BUILD.cred_text(ldata, discover=False)),
+          ("EQL · Layered map data · 6 zones from the game's own maps",
+           "EQL · Layered map data · 1 zone from the game's own maps"))
+
+    no_discovery = IP.convert(LAYERED, ldata, quiet=True, discover=False)
+    check("discovery-off records false per refreshed continent",
+          no_discovery["continents"]["Testland"]["discovery"], False)
+    check("discovery-off writes neither accepted nor rejected catalog",
+          ("discovered" in no_discovery["continents"]["Testland"],
+           "discoveryRejected" in no_discovery), (False, False))
+    lman = IP.convert(LAYERED, ldata, quiet=True)  # restore the discovery-on cache below
+
     # The anchor for the whole section: confirmed NON-empty, which is what makes the paired
     # empty-assertions on the flat pack at the end of this block mean anything.
     check("the manifest records the derived base layer", lman["root"], ROOTA)
@@ -497,7 +724,122 @@ try:
            "#ffffff",     # 1  (255,255,255) beta _1
            "#ff4545",     # 2  (255,0,0)     alpha base and alpha _1
            "#4f94cd"])    # 3  (70,130,180)  gamma base   <- from the ROOT layer
-    check("...and no root colour is unknown to the shipped table", lman["unseenColors"], [])
+    check("discovered colours never enter the shared palette",
+          lload("palette.json"), ["#08ce08", "#ffffff", "#ff4545", "#4f94cd"])
+    check("the discovered palette tail is a pinned ordered literal",
+          lman["continents"]["Testland"]["discoveredPalette"],
+          ["#cd9a4d", "#5fcd16"])
+    check("only the fixture's two discovered colours are unknown to the shipped table",
+          lman["unseenColors"], [(85, 184, 20), (160, 120, 60)])
+    kappa_detail = lload("detail", "kappa.json")
+    check("discovered detail indices resolve only against palette plus its tail",
+          ([seg[4] for seg in kappa_detail["segs"]],
+           [label[2] for label in kappa_detail["labels"]],
+           lman["continents"]["Testland"]["paletteSize"]),
+          ([4], [5], 4))
+    check("discovered provenance lists only accepted candidate inputs",
+          sorted(lman["continents"]["Testland"]["discoveredSources"]),
+          [key + suffix for key in discovered_keys for suffix in (".txt", "_1.txt")])
+    check("discovered provenance count and fingerprint are pinned",
+          (lman["continents"]["Testland"]["discoveredSourceCount"],
+           lman["continents"]["Testland"]["discoveredSourceFingerprint"]),
+          (10, "4a396c88816e5e22699b0ffba17df76872a89e4ecd46096c5c67c2406944829f"))
+    check("the freshness command compares the fixture instead of skipping",
+          VERIFY.cmd_discoveryfresh(ldata), 0)
+
+    manifest_path = os.path.join(ldata, IP.CACHE_DIRNAME, "manifest.json")
+
+    def catalog_rejects(label, mutate, needle):
+        broken = copy.deepcopy(lman)
+        mutate(broken)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(broken, f, sort_keys=True)
+        ok, why = IP.validate_cache(ldata)
+        check(label, (ok, needle in why), (False, True))
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(lman, f, sort_keys=True)
+
+    def first_record(manifest):
+        return manifest["continents"]["Testland"]["discovered"][0]
+
+    catalog_rejects("catalog validation: discovered must be a list",
+                    lambda m: m["continents"]["Testland"].__setitem__("discovered", {}),
+                    "not a list")
+    catalog_rejects("catalog validation: duplicate keys",
+                    lambda m: m["continents"]["Testland"]["discovered"].append(
+                        copy.deepcopy(first_record(m))),
+                    "duplicate keys")
+    catalog_rejects("catalog validation: keys are case-folded",
+                    lambda m: first_record(m).__setitem__("key", "Ambi"),
+                    "not case-folded")
+    catalog_rejects("catalog validation: keys do not collide with any authored roster",
+                    lambda m: first_record(m).__setitem__("key", "alpha"),
+                    "authored roster")
+    catalog_rejects("catalog validation: required fields cannot be missing",
+                    lambda m: first_record(m).pop("color"),
+                    "missing or invalid color")
+    catalog_rejects("catalog validation: required fields have their declared types",
+                    lambda m: first_record(m).__setitem__("cx", 1.5),
+                    "missing or invalid cx")
+
+    for kind in ("geometry", "detail"):
+        path = os.path.join(ldata, IP.CACHE_DIRNAME, "continents", "Testland",
+                            kind, "ambi.json")
+        held = path + ".held"
+        os.replace(path, held)
+        try:
+            ok, why = IP.validate_cache(ldata)
+            check("catalog validation: discovered %s file must exist" % kind,
+                  (ok, "missing discovered %s" % kind in why), (False, True))
+        finally:
+            os.replace(held, path)
+
+    catalog_rejects("catalog validation: nameFrom enum",
+                    lambda m: first_record(m).__setitem__("nameFrom", "caption"),
+                    "nameFrom")
+    catalog_rejects("catalog validation: source-layer enum",
+                    lambda m: first_record(m).__setitem__("from", "cache"),
+                    "source")
+    catalog_rejects("catalog validation: edges are non-empty",
+                    lambda m: first_record(m).__setitem__("edges", []),
+                    "edges")
+    catalog_rejects("catalog validation: edges stay within the continent",
+                    lambda m: first_record(m)["edges"][0].__setitem__("z", "elsewhere"),
+                    "leaves continent")
+    catalog_rejects("catalog validation: edge neighbours are unique",
+                    lambda m: first_record(m)["edges"].append(
+                        copy.deepcopy(first_record(m)["edges"][0])),
+                    "duplicate zones")
+    catalog_rejects("catalog validation: named enum",
+                    lambda m: first_record(m)["edges"][0].__setitem__("named", "neither"),
+                    "named value")
+    catalog_rejects("catalog validation: costs are finite",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", float("nan")),
+                    "finite and positive")
+    catalog_rejects("catalog validation: costs are positive",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", 0),
+                    "finite and positive")
+    catalog_rejects("catalog validation: costs use the JS-canonical number dialect",
+                    lambda m: first_record(m)["edges"][0].__setitem__("cost", 3.0),
+                    "JS-canonical")
+    catalog_rejects("catalog validation: anchor belongs to the edge set",
+                    lambda m: first_record(m).__setitem__("anchor", "beta"),
+                    "not among its edges")
+    catalog_rejects("catalog validation: discovered display names are unique after znorm",
+                    lambda m: m["continents"]["Testland"]["discovered"][1].__setitem__(
+                        "name", first_record(m)["name"]),
+                    "duplicate normalized names")
+
+    tiny_manifest = json.loads(json.dumps(lman))
+    tiny_manifest["continents"]["Testland"]["discovered"][0]["off"][0] = 0.00001
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(tiny_manifest, f, sort_keys=True)
+    check("manifest-only tiny offsets do not trip the injected-data number dialect",
+          (BUILD.load_manifest(ldata)["continents"]["Testland"]["discovered"][0]["off"][0],
+           BUILD.cred_text(ldata).startswith("EQL")),
+          (0.00001, True))
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(lman, f, sort_keys=True)
     check("the layered manifest records the schema", lman["schema"], IP.SCHEMA)
 
     # baselessZones is ASSERTED, not merely printed. Without this the only guard against the
@@ -611,7 +953,9 @@ try:
     # The summary helper needs world["order"], because the manifest is sort_keys=True and does
     # not store it - alphabetical continent keys cannot recover the authored order.
     check("root_layer_zones pairs continent with zone, in authored order",
-          IP.root_layer_zones(lman, ["Testland"]), [("Testland", "gamma")])
+          IP.root_layer_zones(lman, ["Testland"]),
+          [("Testland", key) for key in
+           ("gamma", "ambi", "excluded", "kappa", "multi", "theta")])
     check("...and reports nothing for a flat conversion",
           IP.root_layer_zones(fman, ["Testland"]), [])
     # The summary is derived from the ZONE LIST, never from top-level `root`, and this pins

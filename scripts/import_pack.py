@@ -22,12 +22,14 @@ purpose - the JS twin in `no-install-builder` should be a transliteration, not a
 import argparse
 import hashlib
 import json
+import math
 import os
 import shutil
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mapgeom                                                 # noqa: E402
 import pack_colors                                              # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +37,7 @@ DATA = os.path.join(ROOT, "data")
 CACHE_DIRNAME = "_generated"
 # 2: per-file `from` and per-continent rootZones/baselessZones (layered pack resolution).
 # 3: per-continent skippedZones (partial authored-roster coverage).
+# 4: per-continent discovery mode/catalog and structured top-level discovery rejections.
 #
 # The bump is not hygiene. validate_cache never reads `sources`, so a schema-1 cache would
 # keep building perfectly well - what it would break is the provenance report: seeded into a
@@ -44,7 +47,7 @@ CACHE_DIRNAME = "_generated"
 # validate_cache BEFORE seeding, so the stale manifest is rejected instead. The same applies
 # to schema 2 seeded into a schema-3 --only run: untouched continents would have no
 # skippedZones and the merged skip report would silently under-count them.
-SCHEMA = 3
+SCHEMA = 4
 
 # A pack zone is up to four files. They are semantic layers, not floors: the base file is line
 # geometry, _1 the POI/label layer (where the to_/from_ transition markers live), _2 a
@@ -60,6 +63,25 @@ LAYER_SUFFIXES = ("", "_1", "_2", "_3")
 # two rules disagree constantly. A JS port needs an explicit half-to-even helper.
 def _r(x):
     return round(x)
+
+
+JS_SAFE_INTEGER = (1 << 53) - 1
+
+
+def _canon_catalog_number(value):
+    """Return a finite JavaScript-canonical number produced for the discovery catalog."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise SystemExit("non-canonical discovered catalog number %r is not finite" % value)
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and abs(value) > JS_SAFE_INTEGER:
+        raise SystemExit("non-canonical discovered catalog integer %r exceeds JS safe range" % value)
+    return value
+
+
+def _normalise_cost(value):
+    """Plan-1 half-to-even one-decimal cost, then the injected-data number dialect."""
+    return _canon_catalog_number(_r(max(value, 0.1) * 10) / 10)
 
 
 # --------------------------------------------------------------------------- pack reading
@@ -328,19 +350,25 @@ def resolve_zone_source(pack, root, zone_key):
 
 
 def root_layer_zones(manifest, order):
-    """[(continent, zone)] for every zone resolved to the root base layer, in authored order.
+    """[(continent, zone)] for every authored or discovered root-layer zone.
 
     `order` is a required parameter rather than a convenience: the manifest is written with
     sort_keys=True and does not store world["order"], so its continent keys come back
     alphabetically and the manifest alone cannot recover the authored order. Callers pass
-    world["order"]. Within a continent, rootZones is already in roster order.
+    world["order"]. Within a continent, authored rootZones stay in roster order and discovered
+    entries follow in their catalog's sorted candidate-key order.
 
     Read from the MERGED manifest, so this covers the whole cache rather than one --only run's
     continents.
     """
     conts = manifest.get("continents", {})
-    return [(cont, zk) for cont in order
-            for zk in (conts.get(cont) or {}).get("rootZones", [])]
+    out = []
+    for cont in order:
+        entry = conts.get(cont) or {}
+        out.extend((cont, zk) for zk in entry.get("rootZones", []))
+        out.extend((cont, record["key"]) for record in entry.get("discovered", [])
+                   if record.get("from") == "root")
+    return out
 
 
 def cache_skips(data=None):
@@ -351,6 +379,20 @@ def cache_skips(data=None):
         man = json.load(f)
     return {cont: set(entry.get("skippedZones", []))
             for cont, entry in man.get("continents", {}).items()}
+
+
+def cache_discoveries(data=None):
+    """Per-continent discovery catalogs and palette tails from the plain manifest dialect."""
+    data = data or DATA
+    with open(os.path.join(data, CACHE_DIRNAME, "manifest.json"),
+              "r", encoding="utf-8") as f:
+        man = json.load(f)
+    return {
+        cont: {"zones": entry.get("discovered", []),
+               "palette": entry.get("discoveredPalette", [])}
+        for cont, entry in man.get("continents", {}).items()
+        if entry.get("discovered")
+    }
 
 
 class CachePromotionError(Exception):
@@ -394,7 +436,325 @@ def promote(tmp_root, out_root):
 
 
 # --------------------------------------------------------------------------- conversion
-def convert(pack, data=None, only=None, quiet=False):
+def discovery_index_entries(pack, root, data, world):
+    """Authored ``(continent, key, name)`` entries in the viewer's DETAIL order.
+
+    Resolution is existence-only here: a rostered detail zone participates only when the
+    selected source can actually supply it.  That mirrors the viewer's ZIDX, which is built
+    from DETAIL rather than from the complete authored roster.  The full authored order is
+    always scanned, even for ``--only``, because this is one global first-wins index.
+    """
+    entries = []
+    for cont in world["order"]:
+        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        roster = list(meta["zoneOrder"])
+        for zk in meta.get("detailZones", []):
+            if zk not in roster:
+                roster.append(zk)
+        resolved = set()
+        for zk in roster:
+            srcdir, _src = resolve_zone_source(pack, root, zk)
+            if srcdir is not None:
+                resolved.add(zk)
+        zones = authored_zones(meta)
+        for zk in meta.get("detailZones", []):
+            if zk in resolved:
+                entries.append((cont, zk, zones[zk]["name"]))
+    return entries
+
+
+def discovery_base_keys(pack, root):
+    """Sorted, case-folded zone keys represented by any layer in either directory."""
+    keys = set()
+    suffixes = tuple(s.casefold() for s in LAYER_SUFFIXES if s)
+    for srcdir in (pack, root):
+        if not srcdir:
+            continue
+        for name in os.listdir(srcdir):
+            stem, ext = os.path.splitext(name)
+            folded = stem.casefold()
+            if ext.casefold() != ".txt":
+                continue
+            for suffix in suffixes:
+                if folded.endswith(suffix):
+                    folded = folded[:-len(suffix)]
+                    break
+            keys.add(folded)
+    return sorted(keys)
+
+
+def detect_discoveries(pack, root, roster, zone_index, include_targets=False):
+    """Return ({continent: partial records}, structured rejections) for unrostered maps."""
+    roster = {key.casefold() for key in roster}
+    key_continent = {key: cont for cont, key in zone_index.values()}
+    candidates, rejected = [], []
+
+    def reject(key, reason, detail):
+        rejected.append({"key": key, "reason": reason, "detail": detail})
+
+    for key in discovery_base_keys(pack, root):
+        if key in roster:
+            continue
+        srcdir, source = resolve_zone_source(pack, root, key)
+        if srcdir is None:
+            continue
+        # The orphan tail resolves annotation-only zones.  Reject it before parsing so a
+        # markerless orphan is always baseless, never incidentally unresolved.
+        if not os.path.exists(os.path.join(srcdir, key + ".txt")):
+            reject(key, "baseless", source)
+            continue
+        records, _unknown = parse_zone(srcdir, key)
+        targets = set()
+        for layer, kind, record, _name, _lineno in records:
+            if layer == 1 and kind == "P":
+                targets.update(mapgeom.transition_targets(zone_index, key, record[3]))
+        targets = sorted(target for target in targets if target in key_continent)
+        continents = sorted({key_continent[target] for target in targets})
+        if not targets:
+            reject(key, "unresolved", "no resolved outward transition")
+            continue
+        if len(continents) != 1:
+            reject(key, "ambiguous", ", ".join(continents))
+            continue
+        candidates.append({"key": key, "from": source, "continent": continents[0],
+                           "targets": targets})
+
+    # A series qualifies only when every member has exactly one neighbour and it is the same
+    # neighbour for the whole stem.  Multi-neighbour members deliberately fall through.
+    groups = {}
+    for candidate in candidates:
+        stem = mapgeom.discovery_series_stem(candidate["key"])
+        if stem:
+            groups.setdefault(stem, []).append(candidate)
+    series_keys = set()
+    for stem, members in groups.items():
+        if (len(members) >= 3 and all(len(m["targets"]) == 1 for m in members) and
+                len({m["targets"][0] for m in members}) == 1):
+            for member in members:
+                series_keys.add(member["key"])
+                reject(member["key"], "series", stem)
+
+    accepted = {}
+    for candidate in candidates:
+        key = candidate["key"]
+        if key in series_keys:
+            continue
+        parent = mapgeom.discovery_derived_parent(key, roster)
+        if parent is not None:
+            reject(key, "derived", parent)
+            continue
+        if key in mapgeom.DISCOVERY_EXCLUDE:
+            reject(key, "excluded", "DISCOVERY_EXCLUDE")
+            continue
+        record = {"key": key, "from": candidate["from"]}
+        if include_targets:
+            # Conversion needs the already-resolved neighbours for placement.  Keep them
+            # private: the durable catalog receives sorted `edges` in step 4 instead.
+            record["_targets"] = candidate["targets"]
+        accepted.setdefault(candidate["continent"], []).append(record)
+
+    for records in accepted.values():
+        records.sort(key=lambda record: record["key"])
+    rejected.sort(key=lambda record: record["key"])
+    return accepted, rejected
+
+
+def _source_identity(sources):
+    """(count, sha256) over sorted (filename, content-sha256) pairs."""
+    pairs = sorted((name, entry["sha256"]) for name, entry in sources.items())
+    h = hashlib.sha256()
+    for name, digest in pairs:
+        h.update(("%s %s\n" % (name, digest)).encode("utf-8"))
+    return len(pairs), h.hexdigest()
+
+
+def _candidate_doorway(records, zone_index, key, target):
+    """First layer-1 transition point from candidate ``key`` to ``target``."""
+    for layer, kind, record, _name, _lineno in records:
+        if layer != 1 or kind != "P":
+            continue
+        nums, _rgb, _size, label = record
+        if target in mapgeom.transition_targets(zone_index, key, label):
+            return (_r(nums[0]), _r(-nums[1]))
+    raise AssertionError("discovery target %s -> %s lost its source marker" % (key, target))
+
+
+def _reciprocal_marker(records, zone_index, anchor):
+    """The one unresolved transition in an anchor's selected _1 layer, if unique."""
+    unresolved = []
+    for layer, kind, record, _name, _lineno in records:
+        if layer != 1 or kind != "P":
+            continue
+        nums, _rgb, _size, label = record
+        if not label.casefold().startswith(("to_", "from_")):
+            continue
+        if not mapgeom.transition_targets(zone_index, anchor, label):
+            unresolved.append((_r(nums[0]), _r(-nums[1]), label))
+    return unresolved[0] if len(unresolved) == 1 else None
+
+
+def _written_centroid(segs, key):
+    """Endpoint mean in written segment order, rounded to the authored integer dialect."""
+    if not segs:
+        raise SystemExit("discovered zone %r has no base-layer line geometry" % key)
+    sx = sy = 0
+    count = 0
+    for seg in segs:
+        sx += seg[0]
+        sx += seg[2]
+        sy += seg[1]
+        sy += seg[3]
+        count += 2
+    return _r(sx / count), _r(sy / count)
+
+
+def _read_compact(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
+                         cout, palette, unseen_all):
+    """Write discovered cache files and return (catalog, sources, palette tail).
+
+    The shared palette.json is already final when this runs and is never modified.  New display
+    colours are indexed against an in-memory extension recorded as discoveredPalette.
+    """
+    catalog = []
+    discovered_sources = {}
+    discovered_palette = []
+    palette_index = {color: i for i, color in enumerate(palette)}
+    azones = authored_zones(meta)
+    targets_by_key = {}
+
+    zones = {}
+    for key in meta["zoneOrder"]:
+        if key not in parsed:
+            continue
+        geometry = _read_compact(os.path.join(cout, "geometry", key + ".json"))
+        zones[key] = compose_zone(azones[key], geometry, None)
+
+    for partial in sorted(candidates, key=lambda record: record["key"]):
+        key = partial["key"]
+        targets = sorted(partial["_targets"])
+        targets_by_key[key] = targets
+        anchor = targets[0]
+        srcdir, source = resolve_zone_source(pack, root, key)
+        if srcdir is None or source != partial["from"]:
+            raise AssertionError("discovered source changed during conversion for %s" % key)
+        records, _unknown = parse_zone(srcdir, key)
+        candidate_doorway = _candidate_doorway(records, zone_index, key, anchor)
+        reciprocal = _reciprocal_marker(parsed[anchor], zone_index, anchor)
+
+        if reciprocal is not None:
+            off = [azones[anchor]["off"][0] + reciprocal[0] - candidate_doorway[0],
+                   azones[anchor]["off"][1] + reciprocal[1] - candidate_doorway[1]]
+            name = mapgeom.discovery_display_name(reciprocal[2])
+            if mapgeom.znorm(name) != mapgeom.znorm(reciprocal[2]):
+                raise AssertionError("discovered display name changed marker identity for %s" % key)
+            # This is an argument made executable, not a reachable collision guard: had the
+            # marker resolved to authored content, detection would not have left it unresolved.
+            if mapgeom.resolve_zone(zone_index, name) is not None:
+                raise AssertionError("discovered marker name collides with authored content: %s" % name)
+            name_from = "marker"
+        else:
+            point = mapgeom.nearest_outline_point(
+                zones[anchor], zones[anchor]["cx"], zones[anchor]["cy"], transformed=False)
+            # Arbitrary by design: without a reciprocal marker the selected source says which
+            # zone connects, but not where on its outline the doorway belongs.
+            off = [point[0] - candidate_doorway[0], point[1] - candidate_doorway[1]]
+            name = key
+            name_from = "key"
+
+        geometry_segs, geometry_z = geometry_records(records, off)
+        cx, cy = (_canon_catalog_number(value)
+                  for value in _written_centroid(geometry_segs, key))
+        dump_compact({"segs": geometry_segs, "segz": geometry_z},
+                     os.path.join(cout, "geometry", key + ".json"))
+        zone = compose_zone({"name": name, "color": mapgeom.DISCOVERED_ZONE_COLOR,
+                             "cx": cx, "cy": cy}, {"segs": geometry_segs}, None)
+        zones[key] = zone
+
+        segs, segz, seglayer, labels, lablayer, raw = detail_records(records)
+        # Tail order is the written detail order: every segment first, then every label, each
+        # array retaining base/_1/_2/_3 source order.  Existing colours reuse their old index.
+        for item, slot in [(seg, 4) for seg in segs] + [(label, 2) for label in labels]:
+            color = pack_colors.color_for(item[slot], unseen_all)
+            if color not in palette_index:
+                palette_index[color] = len(palette) + len(discovered_palette)
+                discovered_palette.append(color)
+            item[slot] = palette_index[color]
+        dump_compact({"segs": segs, "segz": segz, "seglayer": seglayer,
+                      "labels": labels, "lablayer": lablayer,
+                      "bbox": bbox_of(raw[0], raw[1])},
+                     os.path.join(cout, "detail", key + ".json"))
+
+        for path in zone_files(srcdir, key):
+            discovered_sources[os.path.basename(path)] = {
+                "bytes": os.path.getsize(path), "sha256": sha256_of(path), "from": source}
+
+        catalog.append({"key": key, "name": name, "nameFrom": name_from,
+                        "color": mapgeom.DISCOVERED_ZONE_COLOR, "cx": cx, "cy": cy,
+                        "off": off, "anchor": anchor, "from": source})
+
+    by_name = {}
+    for record in catalog:
+        by_name.setdefault(mapgeom.znorm(record["name"]), []).append(record)
+    for collision in (records for records in by_name.values() if len(records) > 1):
+        key_norms = [mapgeom.znorm(record["key"]) for record in collision]
+        if len(set(key_norms)) != len(key_norms):
+            raise SystemExit("discovered zone keys still collide after name fallback: %s"
+                             % ", ".join(record["key"] for record in collision))
+        for record in collision:
+            record["name"] = record["key"]
+            record["nameFrom"] = "key"
+
+    # Costs are the final part of candidate assembly.  At this point every candidate's cache
+    # files and composed zone record exist, and name-collision fallback has fixed the same index
+    # identity the runtime will see.
+    edge_index = dict(zone_index)
+    discovered_index = mapgeom.zidx_from(
+        [(cont, record["key"], record["name"]) for record in catalog])
+    for normalized, target in discovered_index.items():
+        edge_index.setdefault(normalized, target)
+    extended_palette = palette + discovered_palette
+    for record in catalog:
+        key = record["key"]
+        candidate_cache = _read_compact(os.path.join(cout, "detail", key + ".json"))
+        candidate_detail = compose_detail(record, candidate_cache, extended_palette)
+        candidate_exits = mapgeom.exit_points_from(key, zones[key], candidate_detail, edge_index)
+        edges = []
+        for neighbour in targets_by_key[key]:
+            neighbour_cache = _read_compact(
+                os.path.join(cout, "detail", neighbour + ".json"))
+            neighbour_detail = compose_detail(
+                azones[neighbour], neighbour_cache, extended_palette)
+            neighbour_exits = mapgeom.exit_points_from(
+                neighbour, zones[neighbour], neighbour_detail, edge_index)
+            exits = dict(candidate_exits)
+            exits.update(neighbour_exits)
+            candidate_named = (key, neighbour) in exits
+            neighbour_named = (neighbour, key) in exits
+            if candidate_named and neighbour_named:
+                named = "both"
+            elif candidate_named:
+                named = "candidate"
+            elif neighbour_named:
+                named = "neighbour"
+            else:
+                raise AssertionError("accepted discovery edge lost both doorway markers: %s/%s"
+                                     % (key, neighbour))
+            raw_cost = mapgeom.cost_between(
+                zones, key, neighbour, transformed=False, exits=exits)
+            edges.append({"z": neighbour, "cost": _normalise_cost(raw_cost), "named": named})
+        record["edges"] = edges
+
+    return catalog, discovered_sources, discovered_palette
+
+
+def convert(pack, data=None, only=None, quiet=False, discover=True):
     data = data or DATA
     with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
         world = json.load(f)
@@ -431,6 +791,25 @@ def convert(pack, data=None, only=None, quiet=False):
     # before layering existed.
     root = root_layer(pack)
 
+    # Pass A -- index. Build the same global, first-wins name index the viewer gets from
+    # DETAIL. Map-file contents are deliberately not read in this pass.
+    index_entries = discovery_index_entries(pack, root, data, world)
+    zone_index = mapgeom.zidx_from(index_entries)
+
+    # Pass B -- detect globally. --only scopes which catalog entry is replaced, never the
+    # first-wins index or the classification that assigned a candidate to a continent.
+    accepted, rejected = {}, []
+    if discover:
+        roster_keys = []
+        for cont in world["order"]:
+            cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+            with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            roster_keys.extend(meta["zoneOrder"])
+            roster_keys.extend(meta.get("detailZones", []))
+        accepted, rejected = detect_discoveries(
+            pack, root, roster_keys, zone_index, include_targets=True)
+
     out_root = os.path.join(data, CACHE_DIRNAME)
     # A unique staging directory beside the target, not a fixed `.tmp` sibling: two runs in
     # the same tree would otherwise stage into the same path and corrupt each other, and a
@@ -458,6 +837,15 @@ def convert(pack, data=None, only=None, quiet=False):
         "unknownRecords": {},
         "unseenColors": [],
     }
+    if discover:
+        manifest["discoveryRejected"] = rejected
+        manifest["discoveryRejectedNote"] = (
+            "Run-scoped like unknownRecords; an --only conversion may under-report the merged cache.")
+        manifest["discoveredSourcesNote"] = (
+            "Discovered inputs are separate from sources so sourceCount/sourceFingerprint keep "
+            "describing the authored roster files read by the browser twin. Their own count and "
+            "fingerprint are checked by the Python freshness gate; plan 3 extends that check "
+            "across the browser seam.")
     if root:
         manifest["rootNote"] = (
             "Base layer: the client's own maps/ root, used per zone where no pack file exists. "
@@ -583,6 +971,12 @@ def convert(pack, data=None, only=None, quiet=False):
                 if lab[4] in traced:
                     collisions.append("%s/%s: %s" % (cont, zk, lab[4]))
 
+        discovered, discovered_sources, discovered_palette = [], {}, []
+        if discover and accepted.get(cont):
+            discovered, discovered_sources, discovered_palette = assemble_discoveries(
+                cont, accepted[cont], pack, root, parsed, meta, zone_index,
+                cout, palette, unseen_all)
+
         # Anything that must survive an --only run lives HERE, under continents[cont], because
         # the --only seed copies only `continents`. That is why from/rootZones/baselessZones
         # are per-continent rather than top-level: the per-run unknownRecords already
@@ -591,11 +985,20 @@ def convert(pack, data=None, only=None, quiet=False):
         manifest["continents"][cont] = {
             "zones": roster,
             "paletteSize": len(palette),
+            "discovery": bool(discover),
             "rootZones": root_zones,
             "baselessZones": baseless,
             "skippedZones": skipped,
             "sources": sources,
         }
+        if discover:
+            manifest["continents"][cont]["discovered"] = discovered
+            if discovered:
+                manifest["continents"][cont]["discoveredPalette"] = discovered_palette
+                manifest["continents"][cont]["discoveredSources"] = discovered_sources
+                dcount, dfingerprint = _source_identity(discovered_sources)
+                manifest["continents"][cont]["discoveredSourceCount"] = dcount
+                manifest["continents"][cont]["discoveredSourceFingerprint"] = dfingerprint
         baseless_all += ["%s/%s" % (cont, zk) for zk in baseless]
         if not quiet:
             detail_written = sum(zk in parsed for zk in meta.get("detailZones", []))
@@ -700,13 +1103,19 @@ def validate_cache(data=None, world=None):
     if world is None:
         with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
             world = json.load(f)
+    metas = {}
+    authored_keys = set()
+    for cont in world["order"]:
+        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+            metas[cont] = json.load(f)
+        authored_keys.update(zk.casefold() for zk in metas[cont]["zoneOrder"])
+        authored_keys.update(zk.casefold() for zk in metas[cont].get("detailZones", []))
     for cont in world["order"]:
         entry = man.get("continents", {}).get(cont)
         if entry is None:
             return False, "cache has no continent %r" % cont
-        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
-        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        meta = metas[cont]
         want = list(meta["zoneOrder"])
         for zk in meta.get("detailZones", []):
             if zk not in want:
@@ -749,6 +1158,76 @@ def validate_cache(data=None, world=None):
             if (zk not in skipped and
                     not os.path.exists(os.path.join(gdir, "detail", zk + ".json"))):
                 return False, "cache is missing detail for %s/%s" % (cont, zk)
+
+        discovered = entry.get("discovered", [])
+        if not isinstance(discovered, list):
+            return False, "cache discovered catalog for %r is not a list" % cont
+        keys = []
+        names = []
+        required = {"key": str, "name": str, "nameFrom": str, "color": str,
+                    "cx": int, "cy": int, "off": list, "anchor": str,
+                    "from": str, "edges": list}
+        for record in discovered:
+            if not isinstance(record, dict):
+                return False, "cache discovered record for %r is not an object" % cont
+            for field, kind in required.items():
+                value = record.get(field)
+                if (not isinstance(value, kind) or
+                        (kind is int and isinstance(value, bool))):
+                    return False, ("cache discovered record for %r has missing or invalid %s"
+                                   % (cont, field))
+            key = record["key"]
+            if key != key.casefold():
+                return False, "cache discovered key %r is not case-folded" % key
+            if key.casefold() in authored_keys:
+                return False, "cache discovered key %r collides with the authored roster" % key
+            keys.append(key)
+            names.append(mapgeom.znorm(record["name"]))
+            for kind in ("geometry", "detail"):
+                if not os.path.exists(os.path.join(gdir, kind, key + ".json")):
+                    return False, "cache is missing discovered %s for %s/%s" % (kind, cont, key)
+            if record["nameFrom"] not in ("marker", "key"):
+                return False, "cache discovered nameFrom for %r is invalid" % key
+            if record["from"] not in ("pack", "root"):
+                return False, "cache discovered source for %r is invalid" % key
+            if (len(record["off"]) != 2 or
+                    any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+                        not math.isfinite(v) for v in record["off"])):
+                return False, "cache discovered off for %r is not a finite pair" % key
+            if any(abs(record[field]) > JS_SAFE_INTEGER for field in ("cx", "cy")):
+                return False, "cache discovered centroid for %r exceeds JS safe range" % key
+            edges = record["edges"]
+            if not edges:
+                return False, "cache discovered edges for %r is empty" % key
+            edge_keys = []
+            allowed = set(want)
+            allowed.update(r.get("key") for r in discovered if isinstance(r, dict))
+            for edge in edges:
+                if not isinstance(edge, dict) or not isinstance(edge.get("z"), str):
+                    return False, "cache discovered edge for %r has missing or invalid fields" % key
+                neighbour = edge["z"]
+                edge_keys.append(neighbour)
+                if neighbour not in allowed:
+                    return False, ("cache discovered edge for %r leaves continent %r"
+                                   % (key, cont))
+                if edge.get("named") not in ("both", "candidate", "neighbour"):
+                    return False, "cache discovered edge named value for %r is invalid" % key
+                cost = edge.get("cost")
+                if (isinstance(cost, bool) or not isinstance(cost, (int, float)) or
+                        not math.isfinite(cost) or cost <= 0):
+                    return False, "cache discovered edge cost for %r is not finite and positive" % key
+                if ((isinstance(cost, float) and
+                     (cost.is_integer() or (0 < abs(cost) < 1e-4))) or
+                        (isinstance(cost, int) and abs(cost) > JS_SAFE_INTEGER)):
+                    return False, "cache discovered edge cost for %r is not JS-canonical" % key
+            if len(set(edge_keys)) != len(edge_keys):
+                return False, "cache discovered edges for %r contain duplicate zones" % key
+            if record["anchor"] not in edge_keys:
+                return False, "cache discovered anchor for %r is not among its edges" % key
+        if len(set(keys)) != len(keys):
+            return False, "cache discovered catalog for %r contains duplicate keys" % cont
+        if len(set(names)) != len(names):
+            return False, "cache discovered catalog for %r contains duplicate normalized names" % cont
     return True, "ok"
 
 
@@ -877,6 +1356,8 @@ def main():
                          "continent-scoped and index assignment is first-seen)")
     ap.add_argument("--print-authored", default=None, metavar="CONTINENT",
                     help="print the continent.json 'zones' block instead of converting")
+    ap.add_argument("--no-discover", action="store_true",
+                    help="skip unrostered-zone detection and omit its catalog")
     args = ap.parse_args()
 
     data = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -900,7 +1381,7 @@ def main():
         return
 
     print("Converting %s -> %s" % (pack, os.path.join(data, CACHE_DIRNAME)))
-    manifest = convert(pack, data, args.only)
+    manifest = convert(pack, data, args.only, discover=not args.no_discover)
     nz = sum(len(c["zones"]) - len(c.get("skippedZones", []))
              for c in manifest["continents"].values())
     print("Wrote %d continents, %d zones" % (len(manifest["continents"]), nz))

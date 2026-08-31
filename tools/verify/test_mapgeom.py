@@ -65,6 +65,27 @@ for node in ast.walk(tree):
 check("mapgeom import set is exactly math and re", imports, {"math", "re"})
 
 
+DISCOVERY_EXCLUDE = {
+    "arcstone", "arginhiz", "barren", "bloodfalls", "breedinggrounds", "brellsrest",
+    "broodlands", "commonlands", "corathus", "crystalshard", "delvea", "dragonscale",
+    "eastwastesshard", "ethernere", "feerrott2", "freeportacademy", "freeportcityhall",
+    "freeporthall", "freeportmilitia", "freeportsewers", "freeporttheater", "freeportwest",
+    "gorowyn", "growthplane", "gunthak", "highpasshold", "jaggedpine", "kaelshard",
+    "korshaext", "lopingplains", "mischiefplane", "mistythicket", "moors", "neriakd",
+    "oceangreenhills", "oceanoftears", "scorchedwoods", "soldungc", "steamfontmts",
+    "takishruins", "toxxulia", "xorbb",
+}
+check("discovery exclusion is exactly the owner's 42-key ruling",
+      mapgeom.DISCOVERY_EXCLUDE, DISCOVERY_EXCLUDE)
+check("commonlands is explicitly excluded by the residue ruling",
+      "commonlands" in mapgeom.DISCOVERY_EXCLUDE, True)
+check("the discovered zone colour is the pinned authored literal",
+      mapgeom.DISCOVERED_ZONE_COLOR, "#8f78d4")
+check("marker display-name derivation preserves identity and presentation",
+      mapgeom.discovery_display_name("to_New_Sebilis_Expedition_(click)"),
+      "New Sebilis Expedition")
+
+
 probe = """import sys
 assert 'import_pack' not in sys.modules
 assert 'derive_travel_graph' not in sys.modules

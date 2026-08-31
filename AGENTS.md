@@ -131,7 +131,7 @@ New UI added for the user edition feature-detects its own container instead (`re
 - **`HUBS[continent]`** = `[{ x, y, kind, label, letter?, note? }]` — transport hubs; `kind` ∈ `boat|spire|ring|portal|teleport`. `letter` (≤2 chars) is overlaid on the `portal` and `teleport` glyphs only (`hubHasLetter`); the optional multi-line `note` is hover-only. All five kinds are now in use, and `note` is too — the Plane of Hate and Plane of Sky `teleport` hubs carry the Alter Plane spell name and its consumed component.
 - **`UNIVERSE`** = `[{ name, kind, cx, cy, r, active, [alt], [note] }]` — realm-selector entities; `cx,cy` are **viewport fractions** (editable at the universe level). From `data/world.json` → `universe`.
 - **`WORLDLINKS`** = `[{ a:[gx,gy], b:[gx,gy], alt }]` — world-view connectors as **free 2-point lines in globe (0–100) coords**, realm-scoped by `alt` (editable at the world level). From `data/world.json` → `worldLinks`.
-- **`TRAVEL`** = `{ version, groups, capabilities, overrides, walk, routes }` — the travel/routing graph, copied through **verbatim** from `data/travel.json`. The only structure with no per-continent assembly, and the only one nothing in the editor mutates. When the file is absent, the injected value is `{}`: the map still boots, but disables Travel and shows that travel data is unavailable. `overrides` is authoring metadata that **no runtime code reads** — it exists for `derive_travel_graph.py --audit` — and it ships anyway because the copy is verbatim. 283 bytes in an 18 MB artifact, so stripping it would buy nothing and would cost the one property that makes this structure easy to reason about.
+- **`TRAVEL`** = `{ version, groups, capabilities, overrides, walk, routes }` — the authored graph from `data/travel.json`, with generated discovery-catalog walk edges appended at build composition. The authored `walk` stays an unchanged prefix; catalog edges already carry conversion-time costs, so `build.py` derives neither geometry nor cost. When the authored file is absent, the injected value is `{}` — discovery never manufactures a schema-incomplete graph — so the map still boots, disables Travel and explains that travel data is unavailable. `overrides` remains authoring metadata that **no runtime code reads**; it ships because the authored graph is otherwise copied intact.
 - **`XPACS`** = `{ order, default, labels }` — the expansion roster, oldest first, copied through verbatim from `data/world.json` → `xpacs`. Read-only like `TRAVEL`, and its declaration sits on the adjacent line for the same two placement reasons. `labels` has exactly one consumer, the HUD picker; if that ever stops needing display names, delete the field rather than shipping one `verify.py` cannot know is dead. **The field is `xpac`, everything a user reads says "Expansion", and neither gets renamed to match the other; the two surviving `era` spellings are also deliberate** — reasons in `expansion-selection.md`.
 
 **Adding an injected structure is not a one-line change**, because `inject()` takes them **positionally**. A ninth touches `tools/verify/test_markers.py`, `tools/verify/fixture.py` (in *three* places) and `verify.py` (in three more) — what breaks in each, and the index-sensitivity that makes a new placeholder go on the *end*, are in `tools/verify/README.md`.
@@ -157,7 +157,8 @@ data/                              COMMITTED (the authored layer, ~58 KB)
 
 data/_generated/                   REGENERATED from the pack, git-ignored, never committed
   manifest.json                    schema, pack path, base-layer (root) path, per-source-file
-                                   size+sha256+`from` layer, zone roster, rootZones, skippedZones
+                                   size+sha256+`from` layer, zone roster, rootZones, skippedZones,
+                                   discovered zone/catalog/provenance records and palette tails
   continents/<Continent>/
     palette.json                   the continent palette (traced colours first; surviving authored-label
                                    colours appended when absent; indices are assigned on import)
@@ -190,14 +191,16 @@ Six rules recur across every subsystem. Each is argued in the reference file nam
 follows is the rule, and the vocabulary it needs.
 
 1. **Authored vs traced is the spine, and it is also the licensing boundary.** A value that encodes a
-   *decision* — a name, a colour, a centroid, a zone `off`, an adjacency, a cost — is authored,
+   *decision* — a name, a colour, a centroid, a rostered zone `off`, an authored adjacency or cost — is authored,
    committed and hand-edited. A value *traced* from the map pack is regenerated into git-ignored
-   `data/_generated/` and never committed. **Do not hand-edit anything under `data/_generated/`**: the
+   `data/_generated/` and never committed; discovered-zone placement and walk costs are in this
+   generated class. **Do not hand-edit anything under `data/_generated/`**: the
    next import discards it, silently.
-2. **Never derive at build time what a cosmetic change could then silently move.** Adjacency and cost
-   *are* derivable from committed geometry, and are authored anyway: deriving them would let an author
-   nudge a zone for looks and change a travel route with nothing to flag it — `datacmp` cannot catch
-   it, because the injected data legitimately changed. → `travel-graph.md`
+2. **Never derive at build time what a cosmetic change could then silently move.** Every adjacency
+   and cost declared by `data/travel.json` remains authored and underivable. An unrostered discovered
+   zone is the bounded exception: conversion stores its derived edge and cost in the generated
+   catalog, and build only appends that record. A user overlay cannot reprice it, but reconversion
+   against another pack can. → `travel-graph.md`
 3. **Facts read published data; only drawing reads live edit state.** *Published* is the injected
    `ALL`/`META`/`DETAIL`/`HUBS`/`TRAVEL` built from `data/`. *Live edit state* is `EDIT[cont]` and
    `WEDIT` — the viewer's own in-session customisation, which `contData()` returns **in place of**

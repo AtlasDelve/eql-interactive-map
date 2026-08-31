@@ -648,17 +648,49 @@ function section(t) { console.log('\n-- ' + t); }
     }
     out.hubWorst = worst; out.hubWorstKind = worstAt; out.hubsSeen = hubScreens.length;
     TROUTE = live; draw();
-    // dimming, measured on the outlines themselves rather than on a colour name
-    const onR = zoneCentroid(d.zones['nro']), offR = zoneCentroid(d.zones['oasis']);
-    const gauge = (c) => {
-      const X = wx(c[0]), Y = wy(c[1]), r = 40 * dpr;
+    // Dimming is sampled on a target zone's own outline, at the segment midpoint with the
+    // most clearance from the route. The on-route sample also avoids newsebexp's centroid:
+    // its adjacent off-route trace legitimately dims and contaminated the old 40px nro-centroid
+    // square, making a working feature look broken.
+    const pointSegDist2 = (p, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const q = dx * dx + dy * dy;
+      const t = q ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / q)) : 0;
+      const x = a[0] + t * dx, y = a[1] + t * dy;
+      return (p[0] - x) ** 2 + (p[1] - y) ** 2;
+    };
+    const routeSegs = [];
+    for (const leg of TROUTE.legs) {
+      const pts = [], A = tContScr(d, leg.from), B = tContScr(d, leg.to);
+      if (A) pts.push(A);
+      for (const p of tLegWaypoints(d, 'Antonica', leg)) pts.push([wx(p[0]), wy(p[1])]);
+      if (B) pts.push(B);
+      for (let i = 0; i + 1 < pts.length; i++) routeSegs.push([pts[i], pts[i + 1]]);
+    }
+    const outlineGauge = (key, avoid) => {
+      const z = d.zones[key];
+      let best = null;
+      for (const s of z.segs) {
+        const a = tPoint(z, s[0], s[1]), b = tPoint(z, s[2], s[3]);
+        const A = [wx(a[0]), wy(a[1])], B = [wx(b[0]), wy(b[1])];
+        if ((A[0] - B[0]) ** 2 + (A[1] - B[1]) ** 2 < (4 * dpr) ** 2) continue;
+        const p = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+        let clear2 = routeSegs.length ? Math.min(...routeSegs.map(r => pointSegDist2(p, r[0], r[1]))) : Infinity;
+        for (const c of avoid) clear2 = Math.min(clear2, (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2);
+        if (!best || clear2 > best.clear2) best = { p, clear2 };
+      }
+      if (!best) throw new Error('no screen-length outline segment for dimming gauge ' + key);
+      const X = best.p[0], Y = best.p[1], r = 5 * dpr;
       TROUTE = null; draw();
       const b = grab(X, Y, r);
       TROUTE = live; draw();
-      return deltaFrom(b, X, Y, r);
+      return { delta: deltaFrom(b, X, Y, r), clearance: Math.sqrt(best.clear2) };
     };
-    out.dimOnRoute = gauge(onR);
-    out.dimOffRoute = gauge(offR);
+    const newC = zoneCentroid(d.zones['newsebexp']);
+    const onGauge = outlineGauge('nro', [[wx(newC[0]), wy(newC[1])]]);
+    const offGauge = outlineGauge('oasis', []);
+    out.dimOnRoute = onGauge.delta; out.dimOnClearance = onGauge.clearance;
+    out.dimOffRoute = offGauge.delta; out.dimOffClearance = offGauge.clearance;
     for (const k in saved) TCAPS[k] = saved[k];
     TADJ = null; tBuildCaps();
     return out;

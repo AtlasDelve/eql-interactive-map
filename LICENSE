@@ -34,8 +34,8 @@ cover it. Where that geometry came from decides whose work it is:
     files, and likewise not this project's to license.
 
 A single built map can contain a mixture, and the conversion records which
-layer supplied each zone — see rootZones and sources[].from in the generated
-cache's manifest.json.
+layer supplied each zone — see rootZones and the from fields under sources
+and discoveredSources in the generated cache's manifest.json.
 
 This project distributes the builder, which embeds no map geometry at all,
 and additionally offers prebuilt maps as a convenience. Each prebuilt names

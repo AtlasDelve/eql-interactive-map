@@ -13,7 +13,7 @@ ALL[name] for every continent in the realm, so every name here must exist in bot
 
 Usage: python fixture.py <outdir> [variant ...]
   variants: base add-hub add-conn add-zone del-hub add-worldlink script-label skip-zone
-            (default: all)
+            discovered-zone (default: all)
 """
 import copy
 import json
@@ -234,6 +234,33 @@ def variant(name, data):
              "stops": ["beta", "gamma", "zeta"], "hubs": [None, None, None],
              "cost": 6},
         ])
+    elif name == "discovered-zone":
+        # Runtime-side stand-in for a correctly composed catalog record. The converter fixture
+        # proves how this data is produced; this variant proves the viewer consumes the resulting
+        # ordinary zone, detail marker and walk edge through their real runtime seams.
+        discovered_name = "Discovered Reach"
+        ALL["Antonica"]["zones"]["discovered"] = zone(
+            discovered_name, 6500, 0, 7300, 800, "#c58be2")
+        ALL["Antonica"]["bbox"] = [0, 0, 7300, 1000]
+        ALL["Antonica"]["placed"].append("discovered")
+        DETAIL["Antonica"] = {
+            "palette": ["#ffffff"],
+            "zones": {
+                "alpha": {
+                    "name": "Alpha Fields",
+                    "segs": [s + [0] for s in box(0, 0, 1000, 1000)],
+                    "labels": [[500, 500, 0, 2, "to_Discovered_Reach"]],
+                    "bbox": [0, 0, 1000, 1000],
+                },
+                "discovered": {
+                    "name": discovered_name,
+                    "segs": [s + [0] for s in box(6500, 0, 7300, 800)],
+                    "labels": [],
+                    "bbox": [6500, 0, 7300, 800],
+                },
+            },
+        }
+        TRAVEL["walk"].append({"z": ["alpha", "discovered"], "cost": 6.7})
     else:
         raise SystemExit("unknown variant " + name)
     return ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS
@@ -252,7 +279,7 @@ def emit(path, edition, data):
 if __name__ == "__main__":
     outdir = sys.argv[1]
     variants = sys.argv[2:] or ["base", "add-hub", "add-conn", "add-zone", "del-hub",
-                                "add-worldlink", "script-label", "skip-zone"]
+                                "add-worldlink", "script-label", "skip-zone", "discovered-zone"]
     os.makedirs(outdir, exist_ok=True)
     base = base_data()
     for v in variants:
