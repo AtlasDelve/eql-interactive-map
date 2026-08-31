@@ -2,7 +2,8 @@
 """Assemble the no-install browser builder from code and the authored data layer.
 
 The output embeds the user-edition map template, the authored composition inputs, the canonical
-colour table, and the DOM-free converter. It never reads a map pack or generated geometry.
+colour table, and the DOM-free geometry/converter modules. It never reads a map pack or generated
+geometry.
 """
 import argparse
 import json
@@ -17,6 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 BUILDER_TEMPLATE = os.path.join(ROOT, "src", "builder.html")
 MAP_TEMPLATE = os.path.join(ROOT, "src", "template.html")
+MAPGEOM = os.path.join(ROOT, "src", "mapgeom.js")
 CONVERTER = os.path.join(ROOT, "src", "pack_convert.js")
 DEFAULT_OUT = os.path.join(ROOT, "dist", "builder.html")
 
@@ -45,6 +47,11 @@ def read_converter(path=CONVERTER):
         source = f.read()
     check_converter_safe(source, path)
     return source
+
+
+def converter_payload(mapgeom_path=MAPGEOM, converter_path=CONVERTER):
+    """Return the closed, ordered classic-script payload consumed by the builder."""
+    return read_converter(mapgeom_path) + "\n" + read_converter(converter_path)
 
 
 def load_authored(data=DATA):
@@ -98,13 +105,13 @@ def extract_payload(html, name):
 
 
 def assemble(data=DATA, builder_template=BUILDER_TEMPLATE, map_template=MAP_TEMPLATE,
-             converter_path=CONVERTER):
+             mapgeom_path=MAPGEOM, converter_path=CONVERTER):
     with open(builder_template, "r", encoding="utf-8") as f:
         page = f.read()
     with open(map_template, "r", encoding="utf-8") as f:
         map_source = f.read()
 
-    converter = read_converter(converter_path)
+    converter = converter_payload(mapgeom_path, converter_path)
     template_payload = json_for_builder(build.strip_regions(map_source, "user"))
     authored_payload = json_for_builder(load_authored(data))
     colors_payload = json_for_builder(color_table())

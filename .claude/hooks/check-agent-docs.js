@@ -37,7 +37,7 @@ const PATH_RULES = [
   [/^scripts\/mapgeom\.py$/, [T_GRAPH]],
   [/^src\/mapgeom\.js$/, [T_GRAPH]],
   [/^scripts\/(import_pack|pack_colors)\.py$/, [PACK]],
-  [/^src\/pack_convert\.js$/, [PACK, BUILD]],
+  [/^src\/pack_convert\.js$/, [PACK, T_GRAPH, BUILD]],
   [/^src\/builder\.html$/, [BUILDER, LICENSING]],
   [/^scripts\/build_builder\.py$/, [BUILDER, BUILD]],
   [/^data\/_generated\//, [PACK]],

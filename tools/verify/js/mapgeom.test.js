@@ -6,9 +6,13 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const MapGeom = require('../../../src/mapgeom.js');
 
 const REPO = path.resolve(__dirname, '../../..');
+const REAL_MAPGEOM_JS = path.join(REPO, 'src', 'mapgeom.js');
+const REAL_MAPGEOM_PY = path.join(REPO, 'scripts', 'mapgeom.py');
+const mapgeomJsPath = process.env.EQL_MAPGEOM_JS ? path.resolve(process.env.EQL_MAPGEOM_JS) : REAL_MAPGEOM_JS;
+const MapGeom = require(mapgeomJsPath);
+if (!process.env.EQL_MAPGEOM_JS) assert.strictEqual(mapgeomJsPath, REAL_MAPGEOM_JS);
 const py = process.argv[2] || process.env.EQL_PYTHON || 'python';
 const EXPECTED_CORPUS_SHA256 = 'a16e339ad8a5be45f3a37d0e9ad9c7bfe7005931a0124321c61cb41632717a60';
 const DX = -22407.44944409043;
@@ -22,9 +26,13 @@ function pass(name, detail) {
 }
 
 const PYTHON_ADAPTER = String.raw`
-import json, math, os, struct, sys
-sys.path.insert(0, os.path.join(os.getcwd(), 'scripts'))
-import mapgeom
+import importlib.util, json, math, os, struct, sys
+mapgeom_path = os.environ.get('EQL_MAPGEOM_PY', os.path.join(os.getcwd(), 'scripts', 'mapgeom.py'))
+if 'EQL_MAPGEOM_PY' not in os.environ:
+    assert os.path.realpath(mapgeom_path) == os.path.realpath(os.path.join(os.getcwd(), 'scripts', 'mapgeom.py'))
+spec = importlib.util.spec_from_file_location('eql_mapgeom_under_test', mapgeom_path)
+mapgeom = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mapgeom)
 
 def bits(v):
     return struct.pack('>d', float(v)).hex()
@@ -110,8 +118,8 @@ late = mapgeom.nearest_outline_point(p['geometry']['lateZone'], 9999, 9999, Fals
 out = {
   'pinned': pinned, 'numericNorm': numeric_norm, 'numericCost': numeric_cost,
   'affine': affine, 'xfEdges': xf_edges,
+  'znorm': [mapgeom.znorm(x) for x in p['znorm']],
   'constants': {
-    'COST_SAMPLE': mapgeom.COST_SAMPLE, 'UNITS_PER_COST': mapgeom.UNITS_PER_COST,
     'ZALIAS': mapgeom.ZALIAS, 'DISCOVERY_EXCLUDE': sorted(mapgeom.DISCOVERY_EXCLUDE),
     'DISCOVERED_ZONE_COLOR': mapgeom.DISCOVERED_ZONE_COLOR,
     'LINK_OVERRIDE': mapgeom.LINK_OVERRIDE,
@@ -204,6 +212,13 @@ const discovery = {
   derived: ['chardokb', 'kaeltwo', 'oldkithicor', 'lavastorm_original', 'unrelated'],
   display: ['to_Kappa_Expedition_(click)', 'FROM_New_Sebilis_(exit)'],
 };
+const znormCases = [
+  'forrest', 'excile', 'cablis', 'toxullia', 'feerott', 'aquaduct',
+  'northern', 'southern', 'eastern', 'western', 'Name: suffix', '`quoted`',
+  'one-way', 'one way', 'plains of karana', 'The Clan Example', 'A&B-C', ' -- trim -- ',
+  'Butcherblock ⇄ Timorous Deep', 'East Freeport ⇄ Ocean of Tears ⇄ Butcherblock',
+  "Erudin ⇄ Erud's Crossing ⇄ South Qeynos",
+];
 const xfEdges = [
   { name: 'xf absent', zone: { cx: -2, cy: 3, segs: [] }, point: [-11, 17] },
   { name: 'xf empty', zone: { cx: -4, cy: -3, segs: [], xf: {} }, point: [9, -13] },
@@ -215,7 +230,7 @@ const xfEdges = [
 ];
 
 const generated = corpus();
-const payload = { pinned: { dx: DX, dy: DY }, corpus: generated, xfEdges,
+const payload = { pinned: { dx: DX, dy: DY }, corpus: generated, xfEdges, znorm: znormCases,
   entries, transitions, geometry, discovery };
 const corpusHash = crypto.createHash('sha256').update(JSON.stringify(generated)).digest('hex');
 assert.strictEqual(corpusHash, EXPECTED_CORPUS_SHA256, 'fixed corpus SHA-256 drifted');
@@ -225,6 +240,7 @@ assert(discriminating > 0, 'fixed corpus has no Math.hypot-discriminating record
 
 const run = spawnSync(py, ['-c', PYTHON_ADAPTER], {
   cwd: REPO, input: JSON.stringify(payload), encoding: 'utf8', shell: false,
+  env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
   maxBuffer: 64 * 1024 * 1024,
 });
 if (run.status !== 0) throw new Error(`Python adapter exited ${run.status}: ${run.stderr || run.stdout}`);
@@ -271,6 +287,10 @@ const xfEdgeActual = xfEdges.map(({ name, zone, point: [x, y] }) => {
   return { name, tpoint: tp.map(roundedBits), tinv: ti.map(roundedBits),
     roundTrip: rt.map(roundedBits) };
 });
+for (let i = 0; i < xfEdges.length; i++) {
+  assert.deepStrictEqual(xfEdgeActual[i].roundTrip,
+    xfEdges[i].point.map(roundedBits), `absolute rounded round-trip: ${xfEdges[i].name}`);
+}
 assert.deepStrictEqual(xfEdgeActual, python.xfEdges, 'rounded xf-edge Python parity');
 assert.deepStrictEqual(affine, python.affine, 'rounded affine corpus');
 pass('transforms', `${generated.affine.length} affine records plus ${xfEdges.length} degenerate-xf records`);
@@ -308,6 +328,7 @@ const discoveryActual = {
   display: discovery.display.map(MapGeom.discoveryDisplayName),
 };
 assert.deepStrictEqual(discoveryActual, python.discovery);
+assert.deepStrictEqual(znormCases.map(MapGeom.znorm), python.znorm, 'direct znorm differential');
 assert.deepStrictEqual(discoveryActual.series, ['sra', 'sra', null, null]);
 assert.deepStrictEqual(discoveryActual.derived, ['chardok', 'kael', 'kithicor', 'lavastorm', null]);
 assert.strictEqual(discoveryActual.display[0], 'Kappa Expedition');
@@ -345,6 +366,9 @@ assert.deepStrictEqual(transformedBits, python.geometry.thinTransformed,
   'rounded transformed cost-point parity');
 const privateKeys = Object.keys(thin).filter(k => k.startsWith('_')).sort();
 assert.deepStrictEqual(privateKeys, ['_cpts', '_cpts_t']);
+const serializedFull = JSON.stringify(thin);
+assert(serializedFull.includes('_cpts') && serializedFull.includes('_cpts_t'),
+  'unfiltered serialization carries both private caches');
 const serializedThin = JSON.stringify(Object.fromEntries(
   Object.entries(thin).filter(([key]) => !key.startsWith('_'))));
 assert(!serializedThin.includes('_cpts') && !serializedThin.includes('_cpts_t'),
@@ -369,6 +393,9 @@ const parityCall = runner.indexOf('step("mapgeom Python/JavaScript parity"');
 const dependencyBlock = runner.indexOf('if have_node:', runner.indexOf('# Dependency-free twin gates'));
 const quickGate = runner.indexOf('if args.quick:', dependencyBlock);
 const npmGate = runner.indexOf('if not (have_node and have_mods):');
+for (const [name, position] of Object.entries({ parityCall, dependencyBlock, quickGate, npmGate })) {
+  assert(position >= 0, `runner source anchor missing: ${name}`);
+}
 assert(parityCall > dependencyBlock && parityCall < quickGate,
   'mapgeom parity registration must run under Node and outside the --quick guard');
 assert(parityCall < npmGate, 'mapgeom parity registration must precede the node_modules gate');
@@ -376,8 +403,9 @@ assert(runner.includes('results.append(("mapgeom Python/JavaScript parity", "SKI
   'no-Node branch must append the exact named SKIP result');
 const bridgeSource = fs.readFileSync(path.join(REPO, 'tools', 'verify', 'js',
   'pack-convert-full.test.js'), 'utf8');
-assert(bridgeSource.includes("const MapGeom = require('../../../src/mapgeom.js')"),
-  'real-pack bridge must import MapGeom');
+assert(bridgeSource.includes(
+  "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
+  'real-pack bridge must import MapGeom through the step-1 seam');
 assert(bridgeSource.includes('geom = MapGeom') && bridgeSource.includes('geom.zidxFrom(entries)') &&
   bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
   'real-pack bridge must expose and consume the injected MapGeom seam');

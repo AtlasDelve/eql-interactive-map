@@ -138,7 +138,7 @@ check("escaped payload still parses to the original label",
 check("version substitutes as raw constrained text", out.split("\n")[-1], VERSION)
 
 # --- credit: format, escaping, missing-placeholder guard, and one-pass assembly ---
-def fixture_credit(pack, root_counts, discovered=None, discover=True):
+def fixture_credit(pack, root_counts, discovered=None):
     with tempfile.TemporaryDirectory() as data:
         generated = os.path.join(data, build.import_pack.CACHE_DIRNAME)
         os.makedirs(generated)
@@ -149,7 +149,7 @@ def fixture_credit(pack, root_counts, discovered=None, discover=True):
             manifest["continents"].setdefault("C0", {"rootZones": []})["discovered"] = discovered
         with open(os.path.join(generated, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f)
-        return build.cred_text(data, discover=discover)
+        return build.cred_text(data)
 
 
 check("credit names a community pack exactly",
@@ -164,14 +164,10 @@ check("credit singular root-zone clause",
 check("credit plural root-zone clause",
       fixture_credit(os.path.join("game", "maps", "Layered"), [1, 2]),
       "EQL · Layered map data · 3 zones from the game's own maps")
-check("credit counts root-sourced discoveries when composition is enabled",
+check("credit counts root-sourced discoveries in the manifest",
       fixture_credit(os.path.join("game", "maps", "Layered"), [],
                      [{"key": "new", "from": "root"}, {"key": "packnew", "from": "pack"}]),
       "EQL · Layered map data · 1 zone from the game's own maps")
-check("credit ignores root-sourced discoveries when composition is disabled",
-      fixture_credit(os.path.join("game", "maps", "Layered"), [],
-                     [{"key": "new", "from": "root"}], discover=False),
-      "EQL · Layered map data")
 escaped_credit = build.inject(
     "<div>__CRED__</div>\n" + TPL, {}, {}, {}, {}, [], [], {}, {},
     credit="x</div>&\"'", version=VERSION)

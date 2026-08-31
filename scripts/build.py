@@ -133,16 +133,15 @@ def read_version(path=VERSION_FILE):
     return version
 
 
-def cred_text(data, discover=True):
+def cred_text(data):
     """Describe the selected pack and any zones supplied by the game's own maps."""
     manifest = load_manifest(data)
     pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
     root_count = sum(len(c.get("rootZones", []))
                      for c in manifest.get("continents", {}).values())
-    if discover:
-        root_count += sum(
-            1 for entry in manifest.get("continents", {}).values()
-            for record in entry.get("discovered", []) if record.get("from") == "root")
+    root_count += sum(
+        1 for entry in manifest.get("continents", {}).values()
+        for record in entry.get("discovered", []) if record.get("from") == "root")
     # Canonical format for the browser twin, including separators:
     #   root: EQL · selected maps folder
     #   pack: EQL · <name> map data[ · N zone(s) from the game's own maps]
@@ -287,7 +286,7 @@ def ensure_cache(data, pack):
                          "Re-run: python scripts/import_pack.py --pack %s" % (why, pack))
 
 
-def build(data=None, discover=True):
+def build(data=None):
     data = data or DATA
     world = load(os.path.join(data, "world.json"))
     META = world["meta"]
@@ -305,7 +304,7 @@ def build(data=None, discover=True):
 
     ALL, DETAIL, HUBS = {}, {}, {}
     skips = import_pack.cache_skips(data)
-    discoveries = import_pack.cache_discoveries(data) if discover else {}
+    discoveries = import_pack.cache_discoveries(data)
     for cont in order:
         base = cont_dir(cont, data)
         gen = cont_dir(cont, os.path.join(data, import_pack.CACHE_DIRNAME))
@@ -430,8 +429,6 @@ def main():
     ap.add_argument("--pack", default=None,
                     help="map-pack directory (e.g. <game install>/maps/Brewall). Remembered "
                          "in <data>/" + PACK_CONFIG + ", so later builds need no flag.")
-    ap.add_argument("--no-discover", action="store_false", dest="discover", default=True,
-                    help="ignore the generated discovery catalog while composing this build")
     args = ap.parse_args()
     out = args.out or DEFAULT_OUT[args.edition]
     data_root = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -443,8 +440,8 @@ def main():
         template = f.read()
 
     template = strip_regions(template, args.edition)     # strip before injecting
-    data = build(data_root, discover=args.discover)
-    html = inject(template, *data, credit=cred_text(data_root, discover=args.discover),
+    data = build(data_root)
+    html = inject(template, *data, credit=cred_text(data_root),
                   version=read_version())
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)

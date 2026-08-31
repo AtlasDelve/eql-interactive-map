@@ -54,10 +54,11 @@ repository-visibility rule.
 ## Assembly and the closed input set
 
 `build_builder.py` reads the builder page, strips the map template to the user edition, loads the
-authored tree with `build.load()`, generates the colour table from `PACK_COLORS`, inlines the
-converter, and reads the root `VERSION` file through `build.read_version()`. Those are the complete
-inputs. It does not inspect the generated cache, a remembered pack path, or a map-pack directory,
-so deleting the cache cannot change its bytes.
+authored tree with `build.load()`, generates the colour table from `PACK_COLORS`, inlines the ordered
+`src/mapgeom.js` then `src/pack_convert.js` classic-script payload, and reads the root `VERSION` file
+through `build.read_version()`. Those are the complete inputs. It does not inspect the generated
+cache, a remembered pack path, or a map-pack directory, so deleting the cache cannot change its
+bytes.
 
 `VERSION` is one non-empty ASCII line in the raw-substitution-safe set of letters, digits, dot,
 plus and hyphen. The shared reader strips the file once and rejects anything outside that contract.
@@ -84,10 +85,11 @@ The stripped template contains seven astral-plane characters, so its JavaScript 
 seven greater than its Unicode code-point count. Cross-language length comparisons are therefore
 invalid; compare the text in one language. The authored object is 41,981 code points as compact
 Unicode JSON and 42,241 bytes in the emitted ASCII-only literal; the 83-entry colour table is 1,813
-bytes; and the raw converter is 18,197 characters or 18,200 UTF-8 bytes. Summary sizes describe the
-bytes actually embedded.
+bytes; and the ordered MapGeom-plus-converter payload is 41,329 characters or 41,332 UTF-8 bytes.
+Summary sizes describe the bytes actually embedded.
 
-The converter is different: applying the JSON rewrite to raw JavaScript would corrupt its literal
+The two-module converter payload is different: applying the JSON rewrite to raw JavaScript would
+corrupt its literal
 `.replace(/</g, ...)` regular expression. It is therefore embedded byte-for-byte after a
 case-insensitive refusal for `</script`, `<script`, and `<!--`. The refusal makes the raw embedding
 safe without maintaining a rewritten second copy.
@@ -113,7 +115,7 @@ The result remains usable after the source folder is no longer available.
 The input is large enough that selection is part of the architecture. The supported maps tree is
 340 MB on disk across 4,093 text files, while roster-and-layer filtering reads 361 files / 25.9 MB
 for Brewall. Reading the entire selection first would multiply the browser's I/O for data the
-converter will never inspect. The assembled builder itself is 257,425 bytes. Of that closed input,
+converter will never inspect. The assembled builder itself is 280,260 bytes. Of that closed input,
 the authored payload is 41,981 Unicode code points and 42,241 emitted bytes; the two units are kept
 separate because compact Unicode JSON and the ASCII-only embedded literal are not byte-equivalent.
 

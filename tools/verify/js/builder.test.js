@@ -92,8 +92,7 @@ function copyFixtureData(root) {
 function pythonReference(pack, data, reference) {
   let run = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (run.status !== 0) throw new Error('fixture import failed: ' + run.stderr);
-  // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
-  run = runPython(['scripts/build.py', '--data', data, '--out', reference, '--no-discover']);
+  run = runPython(['scripts/build.py', '--data', data, '--out', reference]);
   if (run.status !== 0) throw new Error('fixture build failed: ' + run.stderr);
   return fs.readFileSync(reference, 'utf8');
 }
@@ -286,10 +285,10 @@ async function main() {
     const layered = await pageBuild(page, layeredFiles, layeredChoice.record);
     check('layered report pins root-sourced gamma', () =>
       assert.deepStrictEqual(hostArray(layered.built.report.rootZones.Testland), ['gamma']));
-    check('layered credit pins one game-root zone', () =>
-      assert.strictEqual(layered.built.credit, "EQL · Layered map data · 1 zone from the game's own maps"));
     check('page output is byte-identical to Python over layered pack', () =>
       assertSame('layered builder', layered.built.html, layeredReference));
+    check('layered credit pins six game-root zones', () =>
+      assert.strictEqual(layered.built.credit, "EQL · Layered map data · 6 zones from the game's own maps"));
 
     const rootChoice = choice(page, layeredFiles, 'maps (root alone)');
     const rootPageFiles = layeredFiles.map(file => ({

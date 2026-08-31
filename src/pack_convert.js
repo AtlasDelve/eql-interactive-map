@@ -3,6 +3,8 @@
 // DOM-free twin of scripts/import_pack.py plus scripts/build.py's composition/injection.
 // I/O is supplied by the caller so the same converter runs under Node and in builder.html.
 
+const GEOM = (typeof require === 'function') ? require('./mapgeom.js') : MapGeom;
+
 const LAYER_SUFFIXES = ['', '_1', '_2', '_3'];
 const PY_WS = '[\\t\\n\\v\\f\\r \\x1c-\\x1f\\x85\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]';
 const PY_STRIP = new RegExp('^' + PY_WS + '+|' + PY_WS + '+$', 'g');
@@ -11,6 +13,14 @@ const PLACEHOLDERS = ['__WORLDLINKS__', '__UNIVERSE__', '__DETAIL__', '__TRAVEL_
 // Keep these measured thresholds aligned with scripts/pack_colors.py; see docs/reference/pack-import.md.
 const LIFT_MAX = 205.0;
 const LIFT_LUMA = 124.3;
+
+// Discovery ordering must match Python's `sorted()`, which is Unicode code-point order. This is
+// UTF-16 CODE-UNIT order, which is the same thing for the ASCII zone keys discovery can produce
+// (see the boundary note below) and is what the surrounding bare `.sort()` calls already use.
+// It is NOT localeCompare: that is ICU collation under the HOST DEFAULT LOCALE, which in
+// builder.html is the end user's. See Amendment 2.
+function cmpStr(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+function byKey(a, b) { return cmpStr(a.key, b.key); }
 
 function roundHalfEven(x) {
   // Coordinates use Python round(): half-to-even, not JavaScript Math.round.
@@ -274,6 +284,276 @@ function looksLikeRootMaps(index, packDir) {
   return reasons;
 }
 
+function discoveryIndexEntries(index, authored, packDir, rootDir) {
+  const entries = [];
+  for (const cont of authored.world.order) {
+    const meta = authored.continents[cont].meta;
+    const roster = meta.zoneOrder.slice();
+    for (const zk of meta.detailZones || []) if (!roster.includes(zk)) roster.push(zk);
+    const resolved = new Set();
+    for (const zk of roster) {
+      const [srcDir] = resolveZoneSource(index, packDir, rootDir, zk);
+      if (srcDir) resolved.add(zk);
+    }
+    for (const zk of meta.detailZones || []) {
+      if (resolved.has(zk)) entries.push([cont, zk, meta.zones[zk].name]);
+    }
+  }
+  return entries;
+}
+
+function discoveryBaseKeys(index, packDir, rootDir) {
+  const keys = new Set();
+  const suffixes = LAYER_SUFFIXES.filter(Boolean).map(s => s.toLowerCase());
+  for (const srcDir of [packDir, rootDir]) {
+    if (!srcDir) continue;
+    const prefix = pathJoin(srcDir).toLowerCase() + '/';
+    for (const actual of index.keys()) {
+      const folded = actual.toLowerCase();
+      if (!folded.startsWith(prefix)) continue;
+      const name = folded.slice(prefix.length);
+      if (name.includes('/') || !name.endsWith('.txt')) continue;
+      let stem = name.slice(0, -4);
+      for (const suffix of suffixes) {
+        if (stem.endsWith(suffix)) { stem = stem.slice(0, -suffix.length); break; }
+      }
+      keys.add(stem);
+    }
+  }
+  return [...keys].sort();
+}
+
+async function detectDiscoveries(files, index, packDir, rootDir, roster, zoneIndex) {
+  const rosterSet = new Set([...roster].map(key => key.toLowerCase()));
+  const keyContinent = new Map();
+  for (const { cont, key } of Object.values(zoneIndex)) keyContinent.set(key, cont);
+  const candidates = [], rejected = [];
+  const reject = (key, reason, detail) => rejected.push({ key, reason, detail });
+
+  for (const key of discoveryBaseKeys(index, packDir, rootDir)) {
+    if (rosterSet.has(key)) continue;
+    const [srcDir, source] = resolveZoneSource(index, packDir, rootDir, key);
+    if (!srcDir) continue;
+    if (!index.has(pathJoin(srcDir, key + '.txt'))) {
+      reject(key, 'baseless', source);
+      continue;
+    }
+    const [records] = await parseZone(files, index, srcDir, key);
+    const targets = new Set();
+    for (const [layer, kind, record] of records) {
+      if (layer === 1 && kind === 'P') {
+        for (const target of GEOM.transitionTargets(zoneIndex, key, record[3])) {
+          if (keyContinent.has(target)) targets.add(target);
+        }
+      }
+    }
+    const sortedTargets = [...targets].sort();
+    const continents = [...new Set(sortedTargets.map(target => keyContinent.get(target)))].sort();
+    if (!sortedTargets.length) {
+      reject(key, 'unresolved', 'no resolved outward transition');
+      continue;
+    }
+    if (continents.length !== 1) {
+      reject(key, 'ambiguous', continents.join(', '));
+      continue;
+    }
+    candidates.push({ key, from: source, continent: continents[0], targets: sortedTargets });
+  }
+
+  const groups = new Map();
+  for (const candidate of candidates) {
+    const stem = GEOM.discoverySeriesStem(candidate.key);
+    if (!stem) continue;
+    if (!groups.has(stem)) groups.set(stem, []);
+    groups.get(stem).push(candidate);
+  }
+  const seriesKeys = new Set();
+  for (const [stem, members] of groups) {
+    if (members.length >= 3 && members.every(member => member.targets.length === 1) &&
+        new Set(members.map(member => member.targets[0])).size === 1) {
+      for (const member of members) {
+        seriesKeys.add(member.key);
+        reject(member.key, 'series', stem);
+      }
+    }
+  }
+
+  const accepted = Object.create(null);
+  for (const candidate of candidates) {
+    if (seriesKeys.has(candidate.key)) continue;
+    const parent = GEOM.discoveryDerivedParent(candidate.key, rosterSet);
+    if (parent != null) {
+      reject(candidate.key, 'derived', parent);
+      continue;
+    }
+    if (GEOM.DISCOVERY_EXCLUDE.has(candidate.key)) {
+      reject(candidate.key, 'excluded', 'DISCOVERY_EXCLUDE');
+      continue;
+    }
+    if (!accepted[candidate.continent]) accepted[candidate.continent] = [];
+    accepted[candidate.continent].push(candidate);
+  }
+  for (const records of Object.values(accepted)) records.sort(byKey);
+  rejected.sort(byKey);
+  return { accepted, rejected };
+}
+
+function candidateDoorway(records, zoneIndex, key, target) {
+  for (const [layer, kind, record] of records) {
+    if (layer !== 1 || kind !== 'P') continue;
+    const [nums, , , label] = record;
+    if (GEOM.transitionTargets(zoneIndex, key, label).includes(target)) {
+      return [roundHalfEven(nums[0]), roundHalfEven(-nums[1])];
+    }
+  }
+  throw new Error(`discovery target ${key} -> ${target} lost its source marker`);
+}
+
+function reciprocalMarker(records, zoneIndex, anchor) {
+  const unresolved = [];
+  for (const [layer, kind, record] of records) {
+    if (layer !== 1 || kind !== 'P') continue;
+    const [nums, , , label] = record;
+    if (!/^(to|from)_/i.test(label)) continue;
+    if (!GEOM.transitionTargets(zoneIndex, anchor, label).length) {
+      unresolved.push([roundHalfEven(nums[0]), roundHalfEven(-nums[1]), label]);
+    }
+  }
+  return unresolved.length === 1 ? unresolved[0] : null;
+}
+
+function writtenCentroid(segs, key) {
+  if (!segs.length) throw new Error(`discovered zone ${JSON.stringify(key)} has no base-layer line geometry`);
+  let sx = 0, sy = 0;
+  for (const seg of segs) {
+    sx += seg[0] + seg[2];
+    sy += seg[1] + seg[3];
+  }
+  const count = segs.length * 2;
+  return [roundHalfEven(sx / count), roundHalfEven(sy / count)];
+}
+
+async function assembleDiscoveries({ files, index, cont, candidates, packDir, rootDir,
+  parsed, meta, zoneIndex, palette, colors, unseen, authoredDetails }) {
+  const catalog = [], sources = [], discoveredPalette = [];
+  const paletteIndex = new Map(palette.map((color, i) => [color, i]));
+  const azones = meta.zones || {}, targetsByKey = new Map(), candidateDetails = new Map();
+
+  // Cost calculations own their records: costBetween memoizes on zone objects.
+  const costZones = Object.create(null);
+  for (const key of meta.zoneOrder) {
+    if (!parsed.has(key)) continue;
+    const geometry = geometryRecords(parsed.get(key).records, azones[key].off, `${cont}/${key}`);
+    costZones[key] = composeZone(azones[key], geometry, null);
+  }
+
+  for (const partial of [...candidates].sort(byKey)) {
+    const key = partial.key, targets = [...partial.targets].sort(), anchor = targets[0];
+    targetsByKey.set(key, targets);
+    const [srcDir, source] = resolveZoneSource(index, packDir, rootDir, key);
+    if (!srcDir || source !== partial.from) {
+      throw new Error(`discovered source changed during conversion for ${key}`);
+    }
+    const [records] = await parseZone(files, index, srcDir, key);
+    const doorway = candidateDoorway(records, zoneIndex, key, anchor);
+    const reciprocal = reciprocalMarker(parsed.get(anchor).records, zoneIndex, anchor);
+    let off, name, nameFrom;
+    if (reciprocal) {
+      off = [azones[anchor].off[0] + reciprocal[0] - doorway[0],
+        azones[anchor].off[1] + reciprocal[1] - doorway[1]];
+      name = GEOM.discoveryDisplayName(reciprocal[2]);
+      if (GEOM.znorm(name) !== GEOM.znorm(reciprocal[2])) {
+        throw new Error(`discovered display name changed marker identity for ${key}`);
+      }
+      if (GEOM.resolveZone(zoneIndex, name) != null) {
+        throw new Error(`discovered marker name collides with authored content: ${name}`);
+      }
+      nameFrom = 'marker';
+    } else {
+      const anchorZone = costZones[anchor];
+      const point = GEOM.nearestOutlinePoint(anchorZone, anchorZone.cx, anchorZone.cy, false);
+      off = [point[0] - doorway[0], point[1] - doorway[1]];
+      name = key;
+      nameFrom = 'key';
+    }
+
+    const geometry = geometryRecords(records, off, `${cont}/${key}`);
+    const [cx, cy] = writtenCentroid(geometry.segs, key);
+    const zone = composeZone({ name, color: GEOM.DISCOVERED_ZONE_COLOR, cx, cy }, geometry, null);
+    costZones[key] = zone;
+
+    const detail = detailRecords(records, `${cont}/${key}`);
+    for (const [item, slot] of [
+      ...detail.segs.map(item => [item, 4]),
+      ...detail.labels.map(item => [item, 2]),
+    ]) {
+      const color = colorFor(item[slot], colors, unseen);
+      if (!paletteIndex.has(color)) {
+        paletteIndex.set(color, palette.length + discoveredPalette.length);
+        discoveredPalette.push(color);
+      }
+      item[slot] = paletteIndex.get(color);
+    }
+    detail.bbox = bboxOf(detail.rawX, detail.rawY);
+    candidateDetails.set(key, detail);
+    for (const fileKey of zoneFileKeys(index, srcDir, key)) {
+      sources.push({ name: basename(fileKey), from: source });
+    }
+    catalog.push({ key, name, nameFrom, color: GEOM.DISCOVERED_ZONE_COLOR, cx, cy,
+      off, anchor, from: source });
+  }
+
+  const byName = new Map();
+  for (const record of catalog) {
+    const normalized = GEOM.znorm(record.name);
+    if (!byName.has(normalized)) byName.set(normalized, []);
+    byName.get(normalized).push(record);
+  }
+  for (const collision of [...byName.values()].filter(records => records.length > 1)) {
+    const keyNorms = collision.map(record => GEOM.znorm(record.key));
+    if (new Set(keyNorms).size !== keyNorms.length) {
+      throw new Error(`discovered zone keys still collide after name fallback: ${collision.map(record => record.key).join(', ')}`);
+    }
+    for (const record of collision) {
+      record.name = record.key;
+      record.nameFrom = 'key';
+    }
+  }
+
+  const edgeIndex = Object.assign(Object.create(null), zoneIndex);
+  const discoveredIndex = GEOM.zidxFrom(catalog.map(record => [cont, record.key, record.name]));
+  for (const [normalized, target] of Object.entries(discoveredIndex)) {
+    if (!Object.prototype.hasOwnProperty.call(edgeIndex, normalized)) edgeIndex[normalized] = target;
+  }
+  const extendedPalette = palette.concat(discoveredPalette);
+  const outputZones = Object.create(null), outputDetails = Object.create(null);
+  for (const record of catalog) {
+    const key = record.key;
+    const candidateDetail = composeDetail(record, candidateDetails.get(key), extendedPalette);
+    const candidateExits = GEOM.exitPointsFrom(key, costZones[key], candidateDetail, edgeIndex);
+    const edges = [];
+    for (const neighbour of targetsByKey.get(key)) {
+      const neighbourExits = GEOM.exitPointsFrom(
+        neighbour, costZones[neighbour], authoredDetails[neighbour], edgeIndex);
+      const exits = new Map(candidateExits);
+      for (const [pair, point] of neighbourExits) exits.set(pair, point);
+      const candidateNamed = exits.has(`${key}\0${neighbour}`);
+      const neighbourNamed = exits.has(`${neighbour}\0${key}`);
+      let named;
+      if (candidateNamed && neighbourNamed) named = 'both';
+      else if (candidateNamed) named = 'candidate';
+      else if (neighbourNamed) named = 'neighbour';
+      else throw new Error(`accepted discovery edge lost both doorway markers: ${key}/${neighbour}`);
+      const rawCost = GEOM.costBetween(costZones, key, neighbour, false, exits);
+      edges.push({ z: neighbour, cost: GEOM.round1(Math.max(rawCost, 0.1)), named });
+    }
+    record.edges = edges;
+    outputZones[key] = composeZone(record, { segs: costZones[key].segs }, null);
+    outputDetails[key] = candidateDetail;
+  }
+  return { catalog, sources, discoveredPalette, outputZones, outputDetails };
+}
+
 function htmlEscape(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 }
@@ -314,11 +594,22 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const world = authored.world, order = world.order;
   const ALL = {}, META = world.meta, DETAIL = {}, HUBS = {};
   const UNIVERSE = world.universe || [], WORLDLINKS = world.worldLinks || [];
-  const TRAVEL = authored.travel || {}, XPACS = world.xpacs || {};
+  let TRAVEL = authored.travel || {};
+  const XPACS = world.xpacs || {};
   const skippedReport = {}, rootReport = {}, baseless = [], unseen = [], warnings = looksLikeRootMaps(index, packDir);
   const collisions = index.collisions.map(pair => `file key collision: ${pair[0]} | ${pair[1]}`);
-  const unknownRecords = {};
+  const unknownRecords = {}, discoveredReport = {}, discoveredSourcesReport = {};
   let rootCount = 0;
+
+  const discoveryRoster = new Set();
+  for (const cont of order) {
+    const meta = authored.continents[cont].meta;
+    for (const zk of meta.zoneOrder) discoveryRoster.add(zk);
+    for (const zk of meta.detailZones || []) discoveryRoster.add(zk);
+  }
+  const discoveryIndex = GEOM.zidxFrom(discoveryIndexEntries(index, authored, packDir, rootDir));
+  const discoveries = await detectDiscoveries(
+    files, index, packDir, rootDir, discoveryRoster, discoveryIndex);
 
   for (const cont of order) {
     const entry = authored.continents[cont];
@@ -397,9 +688,44 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       for (const lab of (azones[zk].labels || [])) if (traced.has(lab[4])) collisions.push(`${cont}/${zk}: ${lab[4]}`);
       dz[zk] = composeDetail(azones[zk], d, palette);
     }
-    if (palette.length || Object.keys(dz).length) DETAIL[cont] = { palette, zones: dz };
+    const candidates = discoveries.accepted[cont] || [];
+    let assembled = {
+      catalog: [], sources: [], discoveredPalette: [], outputZones: {}, outputDetails: {},
+    };
+    if (candidates.length) {
+      assembled = await assembleDiscoveries({
+        files, index, cont, candidates, packDir, rootDir,
+        parsed, meta, zoneIndex: discoveryIndex, palette, colors, unseen, authoredDetails: dz,
+      });
+    }
+    discoveredReport[cont] = assembled.catalog;
+    discoveredSourcesReport[cont] = assembled.sources;
+    for (const record of assembled.catalog) {
+      zones[record.key] = assembled.outputZones[record.key];
+      dz[record.key] = assembled.outputDetails[record.key];
+      if (record.from === 'root') rootCount++;
+    }
+    const extendedPalette = palette.concat(assembled.discoveredPalette);
+    if (extendedPalette.length || Object.keys(dz).length) DETAIL[cont] = { palette: extendedPalette, zones: dz };
     const hubs = layout.hubs || [];
     if (hubs.length && Object.keys(zones).length) HUBS[cont] = hubs;
+  }
+
+  if (Object.keys(TRAVEL).length) {
+    TRAVEL = { ...TRAVEL };
+    const authoredPairs = new Set((TRAVEL.walk || []).map(edge => [...edge.z].sort().join('\0')));
+    const records = Object.values(discoveredReport).flat().sort(byKey);
+    const derived = [];
+    for (const record of records) {
+      for (const edge of [...record.edges].sort((a, b) => cmpStr(a.z, b.z))) {
+        const pair = [record.key, edge.z].sort().join('\0');
+        if (authoredPairs.has(pair)) {
+          throw new Error(`discovered walk edge duplicates authored pair: ${pair.replace('\0', '|')}`);
+        }
+        derived.push({ z: [record.key, edge.z], cost: edge.cost });
+      }
+    }
+    TRAVEL.walk = (TRAVEL.walk || []).concat(derived);
   }
 
   const data = { ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS };
@@ -407,7 +733,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const report = {
     skipped: skippedReport, rootZones: rootReport, baseless,
     unseenColors: [...new Set(unseen)].sort(), warnings, collisions: [...new Set(collisions)].sort(),
-    unknownRecords,
+    unknownRecords, discovered: discoveredReport, discoveryRejected: discoveries.rejected,
+    discoveredSources: discoveredSourcesReport,
   };
   return { data, credit: creditText(packDir, rootCount), report };
 }

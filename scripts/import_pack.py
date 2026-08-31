@@ -754,7 +754,7 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
     return catalog, discovered_sources, discovered_palette
 
 
-def convert(pack, data=None, only=None, quiet=False, discover=True):
+def convert(pack, data=None, only=None, quiet=False):
     data = data or DATA
     with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
         world = json.load(f)
@@ -798,17 +798,15 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
 
     # Pass B -- detect globally. --only scopes which catalog entry is replaced, never the
     # first-wins index or the classification that assigned a candidate to a continent.
-    accepted, rejected = {}, []
-    if discover:
-        roster_keys = []
-        for cont in world["order"]:
-            cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
-            with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            roster_keys.extend(meta["zoneOrder"])
-            roster_keys.extend(meta.get("detailZones", []))
-        accepted, rejected = detect_discoveries(
-            pack, root, roster_keys, zone_index, include_targets=True)
+    roster_keys = []
+    for cont in world["order"]:
+        cdir = os.path.join(data, "continents", cont.replace(" ", "_").replace("'", ""))
+        with open(os.path.join(cdir, "continent.json"), "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        roster_keys.extend(meta["zoneOrder"])
+        roster_keys.extend(meta.get("detailZones", []))
+    accepted, rejected = detect_discoveries(
+        pack, root, roster_keys, zone_index, include_targets=True)
 
     out_root = os.path.join(data, CACHE_DIRNAME)
     # A unique staging directory beside the target, not a fixed `.tmp` sibling: two runs in
@@ -837,15 +835,13 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
         "unknownRecords": {},
         "unseenColors": [],
     }
-    if discover:
-        manifest["discoveryRejected"] = rejected
-        manifest["discoveryRejectedNote"] = (
-            "Run-scoped like unknownRecords; an --only conversion may under-report the merged cache.")
-        manifest["discoveredSourcesNote"] = (
-            "Discovered inputs are separate from sources so sourceCount/sourceFingerprint keep "
-            "describing the authored roster files read by the browser twin. Their own count and "
-            "fingerprint are checked by the Python freshness gate; plan 3 extends that check "
-            "across the browser seam.")
+    manifest["discoveryRejected"] = rejected
+    manifest["discoveryRejectedNote"] = (
+        "Run-scoped like unknownRecords; an --only conversion may under-report the merged cache.")
+    manifest["discoveredSourcesNote"] = (
+        "Discovered inputs are separate from sources so sourceCount/sourceFingerprint keep "
+        "describing the authored roster files. Their own count and fingerprint are checked "
+        "independently across both the Python and browser conversion paths.")
     if root:
         manifest["rootNote"] = (
             "Base layer: the client's own maps/ root, used per zone where no pack file exists. "
@@ -972,7 +968,7 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
                     collisions.append("%s/%s: %s" % (cont, zk, lab[4]))
 
         discovered, discovered_sources, discovered_palette = [], {}, []
-        if discover and accepted.get(cont):
+        if accepted.get(cont):
             discovered, discovered_sources, discovered_palette = assemble_discoveries(
                 cont, accepted[cont], pack, root, parsed, meta, zone_index,
                 cout, palette, unseen_all)
@@ -985,20 +981,19 @@ def convert(pack, data=None, only=None, quiet=False, discover=True):
         manifest["continents"][cont] = {
             "zones": roster,
             "paletteSize": len(palette),
-            "discovery": bool(discover),
+            "discovery": True,
             "rootZones": root_zones,
             "baselessZones": baseless,
             "skippedZones": skipped,
             "sources": sources,
         }
-        if discover:
-            manifest["continents"][cont]["discovered"] = discovered
-            if discovered:
-                manifest["continents"][cont]["discoveredPalette"] = discovered_palette
-                manifest["continents"][cont]["discoveredSources"] = discovered_sources
-                dcount, dfingerprint = _source_identity(discovered_sources)
-                manifest["continents"][cont]["discoveredSourceCount"] = dcount
-                manifest["continents"][cont]["discoveredSourceFingerprint"] = dfingerprint
+        manifest["continents"][cont]["discovered"] = discovered
+        if discovered:
+            manifest["continents"][cont]["discoveredPalette"] = discovered_palette
+            manifest["continents"][cont]["discoveredSources"] = discovered_sources
+            dcount, dfingerprint = _source_identity(discovered_sources)
+            manifest["continents"][cont]["discoveredSourceCount"] = dcount
+            manifest["continents"][cont]["discoveredSourceFingerprint"] = dfingerprint
         baseless_all += ["%s/%s" % (cont, zk) for zk in baseless]
         if not quiet:
             detail_written = sum(zk in parsed for zk in meta.get("detailZones", []))
@@ -1115,6 +1110,8 @@ def validate_cache(data=None, world=None):
         entry = man.get("continents", {}).get(cont)
         if entry is None:
             return False, "cache has no continent %r" % cont
+        if entry.get("discovery") is not True:
+            return False, "cache discovery catalog for %r is absent or disabled" % cont
         meta = metas[cont]
         want = list(meta["zoneOrder"])
         for zk in meta.get("detailZones", []):
@@ -1356,8 +1353,6 @@ def main():
                          "continent-scoped and index assignment is first-seen)")
     ap.add_argument("--print-authored", default=None, metavar="CONTINENT",
                     help="print the continent.json 'zones' block instead of converting")
-    ap.add_argument("--no-discover", action="store_true",
-                    help="skip unrostered-zone detection and omit its catalog")
     args = ap.parse_args()
 
     data = os.path.abspath(os.path.expanduser(args.data)) if args.data else DATA
@@ -1381,7 +1376,7 @@ def main():
         return
 
     print("Converting %s -> %s" % (pack, os.path.join(data, CACHE_DIRNAME)))
-    manifest = convert(pack, data, args.only, discover=not args.no_discover)
+    manifest = convert(pack, data, args.only)
     nz = sum(len(c["zones"]) - len(c.get("skippedZones", []))
              for c in manifest["continents"].values())
     print("Wrote %d continents, %d zones" % (len(manifest["continents"]), nz))

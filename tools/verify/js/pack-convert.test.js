@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,6 +14,7 @@ const {
 const REPO = path.resolve(__dirname, '../../..');
 const FX = path.join(REPO, 'tools', 'verify', 'packfx');
 const VERSION = fs.readFileSync(path.join(REPO, 'VERSION'), 'ascii').trim();
+const PINS = json(path.join(REPO, 'docs', 'internal', 'session-2026-08-23', 'plan3-pins.json'));
 const py = process.argv[2] || process.env.EQL_PYTHON || 'python';
 
 function runPython(args, options = {}) {
@@ -49,7 +51,7 @@ function loadAuthored(dataRoot) {
 }
 
 function reader(selected) {
-  const parent = path.dirname(selected), keys = [], disk = new Map();
+  const parent = path.dirname(selected), keys = [], disk = new Map(), reads = new Map();
   function walk(dir) {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const absolute = path.join(dir, ent.name);
@@ -64,8 +66,53 @@ function reader(selected) {
   return {
     keys() { return keys; },
     has(key) { return disk.has(key); },
-    async read(key) { return new Uint8Array(fs.readFileSync(disk.get(key))); },
+    async read(key) {
+      const bytes = fs.readFileSync(disk.get(key));
+      reads.set(key, Buffer.from(bytes));
+      return new Uint8Array(bytes);
+    },
+    reads,
   };
+}
+
+function sourceIdentity(reads) {
+  const sources = [...reads].map(([key, bytes]) => [
+    path.posix.basename(key), crypto.createHash('sha256').update(bytes).digest('hex'),
+  ]).sort((a, b) => a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : (a[1] < b[1] ? -1 : (a[1] > b[1] ? 1 : 0))));
+  const hash = crypto.createHash('sha256');
+  for (const [name, sha] of sources) hash.update(`${name} ${sha}\n`, 'utf8');
+  return { count: sources.length, fingerprint: hash.digest('hex') };
+}
+
+function assertNoDerivedTies(label, files, authored, packDir, rootDir) {
+  const roster = [];
+  for (const cont of authored.world.order) {
+    const meta = authored.continents[cont].meta;
+    for (const key of meta.zoneOrder) if (!roster.includes(key)) roster.push(key);
+    for (const key of meta.detailZones || []) if (!roster.includes(key)) roster.push(key);
+  }
+  const rosterSet = new Set(roster.map(key => key.toLowerCase())), candidates = new Set();
+  for (const dir of [packDir, rootDir]) {
+    if (!dir) continue;
+    const prefix = dir.toLowerCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') + '/';
+    for (const raw of files.keys()) {
+      const key = String(raw).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (!key.startsWith(prefix)) continue;
+      let name = key.slice(prefix.length);
+      if (name.includes('/') || !name.endsWith('.txt')) continue;
+      name = name.slice(0, -4).replace(/_(?:1|2|3)$/, '');
+      if (!rosterSet.has(name)) candidates.add(name);
+    }
+  }
+  for (const key of candidates) {
+    const matches = roster.filter(parent => {
+      const folded = parent.toLowerCase(), tail = key.startsWith(folded) ? key.slice(folded.length) : null;
+      return (tail != null && /^(b|c|two|twoa|twob)$/.test(tail)) ||
+        key === `old${folded}` || key === `${folded}_original`;
+    });
+    assert(matches.length <= 1, `${label}: derived-parent tie for ${key}: ${matches.join(', ')}`);
+  }
+  console.log(`PASS: ${label} derived-parent tie precondition (${candidates.size} candidate keys, none tied)`);
 }
 
 function strippedTemplate() {
@@ -110,6 +157,15 @@ assert.deepStrictEqual(
 );
 console.log('PASS: extractor skips a prose declaration mention');
 
+const converterSource = fs.readFileSync(path.join(REPO, 'src', 'pack_convert.js'), 'utf8');
+const convertArgs = converterSource.match(/async function convert\(\{([^}]+)\}\)/);
+assert(convertArgs, 'convert argument boundary is directly inspectable');
+assert.deepStrictEqual(convertArgs[1].split(',').map(value => value.trim()),
+  ['authored', 'files', 'colors', 'packDir', 'rootDir'], 'convert argument boundary stays closed');
+for (const token of ['createHash', 'crypto.subtle']) {
+  assert(!converterSource.includes(token), `production converter contains forbidden crypto token ${token}`);
+}
+
 function blobs(text) {
   return {
     ALL: extract(text, 'const ALL=', '{'),
@@ -129,6 +185,19 @@ function assertSame(label, actual, expected) {
   }
 }
 
+function assertNoPrivateKeys(data) {
+  const privateKeys = [];
+  function scan(value, at) {
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      if (key.startsWith('_')) privateKeys.push(`${at}.${key}`);
+      scan(child, `${at}.${key}`);
+    }
+  }
+  scan(data.ALL, 'ALL'); scan(data.DETAIL, 'DETAIL'); scan(data.TRAVEL, 'TRAVEL');
+  assert.deepStrictEqual(privateKeys, [], 'private discovery state leaked into injected data');
+}
+
 function copyFixtureData(root) {
   const data = path.join(root, 'data');
   fs.cpSync(path.join(FX, 'data'), data, { recursive: true });
@@ -138,8 +207,7 @@ function copyFixtureData(root) {
 function pythonPipeline(pack, data, ref) {
   const imp = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (imp.status !== 0) throw new Error(`import failed: ${imp.stderr.toString('utf8')}`);
-  // Plan 3 removes this parity-only --no-discover when the browser converter consumes catalogs.
-  return runPython(['scripts/build.py', '--data', data, '--out', ref, '--no-discover']);
+  return runPython(['scripts/build.py', '--data', data, '--out', ref]);
 }
 
 function assertNoRootLayer(pack) {
@@ -148,14 +216,18 @@ function assertNoRootLayer(pack) {
   if (run.status !== 0) throw new Error(`temporary pack unexpectedly acquired a root layer: ${run.stderr.toString('utf8')}`);
 }
 
-async function compareCase(label, pack, selected, packDir, rootDir, data, ref, template, colors, inspect) {
+async function compareCase(label, pack, selected, packDir, rootDir, data, ref, template, colors,
+  inspect, beforeCompare) {
   const build = pythonPipeline(pack, data, ref);
   if (build.status !== 0) throw new Error(`${label}: build failed: ${build.stderr.toString('utf8')}`);
   const reference = fs.readFileSync(ref, 'utf8');
-  const result = await convert({ authored: loadAuthored(data), files: reader(selected), colors, packDir, rootDir });
+  const files = reader(selected);
+  const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
   const actual = buildHTML(template, result.data, result.credit, VERSION);
-  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')));
+  assertNoPrivateKeys(result.data);
+  if (beforeCompare) beforeCompare(result);
   assertSame(label, actual, reference);
+  if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   console.log(`PASS: ${label}`);
 }
 
@@ -228,13 +300,83 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       const root = path.join(scratch, 'layered'); fs.mkdirSync(root);
       const data = copyFixtureData(root);
       const selected = path.join(FX, 'layered', 'maps'), pack = path.join(selected, 'Layered');
-      await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (_d, result) => {
+      await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (d, result, manifest, files) => {
+        assert.deepStrictEqual(Object.keys(result).sort(), ['credit', 'data', 'report']);
+        assert.deepStrictEqual(Object.keys(result.report).sort(), [
+          'baseless', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
+          'rootZones', 'skipped', 'unknownRecords', 'unseenColors', 'warnings',
+        ]);
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
-        assert.strictEqual(result.credit, 'EQL · Layered map data · 1 zone from the game\'s own maps');
+        assert.strictEqual(result.credit, PINS.cred_on);
+        assert.deepStrictEqual(result.report.discovered.Testland, PINS.discovered);
+        assert.deepStrictEqual(result.report.discoveredSources.Testland,
+          PINS.discoveredSources_names.map(name => ({ name, from: 'root' })));
+        const discoveredNames = new Set(PINS.discoveredSources_names);
+        const acceptedReads = new Map([...files.reads].filter(([key]) => discoveredNames.has(path.posix.basename(key))));
+        const identity = sourceIdentity(acceptedReads);
+        assert.deepStrictEqual(identity, {
+          count: PINS.discoveredSourceCount,
+          fingerprint: PINS.discoveredSourceFingerprint,
+        });
+        assert.strictEqual(manifest.continents.Testland.discoveredSourceCount, identity.count);
+        assert.strictEqual(manifest.continents.Testland.discoveredSourceFingerprint, identity.fingerprint);
+        assert.deepStrictEqual(Object.keys(d.ALL.Testland.zones), PINS.build_on.ALL_zone_keys);
+        assert.deepStrictEqual(Object.keys(d.DETAIL.Testland.zones), PINS.build_on.DETAIL_zone_keys);
+        assert.deepStrictEqual(d.DETAIL.Testland.palette, PINS.build_on.DETAIL_palette);
+        assert.deepStrictEqual(result.data.TRAVEL, {});
+        assert.deepStrictEqual(result.data.ALL.Testland.placed, ['alpha', 'beta', 'gamma']);
+        assert.deepStrictEqual(result.data.ALL.Testland.unplaced, []);
+        assert.deepStrictEqual(result.data.ALL.Testland.links, PINS.build_on.ALL_links);
+        assert(!Object.prototype.hasOwnProperty.call(result.data.ALL.Testland, 'skipped'));
+        assert.deepStrictEqual(result.report.discoveryRejected, [
+          { key: 'alphab', reason: 'derived', detail: 'alpha' },
+          { key: 'betab', reason: 'derived', detail: 'beta' },
+          { key: 'delta', reason: 'unresolved', detail: 'no resolved outward transition' },
+          { key: 'eta', reason: 'baseless', detail: 'pack' },
+          { key: 'sraa', reason: 'series', detail: 'sra' },
+          { key: 'srab', reason: 'series', detail: 'sra' },
+          { key: 'srac', reason: 'series', detail: 'sra' },
+          { key: 'zeta', reason: 'baseless', detail: 'root' },
+        ]);
+      }, result => {
+        const palettePins = PINS.build_on.DETAIL_zone_palette_indices.kappa;
+        assert.strictEqual(result.data.DETAIL.Testland.zones.kappa.segs[0][4],
+          palettePins.seg_palette_indices[0], 'browser kappa seg palette index');
+        assert.strictEqual(result.data.DETAIL.Testland.zones.kappa.labels[0][2],
+          palettePins.label_palette_indices[0], 'browser kappa label palette index');
       });
+      assertNoDerivedTies('layered fixture', reader(selected), loadAuthored(data),
+        'maps/Layered', 'maps');
     }
 
-    // 3: one skipped zone, one filtered link, one surviving link.
+    // 3: ordinal discovery order differs from host-default ICU collation.
+    {
+      const root = path.join(scratch, 'collate'); fs.mkdirSync(root);
+      const data = copyFixtureData(root), pack = path.join(FX, 'collate');
+      await compareCase('discovery collation fixture', pack, pack, 'collate', null, data,
+        path.join(root, 'ref.html'), template, colors, null, result => {
+          const records = result.report.discovered.Testland;
+          const keys = records.map(record => record.key);
+          assert.deepStrictEqual(keys, ['nu0a', 'nu_a'], 'emitted discovery key set and order');
+          assert.deepStrictEqual(result.report.discoveryRejected, [], 'collation candidates accepted');
+
+          const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+          assert.notDeepStrictEqual([...keys].sort(cmp),
+            [...keys].sort((a, b) => a.localeCompare(b)),
+            'collation fixture distinguishes ordinal order from host-default ICU order');
+          assert.deepStrictEqual(Object.keys(result.data.ALL.Testland.zones).slice(-keys.length), keys,
+            'ALL discovered tail follows emitted order');
+          assert.deepStrictEqual(Object.keys(result.data.DETAIL.Testland.zones).slice(-keys.length), keys,
+            'DETAIL discovered tail follows emitted order');
+          const sourceKeys = [...new Set(result.report.discoveredSources.Testland.map(source =>
+            source.name.replace(/_(?:1|2|3)(?=\.txt$)/, '').replace(/\.txt$/, '')))];
+          assert.deepStrictEqual(sourceKeys, keys, 'discovered source tail follows emitted order');
+          assert(result.report.discoveredSources.Testland.every(source => source.from === 'pack'),
+            'flat collation fixture reports pack provenance');
+        });
+    }
+
+    // 4: one skipped zone, one filtered link, one surviving link.
     {
       const root = path.join(scratch, 'skip-one'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'selected-pack');
@@ -249,7 +391,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       });
     }
 
-    // 4: no rostered source file, but the zero-zone continent remains in ALL.
+    // 5: no rostered source file, but the zero-zone continent remains in ALL.
     {
       const root = path.join(scratch, 'skip-all'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'empty-pack'); fs.mkdirSync(pack);
@@ -264,7 +406,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       });
     }
 
-    // 5: Python cache load and the no-cache twin reject the same tiny nonzero Z.
+    // 6: Python cache load and the no-cache twin reject the same tiny nonzero Z.
     {
       const root = path.join(scratch, 'number-domain'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'number-pack');
