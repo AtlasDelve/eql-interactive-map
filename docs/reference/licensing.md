@@ -93,7 +93,13 @@ license, readme or terms file. **Read that as a measurement of two directories o
 standing property of map packs.** A pack author may add terms at any time, and a pack nobody here has
 examined may already carry them, so the durable rule is to check the pack in hand rather than to rely
 on this figure. Absent any statement, the default is all rights reserved, and any permission would
-have to come from eqmaps.info. **The ruling is a risk decision taken deliberately** — recorded as such
+have to come from the pack's own authors — **and the two packs do not point at the same place.**
+Measured 2026-08-31 over the installed packs: Brewall's `_2` layer carries `http://www.eqmaps.info`
+(alongside `Return_of_the_Exiled_(www.roteguild.org)`), so eqmaps.info is Brewall's contact point
+and Brewall's alone. **Good's Maps names no site at all** — across 2 190 files and 1.79 M lines it
+contains zero URLs, and its only attribution is the author string `Map_by_Goodurden` (with
+`Map_updated_by_Goodurden`, `Labels:__Goodurden` and a `<RoI>` variant). So for Good's Maps there is
+no published contact point in the pack, which is a harder position than Brewall's, not an easier one. **The ruling is a risk decision taken deliberately** — recorded as such
 so a later session does not mistake it for an oversight and reopen it.
 
 **One measurement worth keeping, because it prevents a wrong inference:** Brewall's
@@ -103,8 +109,11 @@ of 2.44×, which reads as retracing rather than copying.
 
 **A root-sourced build is a deliberate deliverable, not an accident to catch.** Its geometry is
 entirely Daybreak-authored, and it is partial by construction. That is why the rule in `AGENTS.md` is
-to check `manifest.json` (`rootZones`, `sources[].from`) against what a release note claims, rather
-than to forbid the build.
+to check `manifest.json` against what a release note claims, rather than to forbid the build.
+**Read `discovered[].from` for that, not `rootZones`.** `rootZones` counts authored rostered zones
+that fell back to the root, so it reads `0` for the Good's and Brewall builds even though each takes
+one zone (`newsebexp`) from the client's own files — a check gated on it would call a mixed-source
+artifact single-source, which is the failure the rule exists to prevent.
 
 ## `.author.html` — why the suffix is load-bearing
 
