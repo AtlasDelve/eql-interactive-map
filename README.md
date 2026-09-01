@@ -8,13 +8,25 @@ The browser builder is the intended end-user path: open it, select the `maps` fo
 installation, choose a community pack or the game's own maps, and download a self-contained HTML
 map. Nothing is installed, uploaded, or needed when you open the finished map later.
 
-The builder will be offered in both forms: as a **downloadable release asset** that runs locally
-from `file://`, or as a **hosted page**. Their locations will be added here when they exist.
+**[Download `builder.html`](https://github.com/AtlasDelve/eql-interactive-map/releases/latest/download/builder.html)**
+— a single file that runs locally from `file://`. If you would rather not build one, the
+[latest release](https://github.com/AtlasDelve/eql-interactive-map/releases/latest) also carries
+prebuilt maps for Brewall's pack, Good's Maps, and the game's own maps.
+
+A **hosted page** is planned; its location will be added here when it exists.
 
 A community pack is recommended for complete coverage. Select the game's `maps` folder rather than
 the pack subdirectory inside it: the builder then offers the available packs and can use the game's
 own maps as a per-zone fallback. A root-only build is supported, but it is partial and the builder
 names every rostered zone it could not supply.
+
+Coverage is reported both ways, because it can fail in both directions. The inverse of a rostered
+zone with no file is a **file the roster never listed** — and those are not ignored. A map in your
+pack or in the `maps/` root that the authored roster does not name is **discovered** and attached
+automatically: placed on its continent, named, and routable like any other zone, with
+`data/_generated/manifest.json` recording which source each one came from. So a build is a superset
+of what the roster knows, not a filter on it — which is how New Sebilis Expedition reaches every
+build, including the packs that do not carry it.
 
 ## Python authoring workflow
 
@@ -49,16 +61,19 @@ tracings and uses the game's `maps/` root as a fallback. Pointing `--pack` at `m
 supported and builds every zone that the game ships there; rostered zones with no file are skipped
 and named in the conversion report instead of aborting the build. A community pack supplements
 those gaps. The conversion warns when the path is the root, because that is usually a mistake rather
-than a choice: you get 83 of the 120 rostered zones — no Kunark, no Velious — and lose the pack's
-tracings on the 69 zones where both exist, when pointing at the pack instead would have given you
-both.
+than a choice: the game's own files cover **89 of the 120 rostered zones and skip 32** — most of
+Kunark (17 of its 26) and Velious (12 of 17), plus Runnyeye, the Hole and the Plane of Hate — and
+you also lose the pack's tracings on every zone where both supply a file. Pointing at the pack
+instead would have given you both.
 
 Pointing at a subdirectory is also what gets you the root's maps *where you need them*. When
 `--pack`'s parent is named `maps`, that root becomes a **base layer**: your pack supplies every
 zone it has mapped, and any zone it has not falls back to the game's own file for that zone. It is
 per zone and all-or-nothing — a zone never mixes the two sources — and the conversion summary says
-how many zones came from the root, with `data/_generated/manifest.json` recording which files came
-from where.
+how many **rostered** zones came from the root, with `data/_generated/manifest.json` recording which
+files came from where. A discovered zone's source is not in that count: it is recorded separately as
+`discovered[].from`, so a build whose only root-sourced map is a discovered one still reports "no
+zones from the root layer".
 
 The conversion is not automatic after the first run — update your pack and the cache keeps the
 old traces until you re-run `import_pack.py`. That is deliberate: a build that silently
@@ -171,5 +186,3 @@ related zone and place names are trademarks of **Daybreak Game Company LLC / Dar
 EverQuest game content is their copyright. This is an unofficial, non-commercial fan project, not
 affiliated with or endorsed by Daybreak, and it operates under fan-use tolerance rather than under
 any license granted by Daybreak.
-
-*(Not legal advice — if you plan to redistribute widely or monetize, confirm redistribution terms with the data sources.)*
