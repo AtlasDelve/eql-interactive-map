@@ -36,16 +36,16 @@ set are computed once from that fact. `tBuild` drops an `anywhere` destination o
 pair only when that leg touches an absent stop. This is deliberately separate from `XPAC_ROUTE`,
 whose dynamic whole-route hiding models an expansion endpoint that does not exist yet. Root-only is
 the measured reason: removing Plane of Hate must not also remove the surviving Plane of Sky wizard
-destination, while 12 of 74 walk edges honestly disappear because one endpoint is absent.
+destination, while 12 of 75 walk edges honestly disappear because one endpoint is absent.
 Tests must inspect `TADJ` for that walk-edge removal: `tPlan` independently excludes absent nodes,
 so a failed trip would pass even if the edge-building guard had been deleted.
 
-**A referenced hub is hidden when its own stop is absent as well as when expansion hides its
-route.** Route hub arrays are positional beside `stops`, so the static absent-index set supplies the
-answer without re-indexing published `HUBS`. An unreferenced hub cannot be assigned to a host zone
-because `HUBS` stores no such key; it may therefore float if its physical zone alone is skipped.
-Current data has no exposed case outside wholly absent Plane of Hate, whose entire hub set is
-omitted by the build.
+**Absent-host suppression shares the expansion path without sharing its state.** Authored
+continent hubs and connector ends name their host zone, so `hostAbsent` suppresses them from draw,
+pick, inspector and route-anchor consumers whenever that host is in `ALL[cont].skipped`. Expansion
+hiding remains the separate published-index set `XPAC_HUB`: `Show hidden` may reveal a user's hidden
+item but can reveal neither an absent-host item nor out-of-expansion content. Route hub arrays stay
+positional beside `stops`, so neither path re-indexes published `HUBS`.
 
 **Adjacency is a per-node edge *list*, not a neighbour-keyed map.** Two routes can reach the same
 neighbour and a route can duplicate a walk edge; a last-wins map keeps a worse cost paired with the

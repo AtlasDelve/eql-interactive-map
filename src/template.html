@@ -322,9 +322,8 @@ function recomputeXpac(){
    if(inBuild(s)&&!XPAC_CONT.has(z.cont)){XPAC_ROUTE.add(r.id);break;}}}
  // A hub goes when its own stop is absent, its continent does not exist yet, or every route that
  // references it has gone. Membership of XPAC_ROUTE, deliberately NOT tRouteOn: a capability
- // says "you cannot use this" and must not add or remove glyphs. HUBS has no host-zone key, so an
- // unreferenced hub in a skipped zone can still float; current data exposes none outside the
- // wholly absent Plane of Hate, whose hub set the build omits.
+ // says "you cannot use this" and must not add or remove glyphs. Pack-skipped host zones are a
+ // separate authored-anchor rule enforced by hostAbsent at each draw/pick/route consumer.
  // The `>=1` guard is load-bearing and dormant: without it the vacuous "all zero referencing
  // routes are hidden" fires and the first hub nobody routes through silently disappears.
  for(const k in XPAC_HUB)delete XPAC_HUB[k];

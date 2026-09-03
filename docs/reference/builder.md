@@ -32,9 +32,10 @@ read; jumps over skipped zones are accurate while a count would finish short.
 
 ## Reports do not alter artifact parity
 
-The converter's report is outside the generated map and may be presented for people. In particular,
-unseen RGB keys arrive in lexicographic order because the converter preserves Python artifact
-semantics elsewhere; the page sorts their three numeric components for display. Skip lists,
+The converter's report is outside the generated map and may be presented for people. Its first line
+is `calibration: <key>`, exposing which ruled pack-family transform was selected without changing
+artifact data. Unseen RGB keys arrive in lexicographic order because the converter preserves Python
+artifact semantics elsewhere; the page sorts their three numeric components for display. Skip lists,
 root-folder warnings, and parser errors are likewise page chrome and never inputs to `buildHTML()`.
 
 ## Notice placement and disclosure
@@ -54,7 +55,8 @@ repository-visibility rule.
 ## Assembly and the closed input set
 
 `build_builder.py` reads the builder page, strips the map template to the user edition, loads the
-authored tree with `build.load()`, generates the colour table from `PACK_COLORS`, inlines the ordered
+authored tree with `build.load()`, including `data/packs.json` and every present
+`layout.<pack>.json` named by it, generates the colour table from `PACK_COLORS`, inlines the ordered
 `src/mapgeom.js` then `src/pack_convert.js` classic-script payload, and reads the root `VERSION` file
 through `build.read_version()`. Those are the complete inputs. It does not inspect the generated
 cache, a remembered pack path, or a map-pack directory, so deleting the cache cannot change its

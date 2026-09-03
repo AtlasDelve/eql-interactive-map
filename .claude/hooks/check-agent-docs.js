@@ -43,6 +43,8 @@ const PATH_RULES = [
   [/^data\/_generated\//, [PACK]],
   [/^scripts\/build\.py$/, [BUILD, T_RUNTIME]],
   [/^data\/world\.json$/, [BUILD, XPAC, T_GRAPH, OVERLAY]],
+  [/^data\/packs\.json$/, [PACK, OVERLAY]],
+  [/^data\/continents\/[^/]+\/layout(?:\.[^/]+)?\.json$/, [PACK, OVERLAY]],
   [/^data\/continents\//, [OVERLAY, T_GRAPH]],
   [/^tools\/verify\//, [VERIFY]],
   [/^LICENSE$/, [LICENSING]],

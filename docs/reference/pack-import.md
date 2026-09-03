@@ -356,6 +356,13 @@ on `overthere`), so weld detection, proposals and doorways all differ by pack.
 the same pack can sit at different paths, so `manifest.sourceFingerprint` is a sha256 over
 sorted `(filename, sha256)` pairs and the path is only a human hint. `--audit` prints both.
 
+**Pack calibration is the ruled exception, not a second identity claim.** `data/packs.json` maps a
+case-folded directory basename to the authored transform family that was calibrated for it; the
+client `maps` root selects `default`, and an unknown basename selects `default` with a notice. This
+does not certify a revision or provenance — those still come from source fingerprints and manifest
+records — it only chooses among committed `layout.<pack>.json` placement overrides, and the browser
+and command-line converters apply the same ruling.
+
 **And `overrides` rulings are pack-conditional, so the audit reports rather than prescribes.** A
 ruling exists because *some* pack's geometry could not derive an edge; this proposal agreeing is
 not evidence that every supported pack's does. Advice to "drop this entry" would ping-pong
