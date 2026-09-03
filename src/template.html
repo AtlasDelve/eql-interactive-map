@@ -914,10 +914,9 @@ addEventListener('keydown',e=>{
  if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA'))return;
  if(e.key==='Escape'){sel=null;pendingConn=null;refreshInspector();draw();}
  else if(e.key==='Delete'||e.key==='Backspace'){if(sel){
-   if(sel.type==='conn'){conns.splice(sel.id,1);sel=null;}
-   else if(sel.type==='hub'){hubs.splice(sel.id,1);sel=null;}
-   else if(sel.type==='wconn'){worldConns().splice(sel.id,1);sel=null;}
-   refreshInspector();draw();}}});
+   if(sel.type==='conn'||sel.type==='hub')removeItem(sel.type,sel.id);
+   else if(sel.type==='wconn'){worldConns().splice(sel.id,1);sel=null;refreshInspector();draw();}
+ }}});
 document.getElementById('bAlt').onclick=()=>{alt=(alt==="Norrath")?"The Planes":"Norrath";enterWorld();};
 document.getElementById('bBack').onclick=()=>{ if(level==="zone")enterCont(cur); else if(level==="continent")enterWorld(); else enterUniverse(); };
 document.getElementById('bFit').onclick=()=>{focus=null;hover=null;
@@ -1848,6 +1847,9 @@ function editMouseUp(e){
    cannot express it - so canHide() is paired and the author keeps today's Delete. */
 /*__AUTHOR__*/function canHide(){return false;}/*__END_AUTHOR__*/
 /*__USER__*/function canHide(){return true;}/*__END_USER__*/
+function removeItem(kind,i){const arr=(kind==='hub')?hubs:conns;if(!arr[i])return;
+ if(canHide()&&!arr[i].userAdded){hideItem(kind,i);return;}
+ arr.splice(i,1);sel=null;refreshHiddenUI();refreshInspector();draw();}
 function hideItem(kind,i){const arr=(kind==='hub')?hubs:conns;if(!arr[i])return;
  arr[i].hidden=true;sel=null;
  toast('Hidden. Restore it from “Hidden items”, or tick Show hidden and click it.');
@@ -1944,9 +1946,9 @@ function refreshInspector(){
   body.querySelector('#bAncA').onclick=()=>toggleAnchor(sel.id,'a');
   body.querySelector('#bAncB').onclick=()=>toggleAnchor(sel.id,'b');
   const cdel=body.querySelector('#bConnDel');
-  if(cdel)cdel.onclick=()=>{conns.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  if(cdel)cdel.onclick=()=>removeItem('conn',sel.id);
   const chide=body.querySelector('#bConnHide');
-  if(chide)chide.onclick=()=>hideItem('conn',sel.id);
+  if(chide)chide.onclick=()=>removeItem('conn',sel.id);
  } else if(sel.type==='hub'){const h=hubs[sel.id];
   // Content rows render only when this hub's text is editable (canEditHubContent, paired by
   // edition). When it is not, show the same facts read-only so the selection is still legible.
@@ -1974,9 +1976,9 @@ function refreshInspector(){
   body.querySelector('#hAnc').onclick=()=>{if(h.anchor){const p=hubPos(h,zones);h.x=p[0];h.y=p[1];h.anchor=null;h.lx=null;h.ly=null;}else{anchorHub(h,true);}
    h.touched=true;refreshInspector();draw();};   // anchor/free moves the hub without any drag
   const hdel=body.querySelector('#bHubDel');
-  if(hdel)hdel.onclick=()=>{hubs.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  if(hdel)hdel.onclick=()=>removeItem('hub',sel.id);
   const hhide=body.querySelector('#bHubHide');
-  if(hhide)hhide.onclick=()=>hideItem('hub',sel.id);
+  if(hhide)hhide.onclick=()=>removeItem('hub',sel.id);
  } else if(sel.type==='uni'){const en=uEntities()[sel.id];
   body.innerHTML=`<h2>Realm · ${en?en.name:''}</h2>
    <div class="hint">Drag the realm on the map to reposition it. Save a version or export your layout to keep it.</div>
