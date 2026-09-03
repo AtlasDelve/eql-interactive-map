@@ -48,8 +48,7 @@ const ROOT_ONLY_EXPECTED = {
     'Timorous Deep': ['timorous'], 'Plane of Fear': ['fearplane'], 'Plane of Hate': [],
     'Plane of Sky': ['airplane'],
   },
-  discovered: [{ cont: 'Antonica', key: 'newsebexp', anchor: 'nro', nameFrom: 'marker',
-    name: 'New Sebilis Expedition', from: 'pack' }],
+  discovered: [],
   credit: 'EQL · selected maps folder',
 };
 
@@ -364,37 +363,10 @@ async function runRootOnly(mapsRoot, template, colors) {
     if (run.status !== 0) throw new Error(`root-only build failed: ${run.stderr.toString('utf8')}`);
 
     const rootManifest = json(path.join(scratch, '_generated', 'manifest.json'));
-    const bridge = assertMarkerBridge(reference, rootManifest);
+    const bridge = assertMarkerBridge(reference, rootManifest, MapGeom, false);
     assert.deepStrictEqual(bridge.crossContinent, [], 'root-only detail keys span continents');
-    console.log(`PASS: root-only marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
-    const INDEX_TAG = Symbol('instrumented MapGeom index');
-    const TARGET_TAG = Symbol('instrumented MapGeom target');
-    let indexCalls = 0, transitionCalls = 0, taggedIndex;
-    const instrumented = {
-      zidxFrom(entries) {
-        indexCalls++;
-        taggedIndex = MapGeom.zidxFrom(entries);
-        taggedIndex[INDEX_TAG] = true;
-        return taggedIndex;
-      },
-      transitionTargets(index, zoneKey, label) {
-        transitionCalls++;
-        assert.strictEqual(index, taggedIndex, 'marker bridge bypassed the injected MapGeom index');
-        assert(index[INDEX_TAG], 'marker bridge used an untagged index');
-        return MapGeom.transitionTargets(index, zoneKey, label).map(key => {
-          const tagged = new String(key);
-          tagged[TARGET_TAG] = true;
-          return tagged;
-        });
-      },
-    };
-    const observed = assertMarkerBridge(
-      reference, json(path.join(scratch, '_generated', 'manifest.json')), instrumented);
-    assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
-    assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
-    assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
-      'a marker resolution did not come from the injected MapGeom transition result');
-    console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
+    assert.strictEqual(bridge.count, 0, 'root-only catalog is empty after newsebexp was rostered');
+    console.log(`PASS: root-only detail-key premise (${bridge.keyCount} keys; 0 cross-continent; empty catalog)`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
     const authored = loadAuthored(scratch);

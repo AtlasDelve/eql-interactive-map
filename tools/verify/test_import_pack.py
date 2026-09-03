@@ -846,6 +846,23 @@ try:
           (10, "4a396c88816e5e22699b0ffba17df76872a89e4ecd46096c5c67c2406944829f"))
     check("the freshness command compares the fixture instead of skipping",
           VERIFY.cmd_discoveryfresh(ldata), 0)
+    fresh_root = os.path.join(ltmp, "freshness-maps")
+    shutil.copytree(ROOTA, fresh_root)
+    fresh_manifest = copy.deepcopy(lman)
+    fresh_manifest["root"] = fresh_root
+    fresh_manifest["pack"] = os.path.join(fresh_root, "Layered")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(fresh_manifest, f, sort_keys=True)
+    with open(os.path.join(fresh_root, "kappa.txt"), "ab") as f:
+        f.write(b"\n")
+    freshness_output = io.StringIO()
+    with redirect_stdout(freshness_output):
+        freshness_mutation = VERIFY.cmd_discoveryfresh(ldata)
+    check("changing a discovered source byte fails discoveryfresh", freshness_mutation, 1)
+    check("the freshness failure names the changed source",
+          "FAIL  discovered source changed: Testland/kappa.txt" in freshness_output.getvalue(), True)
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(lman, f, sort_keys=True)
 
 
     def catalog_rejects(label, mutate, needle):

@@ -247,6 +247,15 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   assertSame(label, actual, reference);
   if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   console.log(`PASS: ${label}`);
+  return { actual, reference, result };
+}
+
+function removeLastDerivedEdge(html, travel) {
+  const changed = JSON.parse(JSON.stringify(travel));
+  changed.walk.pop();
+  const before = 'const TRAVEL=' + JSON.stringify(travel);
+  assert(html.includes(before), 'artifact contains the exact injected travel declaration');
+  return html.replace(before, 'const TRAVEL=' + JSON.stringify(changed));
 }
 
 // Python float grammar: reject what Number() accepts, accept what Number() alone rejects.
@@ -377,6 +386,33 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       });
       assertNoDerivedTies('layered fixture', reader(selected), loadAuthored(data),
         'maps/Layered', 'maps');
+    }
+
+    // Discovery-on travel fixture: unlike the builder's intentionally travel-less fixture,
+    // this has a complete authored prefix so both converter pipelines must append the catalog.
+    {
+      const root = path.join(scratch, 'discovery-travel'); fs.mkdirSync(root);
+      const data = copyFixtureData(root);
+      fs.copyFileSync(path.join(FX, 'discovery-travel.json'), path.join(data, 'travel.json'));
+      const selected = path.join(FX, 'layered', 'maps'), pack = path.join(selected, 'Layered');
+      const ref = path.join(root, 'python.html');
+      const built = await compareCase('discovery-on travel fixture', pack, selected,
+        'maps/Layered', 'maps', data, ref, template, colors, (d, result) => {
+          assert.deepStrictEqual(result.data.TRAVEL.walk[0], {z:['alpha','beta'],cost:4.2});
+          assert(result.data.TRAVEL.walk.length > 1, 'catalog edges appended after authored prefix');
+        });
+      const pass = runPython(['tools/verify/verify.py', 'derivedtravel', ref, data]);
+      assert.strictEqual(pass.status, 0, pass.stdout.toString('utf8'));
+
+      for (const [label, html] of [['Python', built.reference], ['browser', built.actual]]) {
+        const mutant = path.join(root, label.toLowerCase() + '-missing-edge.html');
+        fs.writeFileSync(mutant, removeLastDerivedEdge(html, built.result.data.TRAVEL));
+        const failed = runPython(['tools/verify/verify.py', 'derivedtravel', mutant, data]);
+        assert.notStrictEqual(failed.status, 0, `${label} derived-edge removal unexpectedly passed`);
+        assert(failed.stdout.toString('utf8').includes('derived walk tail'),
+          `${label} mutation did not report the derived tail`);
+      }
+      console.log('PASS: removing a derived edge from either converter artifact fails verification');
     }
 
     // 3: Brewall variant, including a cancelled base transform and zero-survivor continent.

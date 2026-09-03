@@ -126,13 +126,14 @@ def cmd_datacmp(a, b):
     return 1 if bad else 0
 
 
-def cmd_derivedtravel(path):
-    """Require the artifact's travel tail to be the non-empty manifest catalog append."""
+def cmd_derivedtravel(path, data=None):
+    """Require the artifact's travel tail to equal the manifest catalog append, including empty."""
+    data_root = os.path.abspath(data or os.path.join(REPO, "data"))
     data = extract(path)
     travel = data["TRAVEL"]
-    with open(os.path.join(REPO, "data", "travel.json"), encoding="utf-8") as f:
+    with open(os.path.join(data_root, "travel.json"), encoding="utf-8") as f:
         authored = json.load(f)
-    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+    with open(os.path.join(data_root, "_generated", "manifest.json"),
               encoding="utf-8") as f:
         manifest = json.load(f)
 
@@ -176,12 +177,11 @@ def cmd_derivedtravel(path):
         if tuple(sorted(pair)) in authored_pairs:
             print("FAIL  derived walk edge duplicates an authored pair: %s|%s" % pair)
             bad += 1
-    if not derived:
-        print("FAIL  discovery-on artifact has no derived walk edges")
-        bad += 1
-    else:
+    if records:
         print("compared %d derived walk edge(s): %s" %
               (len(derived), ", ".join("%s>%s" % tuple(edge["z"]) for edge in derived)))
+    else:
+        print("NOTE: discovery catalog is empty; compared an empty derived travel tail")
 
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
@@ -451,7 +451,7 @@ def cmd_discoveryfresh(data=None):
         print("\nRESULT: FAIL (1)")
         return 1
 
-    bad = compared = catalogs = 0
+    bad = compared = catalogs = discovered = 0
     for cont, entry in manifest.get("continents", {}).items():
         sources = entry.get("discoveredSources")
         if sources is None:
@@ -460,6 +460,7 @@ def cmd_discoveryfresh(data=None):
                 bad += 1
             continue
         catalogs += 1
+        discovered += len(entry.get("discovered", []))
         pairs = []
         for name, expected in sorted(sources.items()):
             tag = expected.get("from")
@@ -498,6 +499,8 @@ def cmd_discoveryfresh(data=None):
 
     print("compared %d discovered source file(s) across %d continent catalog(s)"
           % (compared, catalogs))
+    if discovered == 0:
+        print("NOTE: discovery catalog is empty; there are no discovered source bytes to compare")
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

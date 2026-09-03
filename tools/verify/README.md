@@ -146,25 +146,27 @@ Written down because each one is a mistake worth not repeating:
   must be available: either mismatch is a failure naming the remediation, never a comparison that
   disappears behind `SKIP`. Both cases report the number of source files compared. The root-only
   case builds in an isolated ignored data copy and pins all 32 skipped keys, all 89 surviving keys,
-  the sole `newsebexp` catalog record, and the retained empty Plane of Hate. Before deleting that
-  scratch tree it requires every marker-named catalog entry to resolve from its anchor label to the
-  injected zone key, with a non-zero count; the one root-only artifact is discovery-on. The
+  rostered `newsebexp`, an empty discovery catalog, and the retained empty Plane of Hate. Before
+  deleting that scratch tree it checks every marker-named catalog entry when any exist; the committed
+  discovery-on travel fixture supplies the non-empty catalog acceptance path. The
   enclosing runner may still skip the whole optional layer when the machine-local pack
   configuration or Node is absent, or under `--quick`.
-- **Browser-converter parity includes discovery on its only production path.** Fixture, Brewall,
-  root-only and browser-builder comparisons all use the same discovery-bearing Python artifact.
+- **Browser-converter parity includes discovery on its production path.** Fixture, Brewall,
+  root-only and browser-builder comparisons use the same Python-shaped artifacts, and a committed
+  discovery-on travel fixture runs through both the Python and browser converters.
   The fixture's two-manifest differential removes only `discovered` and `discoveredPalette` from a
   copied manifest, then proves the catalog is an append that preserves authored records and palette
   indices. The Brewall pass also compares JavaScript and Python `znorm` over every accepted/rejected
   discovery key and every transition-marker label actually read, so real pack spellings exercise
   the shared resolver boundary. `derivedtravel` separately proves the authored `TRAVEL.walk` prefix
-  and exact non-empty catalog tail.
+  and exact catalog tail, including the empty production catalog.
 - **The derived-travel check reads the artifact, not the authored graph verifier.** `verify.py travel`
   stays bare-clone-safe and owns only `data/travel.json`. `derivedtravel` instead extracts the built
   `ALL` and `TRAVEL`, requires the authored walk array as an unchanged prefix, and compares the
   ordered tail directly with manifest records whose costs were already produced during conversion.
-  It also rejects absent endpoints and authored-pair collisions. Requiring at least one tail edge is
-  the control against a green check with the entire merge removed; the step is skipped under
+  It also rejects absent endpoints and authored-pair collisions. The discovery-on fixture removes
+  the derived edge from the Python and browser artifacts independently, so either missing merge fails
+  even though the production catalog is empty. The step is skipped under
   `--quick` because it needs the real artifact and generated cache.
 - **Discovered-zone runtime behaviour uses a viewer fixture, not the converter fixture.**
   `discovered-runtime.test.js` consumes an ordinary injected zone whose display name resolves from
@@ -301,7 +303,7 @@ glyph's own annulus, so 29px of genuine route came back as a spire false positiv
 have been "fixed" by loosening the threshold that was doing the work.
 
 **Route dimming is sampled on the target zone's own outline, clear of both the route and adjacent
-discovered geometry.** A 40-pixel square around North Ro's centroid also included `newsebexp`, whose
+zone geometry.** A 40-pixel square around North Ro's centroid also included `newsebexp`, whose
 off-route outline legitimately changes when the route turns on; that contaminated the on-route
 control with evidence that dimming worked. The browser test now chooses the outline midpoint with
 the greatest clearance and keeps the original `> 1.5` delta ratio. Disabling dimming makes that

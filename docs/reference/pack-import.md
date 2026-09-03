@@ -183,8 +183,9 @@ all-or-nothing resolution makes unrepresentable.
 
 **The measured root-only result is 89 surviving zones and 32 skips across five continents.** The
 skips are Antonica `runnyeye`; Odus `hole`; Kunark 17 named keys; Velious 12 named keys; and Plane
-of Hate `hateplane`. The 89 survivors are 88 authored root-supplied zones plus the discovered
-`Antonica/newsebexp` append. Plane of Hate therefore remains in `ALL` with an empty `zones` object
+of Hate `hateplane`. All 89 survivors are authored roster entries resolved from the root;
+`Antonica/newsebexp` is rostered and the discovery catalog is empty. Plane of Hate therefore remains
+in `ALL` with an empty `zones` object
 and its one-key skip list, while `DETAIL` and `HUBS` omit it. The real-pack parity test pins the
 complete per-continent skip and survivor arrays, not only these counts. Keeping every continent
 preserves authored order and keeps the partial-build author interlock observable even when a whole

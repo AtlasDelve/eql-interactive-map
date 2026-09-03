@@ -110,10 +110,10 @@ of 2.44×, which reads as retracing rather than copying.
 **A root-sourced build is a deliberate deliverable, not an accident to catch.** Its geometry is
 entirely Daybreak-authored, and it is partial by construction. That is why the rule in `AGENTS.md` is
 to check `manifest.json` against what a release note claims, rather than to forbid the build.
-**Read `discovered[].from` for that, not `rootZones`.** `rootZones` counts authored rostered zones
-that fell back to the root, so it reads `0` for the Good's and Brewall builds even though each takes
-one zone (`newsebexp`) from the client's own files — a check gated on it would call a mixed-source
-artifact single-source, which is the failure the rule exists to prevent.
+Read `sources[].from` for the per-file layer and pair it with whichever roster summary is populated:
+`rootZones` counts authored zones that fall back to a root layer, while `discovered[].from` identifies
+catalog appends. `newsebexp` is now authored in the roster and no longer appears in `discovered`;
+provenance checks must remain roster-aware rather than assuming either summary alone is universal.
 
 ## `.author.html` — why the suffix is load-bearing
 
