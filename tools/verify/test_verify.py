@@ -5,6 +5,7 @@ import io
 import os
 import sys
 import tempfile
+import copy
 
 import verify
 
@@ -86,6 +87,38 @@ downloadBlob; buildEditState; detectLinks;
               "const ALL=" in str(e), True)
     else:
         check("missing real declaration raises and names the prefix", "no exception", "exception")
+
+
+zone = {"name": "Alpha", "cx": 500, "cy": 500,
+        "segs": [[0, 0, 1000, 0], [1000, 0, 1000, 1000],
+                 [1000, 1000, 0, 1000], [0, 1000, 0, 0]]}
+anchor_all = {"Antonica": {"zones": {"alpha": zone},
+                            "connectors": [{"a": {"xy": [0, 500], "anchor": "alpha", "lx": 0, "ly": 500},
+                                            "b": {"xy": [1000, 500], "anchor": "alpha", "lx": 1000, "ly": 500}}]}}
+anchor_hubs = {"Antonica": [{"x": 500, "y": 0, "anchor": "alpha", "lx": 500, "ly": 0}]}
+rosters = {"Antonica": {"alpha"}}
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    anchor_control = verify._check_anchors(anchor_all, anchor_hubs, rosters)
+check("anchors control passes", anchor_control, 0)
+
+mut_hubs = copy.deepcopy(anchor_hubs)
+mut_hubs["Antonica"][0]["lx"] += 3000
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    hub_mutation = verify._check_anchors(anchor_all, mut_hubs, rosters)
+check("hub lx mutation fails anchors", hub_mutation, 2)
+check("hub mutation names the exact authored entry",
+      "FAIL  anchor off host: Antonica hubs[0]" in output.getvalue(), True)
+
+mut_all = copy.deepcopy(anchor_all)
+mut_all["Antonica"]["connectors"][0]["a"]["lx"] += 3000
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    conn_mutation = verify._check_anchors(mut_all, anchor_hubs, rosters)
+check("connector lx mutation fails anchors", conn_mutation, 2)
+check("connector mutation names the exact authored end",
+      "FAIL  anchor off host: Antonica connectors[0].a" in output.getvalue(), True)
 
 
 print()

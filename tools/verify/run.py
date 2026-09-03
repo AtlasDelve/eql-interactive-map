@@ -117,14 +117,14 @@ def main():
     if args.list:
         print("1 python     test_builder, test_markers, test_import_pack, test_verify, test_mapgeom,")
         print("               strip, lf,")
-        print("               datacmp(user,author), jsnum x2, hints, discoveryfresh, travel")
+        print("               datacmp(user,author), jsnum x2, hints, anchors, discoveryfresh, travel")
         print("1/artifact     derivedtravel  [--quick skips]")
         print("N node/small mapgeom Python/JavaScript parity, pack-convert fixture parity,")
         print("               lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
-        print("2 jsdom/small builder, overlay, hide-io, ghost-alpha, author-guards, script-escape,")
-        print("               travel, discovered-runtime, world-anchor")
+        print("2 jsdom/small builder, overlay, anchors, hide-io, ghost-alpha, author-guards,")
+        print("               script-escape, travel, discovered-runtime, world-anchor")
         print("3 jsdom/full  smoke x2, travel-full, untouched, perf"
               + ("  [--quick skips]" if True else ""))
         print("4 browser     browser.test.js" + ("  [--no-browser skips]" if True else ""))
@@ -158,6 +158,8 @@ def main():
     step("JS-canonical numbers (author edition)",
          [sys.executable, "verify.py", "jsnum", AUTHOR])
     step("ref-hint collision check over data/", [sys.executable, "verify.py", "hints"])
+    step("authored hubs and connector ends stay on their hosts",
+         [sys.executable, "verify.py", "anchors"])
     step("discovered input freshness", [sys.executable, "verify.py", "discoveryfresh"])
     step("travel graph integrity over data/", [sys.executable, "verify.py", "travel"])
     if args.quick:
@@ -209,7 +211,7 @@ def main():
                    stdout=subprocess.DEVNULL)
     step("jsdom fixtures: builder.test.js",
          ["node", "builder.test.js", sys.executable], cwd=JS)
-    for f in ("overlay.test.js", "hide-io.test.js", "ghost-alpha.test.js",
+    for f in ("overlay.test.js", "anchors.test.js", "hide-io.test.js", "ghost-alpha.test.js",
               "author-guards.test.js", "script-escape.test.js", "travel.test.js",
               "discovered-runtime.test.js", "world-anchor.test.js"):
         step("jsdom fixtures: " + f, ["node", f], cwd=JS)

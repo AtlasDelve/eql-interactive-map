@@ -9,6 +9,7 @@ Usage:
     python verify.py strip    USER.html       # strip-completeness greps
     python verify.py linediff A.html B.html   # show changed lines (for small deltas)
     python verify.py hints                    # ref-hint collision check over data/
+    python verify.py anchors                  # authored hub/connector host attachments
     python verify.py discoveryfresh           # discovered source bytes + fingerprints
     python verify.py derivedtravel ARTIFACT    # catalog edges appended to injected travel
     python verify.py travel                   # authored travel graph + expansion declaration
@@ -20,6 +21,10 @@ import math
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
+import build  # noqa: E402
+import mapgeom  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))          # tools/verify/ -> repo root
@@ -328,7 +333,9 @@ def cmd_hints():
         hubs = lay.get("hubs", []) or []
         hh = [h.get("kind", "") + "|" + (h.get("label", "") or "") for h in hubs]
         conns = lay.get("connectors", []) or []
-        ch = ["%d,%d|%d,%d" % (c2["a"][0], c2["a"][1], c2["b"][0], c2["b"][1]) for c2 in conns]
+        def xy(end):
+            return end if isinstance(end, list) else end["xy"]
+        ch = ["%d,%d|%d,%d" % tuple(xy(c2["a"]) + xy(c2["b"])) for c2 in conns]
         for name, arr in (("hubs", hh), ("conns", ch)):
             u = len(set(arr))
             flag = "" if u == len(arr) else "  <-- COLLISION"
@@ -346,6 +353,88 @@ def cmd_hints():
                                          "" if u == len(wh) else "  <-- COLLISION"))
     if u != len(wh):
         bad += 1
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+# ------------------------------------------------------------------ authored anchors
+
+ANCHOR_MEASURED_MAX = 325.558
+ANCHOR_BOUND = 358.2
+
+
+def _check_anchors(ALL, HUBS, rosters):
+    """Check anchored authored positions; migrated Brewall max was 325.558, bound is +10%."""
+    bad = checked = 0
+    observed = 0.0
+
+    def check(cont, kind, index, suffix, item, anchor, lx, ly):
+        nonlocal bad, checked, observed
+        where = "%s %s[%d]%s" % (cont, kind, index, suffix)
+        if not anchor or lx is None or ly is None:
+            print("FAIL  anchor missing: " + where)
+            bad += 1
+            return
+        if anchor not in rosters.get(cont, set()):
+            print("FAIL  anchor host outside roster: %s host=%s" % (where, anchor))
+            bad += 1
+            return
+        skipped = set(ALL[cont].get("skipped", []))
+        if anchor in skipped:
+            checked += 1
+            return
+        zone = ALL[cont].get("zones", {}).get(anchor)
+        if not zone:
+            print("FAIL  anchor host absent without skipped marker: %s host=%s" % (where, anchor))
+            bad += 1
+            return
+        point = mapgeom.tpoint(zone, lx, ly)
+        dist = mapgeom.dist_to_zone(zone, point[0], point[1])
+        observed = max(observed, dist)
+        if dist > ANCHOR_BOUND:
+            print("FAIL  anchor off host: %s dist=%.3f bound=%.1f" %
+                  (where, dist, ANCHOR_BOUND))
+            bad += 1
+        segs = zone.get("segs", [])
+        if segs:
+            xs = [v for seg in segs for v in (seg[0], seg[2])]
+            ys = [v for seg in segs for v in (seg[1], seg[3])]
+            if (lx < min(xs) - ANCHOR_BOUND or lx > max(xs) + ANCHOR_BOUND or
+                    ly < min(ys) - ANCHOR_BOUND or ly > max(ys) + ANCHOR_BOUND):
+                print("FAIL  anchor local point outside host bounds: %s host=%s" % (where, anchor))
+                bad += 1
+        checked += 1
+
+    for cont, entry in ALL.items():
+        hubs = HUBS.get(cont)
+        if hubs is None:
+            hubs = (entry.get("skippedAuthored") or {}).get("hubs", [])
+        for i, hub in enumerate(hubs or []):
+            check(cont, "hubs", i, "", hub, hub.get("anchor"), hub.get("lx"), hub.get("ly"))
+        for i, connector in enumerate(entry.get("connectors", []) or []):
+            for which in ("a", "b"):
+                end = connector.get(which)
+                if isinstance(end, list):
+                    anchor = lx = ly = None
+                else:
+                    anchor, lx, ly = end.get("anchor"), end.get("lx"), end.get("ly")
+                check(cont, "connectors", i, "." + which, end, anchor, lx, ly)
+    print("checked %d authored anchor(s); observed max distance %.3f (bound %.1f)" %
+          (checked, observed, ANCHOR_BOUND))
+    return bad
+
+
+def cmd_anchors(data=None):
+    """Validate production-composed anchors against authored rosters and transformed outlines."""
+    data = os.path.abspath(data or os.path.join(REPO, "data"))
+    built = build.build(data)
+    ALL, HUBS = built[0], built[3]
+    world = build.load(os.path.join(data, "world.json"))
+    rosters = {}
+    for cont in world["order"]:
+        meta = build.load(os.path.join(build.cont_dir(cont, data), "continent.json"))
+        rosters[cont] = set(meta["zoneOrder"])
+    bad = _check_anchors(ALL, HUBS, rosters)
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

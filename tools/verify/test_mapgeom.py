@@ -53,6 +53,13 @@ COST_REPR = "107.36764315959165"
 check("cost_between is bound to the explicit-sqrt contract",
       mapgeom.cost_between(ZONES, "a", "b", False, EXITS), float(COST_REPR))
 
+SEGMENT_ZONE = {"cx": 0, "cy": 0, "segs": [[0, 0, 10, 0]]}
+check("dist_to_zone projects onto the segment interior",
+      mapgeom.dist_to_zone(SEGMENT_ZONE, 5, 3), 3.0)
+endpoint_only = min(mapgeom.norm(5, 3), mapgeom.norm(-5, 3))
+check("endpoint-only distance is a discriminating wrong control",
+      endpoint_only == mapgeom.dist_to_zone(SEGMENT_ZONE, 5, 3), False)
+
 
 with open(MAPGEOM_PATH, "r", encoding="utf-8") as f:
     tree = ast.parse(f.read(), filename=MAPGEOM_PATH)
