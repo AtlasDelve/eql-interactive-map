@@ -2013,14 +2013,22 @@ function toggleWlAnchor(idx,which){const l=worldConns()[idx];if(!l)return;
  refreshInspector();draw();}
 
 /* ---- persistence: localStorage version history (per continent) + customization file export ---- */
-// Keys are suffixed per edition. The author build stores full snapshots and the user build
-// stores sparse overlays, so a shared key would have each misparse the other's buffer when
-// both are opened from the same origin. Nothing has shipped, so no migration is needed.
-/*__AUTHOR__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_v1';}
-function worldLsKey(){return 'eql_editor_world_v1';}/*__END_AUTHOR__*/
-/*__USER__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_u1';}
-function worldLsKey(){return 'eql_editor_world_u1';}/*__END_USER__*/
+// Edition and pack both belong in the destination key: author snapshots and user overlays have
+// different shapes, while calibrations have different coordinate frames.
+/*__AUTHOR__*/function legacyLsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_v1';}
+function legacyWorldLsKey(){return 'eql_editor_world_v1';}
+function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_'+PACKKEY+'_v1';}
+function worldLsKey(){return 'eql_editor_world_'+PACKKEY+'_v1';}/*__END_AUTHOR__*/
+/*__USER__*/function legacyLsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_u1';}
+function legacyWorldLsKey(){return 'eql_editor_world_u1';}
+function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_'+PACKKEY+'_u1';}
+function worldLsKey(){return 'eql_editor_world_'+PACKKEY+'_u1';}/*__END_USER__*/
 function lsKey(){return lsKeyFor(cur);}
+function migrateStoreKey(dest,legacy){try{const marker=dest+'_migrated';
+ if(localStorage.getItem(dest)===null&&localStorage.getItem(marker)===null){const old=localStorage.getItem(legacy);
+   if(old!==null)localStorage.setItem(dest,old);localStorage.setItem(marker,'1');}}catch(e){}}
+function migrateContStore(c){migrateStoreKey(lsKeyFor(c),legacyLsKeyFor(c));}
+function migrateWorldStore(){migrateStoreKey(worldLsKey(),legacyWorldLsKey());}
 // Latest stored state for a continent/world, or null. Used by the view-mode apply hook to
 // decide whether to build edit-state at all, so an uncustomized viewer pays nothing.
 function storedState(k){const o=readStoreK(k);return o.versions.length?o.versions[o.versions.length-1].state:null;}
@@ -2032,7 +2040,7 @@ function readStore(){return readStoreK(lsKey());}
 function writeStore(o){return writeStoreK(lsKey(),o);}
 /*__AUTHOR__*/
 function refusePartialAuthor(){for(const c in ALL)if((ALL[c].skipped||[]).length){
- toast('Cannot save or export authored data from this partial build — the map pack is missing roster zones.');return true;}
+ toast('Cannot save versions or export world.json from this partial build — the map pack is missing roster zones.');return true;}
  return false;}
 // Author edition: full snapshots. A sparse overlay cannot express "I added this hub" or
 // "I deleted that one" against a layout.json the author is themselves rewriting.
@@ -2086,7 +2094,7 @@ function revertLast(){const o=readStore();
  if(o.versions.length)applyState(o.versions[o.versions.length-1].state);else {buildEditState(cur);if(editMode)ensureLinks(cur);}
  sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
  toast(o.versions.length?('Reverted to v'+o.versions.length):'Reverted to the published map.');}
-function loadLatest(){const o=readStore();if(o.versions.length){applyState(o.versions[o.versions.length-1].state);return true;}return false;}
+function loadLatest(){migrateContStore(cur);const o=readStore();if(o.versions.length){applyState(o.versions[o.versions.length-1].state);return true;}return false;}
 function buildHist(){const sel2=document.getElementById('histSel');const o=readStoreK(curStoreKey());
  sel2.innerHTML='';
  if(!o.versions.length){const op=document.createElement('option');op.textContent='(no saved versions)';op.value='-1';sel2.appendChild(op);sel2.disabled=true;return;}
@@ -2224,7 +2232,7 @@ function worldOverlay(){if(!WEDIT)return null;const o={};
  if(wt.length)o.worldConns=wt; if(wh.length)o.worldConnsHidden=wh; if(wa.length)o.worldConnsAdded=wa;
  return Object.keys(o).length?o:null;}
 // Whole-document overlay: every continent with live edit-state, plus the world level.
-function buildOverlay(){const ov={v:OVERLAY_V,continents:{},world:{}};
+function buildOverlay(){const ov={v:OVERLAY_V,pack:PACKKEY,continents:{},world:{}};
  for(const c in EDIT){const o=contOverlay(c);if(o)ov.continents[c]=o;}
  const w=worldOverlay();if(w)ov.world=w;
  return ov;}
@@ -2334,6 +2342,7 @@ function importOverlay(text){let ov;
  if(!ov||typeof ov!=='object'||Array.isArray(ov)){toast('That file is not a layout — nothing changed.');return;}
  if(ov.v!==OVERLAY_V&&ov.v!==1){
    toast('This layout is version '+(ov.v===undefined?'(unknown)':ov.v)+', but this map reads version '+OVERLAY_V+' — nothing changed.');return;}
+ const packWarning=typeof ov.pack==='string'&&ov.pack!==PACKKEY;
  const conts=(ov.continents&&typeof ov.continents==='object')?ov.continents:{};
  let drops=0,applied=0;
  for(const c in conts){
@@ -2359,7 +2368,8 @@ function importOverlay(text){let ov;
  if(level==='continent'&&cur)fitBox(contBbox(cur));
  draw();
  toast('Layout imported — '+applied+' continent'+(applied===1?'':'s')
-   +(drops?(' · '+drops+' entr'+(drops===1?'y':'ies')+' skipped (map data changed)'):''));}
+   +(drops?(' · '+drops+' entr'+(drops===1?'y':'ies')+' skipped (map data changed)'):'')
+   +(packWarning?(' · warning: layout pack '+ov.pack+', this build '+PACKKEY):''));}
 function importOverlayFile(f){if(!f)return;
  const r=new FileReader();
  r.onload=()=>importOverlay(String(r.result));
@@ -2372,9 +2382,9 @@ function importOverlayFile(f){if(!f)return;
    inside setEdit. Guard on a stored buffer actually existing, so an uncustomized viewer
    builds nothing at all; and note the state is deliberately left linksReady:false, so plain
    viewing never runs the weld detector. */
-function applyStoredCont(name){const st=storedState(lsKeyFor(name));if(!st)return;
+function applyStoredCont(name){migrateContStore(name);const st=storedState(lsKeyFor(name));if(!st)return;
  buildEditState(name);reportDrops(applyContOverlay(name,st));}
-function applyStoredWorld(){if(WEDIT)return;const st=storedState(worldLsKey());if(!st)return;
+function applyStoredWorld(){if(WEDIT)return;migrateWorldStore();const st=storedState(worldLsKey());if(!st)return;
  buildWorldEditState();reportDrops(applyWorldOverlay(st));}
 /*__END_USER__*/
 
@@ -2390,7 +2400,12 @@ function restoreSkippedLinks(cont,links){const skipped=ALL[cont].skippedAuthored
  if(skipped&&skipped.links)for(const saved of skipped.links.slice().sort((a,b)=>a.i-b.i)){
    const l=Object.assign({},saved);const i=l.i;delete l.i;out.splice(i,0,l);}
  return out;}
+function buildVariantLayout(cont){const e=EDIT[cont],zoneXf={};
+ for(const k in e.zones){const z=ALL[cont].zones[k],base=xfIn(z&&(z.xfBase||z.xf)),live=e.zones[k].xf;
+   if(!sameXf(live,base))zoneXf[k]=xfOut(live);}
+ return {zoneXf};}
 function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
+ if(PACKKEY!=='default')return buildVariantLayout(cont);
  const connectors=e.conns.map(c=>({a:endOut(c,'a'),b:endOut(c,'b')}));
  const skipped=ALL[cont].skippedAuthored||{};
  const hubsOut=skipped.hubs?JSON.parse(JSON.stringify(skipped.hubs)):e.hubs.map(h=>{const o=Object.assign(hubPosOut(h),{kind:h.kind,label:h.label});
@@ -2411,9 +2426,9 @@ function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
  for(const k in e.zones){const xf=e.zones[k].xf;
    if(!isIdentity(xf))zoneXf[k]={tx:R(xf.tx),ty:R(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
  return {connectors,hubs:hubsOut,links,zoneXf};}
-function exportLayout(){if(refusePartialAuthor())return;const obj=buildLayoutObject(cur);
- downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout.json');
- toast('Exported → data/continents/'+contDirJS(cur)+'/layout.json  ·  rebuild: python scripts/build.py');}
+function exportLayout(){const obj=buildLayoutObject(cur),suffix=PACKKEY==='default'?'':('.'+PACKKEY);
+ downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout'+suffix+'.json');
+ toast('Exported → data/continents/'+contDirJS(cur)+'/layout'+suffix+'.json  ·  rebuild: python scripts/build.py');}
 let _pristine=null;
 // Captured once at first edit-entry (setEdit), before any edit action mutates transient UI (toast/bAuto),
 // so the standalone export ships a clean template. Pure viewers never enter edit -> never pay the ~17MB snapshot.
@@ -2618,7 +2633,7 @@ function worldRevertLast(){const o=readStoreK(worldLsKey());if(!o.versions.lengt
  if(o.versions.length)worldApplyState(o.versions[o.versions.length-1].state);else buildWorldEditState();
  sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
  toast(o.versions.length?('Reverted to world v'+o.versions.length):'Reverted to the published map.');}
-function worldLoadLatest(){const o=readStoreK(worldLsKey());if(o.versions.length){worldApplyState(o.versions[o.versions.length-1].state);return true;}return false;}
+function worldLoadLatest(){migrateWorldStore();const o=readStoreK(worldLsKey());if(o.versions.length){worldApplyState(o.versions[o.versions.length-1].state);return true;}return false;}
 
 /*__AUTHOR__*//* ---- world durable export: a full world.json ---- */
 function buildWorldObject(){const r2=v=>Math.round(v*100)/100,r3=v=>Math.round(v*1e3)/1e3,r4=v=>Math.round(v*1e4)/1e4;
@@ -2648,7 +2663,7 @@ function configEditbar(){const isCont=level==='continent',isWorld=level==='world
  // concept, so the padlock sub-line gets its own rule rather than riding the block.
  document.getElementById('anchorBlock').style.display=(isCont||isWorld)?'':'none';
  document.getElementById('weldHint').style.display=isCont?'':'none';
- /*__AUTHOR__*/document.getElementById('bExport').innerHTML=isCont?'&#10515; Export layout.json':'&#10515; Export world.json';/*__END_AUTHOR__*/}
+ /*__AUTHOR__*/document.getElementById('bExport').innerHTML=isCont?('&#10515; Export layout'+(PACKKEY==='default'?'':('.'+PACKKEY))+'.json'):'&#10515; Export world.json';/*__END_AUTHOR__*/}
 function viewDesc(){
  if(level==='universe')return 'Choose a realm. Norrath and The Planes are mapped; others await EQL data.';
  if(level==='world')return alt==="Norrath"?'Click a landmass to zoom in. Scroll = zoom, drag = pan.':'The Outer Planes - portal realms beyond Norrath. Click a plane to zoom in.';

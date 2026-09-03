@@ -123,8 +123,8 @@ def main():
         print("               lift parity  [no npm install needed]")
         print("N node/full  pack-convert real-pack parity, jsnum")
         print("               [--quick skips; no npm install needed]")
-        print("2 jsdom/small builder, overlay, anchors, hide-io, ghost-alpha, author-guards,")
-        print("               script-escape, travel, discovered-runtime, world-anchor")
+        print("2 jsdom/small builder, overlay, anchors, pack-storage, hide-io, ghost-alpha,")
+        print("               author-guards, script-escape, travel, discovered-runtime, world-anchor")
         print("3 jsdom/full  smoke x2, travel-full, untouched, perf"
               + ("  [--quick skips]" if True else ""))
         print("4 browser     browser.test.js" + ("  [--no-browser skips]" if True else ""))
@@ -211,7 +211,7 @@ def main():
                    stdout=subprocess.DEVNULL)
     step("jsdom fixtures: builder.test.js",
          ["node", "builder.test.js", sys.executable], cwd=JS)
-    for f in ("overlay.test.js", "anchors.test.js", "hide-io.test.js", "ghost-alpha.test.js",
+    for f in ("overlay.test.js", "anchors.test.js", "pack-storage.test.js", "hide-io.test.js", "ghost-alpha.test.js",
               "author-guards.test.js", "script-escape.test.js", "travel.test.js",
               "discovered-runtime.test.js", "world-anchor.test.js"):
         step("jsdom fixtures: " + f, ["node", f], cwd=JS)

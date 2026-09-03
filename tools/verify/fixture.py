@@ -12,7 +12,8 @@ ALL[name] for every continent in the realm, so every name here must exist in bot
 "Antonica" carries the interesting geometry; "Kunark" is the gated one; the rest are stubs.
 
 Usage: python fixture.py <outdir> [variant ...]
-  variants: base anchor-move add-hub add-conn add-zone del-hub add-worldlink script-label skip-zone
+  variants: base anchor-move pack-brewall pack-goods add-hub add-conn add-zone del-hub
+            add-worldlink script-label skip-zone
             discovered-zone (default: all)
 """
 import copy
@@ -208,7 +209,7 @@ def base_data():
 def variant(name, data):
     """Simulate an author shipping an update, so R5 (additive survival) can be tested."""
     ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS = copy.deepcopy(data)
-    if name == "base":
+    if name in ("base", "pack-brewall", "pack-goods"):
         pass
     elif name == "anchor-move":
         # Stand in for an effective pack variant: authored local anchors stay fixed while the
@@ -235,10 +236,22 @@ def variant(name, data):
         # escape (template.html). No test covered either until this variant existed.
         HUBS["Antonica"][0]["label"] = "Docks </script><b>x</b>"
     elif name == "skip-zone":
+        skipped_link = copy.deepcopy(ALL["Antonica"]["links"][1])
         del ALL["Antonica"]["zones"]["gamma"]
         ALL["Antonica"]["skipped"] = ["gamma"]
         ALL["Antonica"]["links"] = [l for l in ALL["Antonica"]["links"]
                                       if l["z1"] != "gamma" and l["z2"] != "gamma"]
+        ALL["Antonica"]["skippedAuthored"] = {
+            "zoneXf": {"gamma": {"tx": 300, "ty": -100, "s": 1.0, "rot": 0.0}},
+            "links": [dict({"i": 1}, **skipped_link)],
+        }
+        ALL["Plane of Hate"]["zones"] = {}
+        ALL["Plane of Hate"]["skipped"] = ["only"]
+        ALL["Plane of Hate"]["skippedAuthored"] = {"hubs": [
+            {"x": 200, "y": 200, "anchor": "only", "lx": 200, "ly": 200,
+             "kind": "teleport", "label": "Suppressed Plane Hub", "letter": "H"}
+        ]}
+        HUBS.pop("Plane of Hate", None)
         TRAVEL["routes"].extend([
             {"id": "spire-beta-gamma", "kind": "spire", "capability": None,
              "topology": "anywhere", "name": "Beta/Gamma spires",
@@ -281,11 +294,12 @@ def variant(name, data):
     return ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS
 
 
-def emit(path, edition, data):
+def emit(path, edition, data, pack_key="default"):
     with open(B.TEMPLATE, "r", encoding="utf-8") as f:
         tpl = f.read()
     tpl = B.strip_regions(tpl, edition)
-    html = B.inject(tpl, *data, credit="EQL · fixture map data", version=B.read_version())
+    html = B.inject(tpl, *data, credit="EQL · fixture map data", version=B.read_version(),
+                    pack_key=pack_key)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     return len(html)
@@ -293,13 +307,16 @@ def emit(path, edition, data):
 
 if __name__ == "__main__":
     outdir = sys.argv[1]
-    variants = sys.argv[2:] or ["base", "anchor-move", "add-hub", "add-conn", "add-zone", "del-hub",
+    variants = sys.argv[2:] or ["base", "anchor-move", "pack-brewall", "pack-goods",
+                                "add-hub", "add-conn", "add-zone", "del-hub",
                                 "add-worldlink", "script-label", "skip-zone", "discovered-zone"]
     os.makedirs(outdir, exist_ok=True)
     base = base_data()
     for v in variants:
         d = variant(v, base)
+        pack_key = {"anchor-move": "brewall", "pack-brewall": "brewall",
+                    "pack-goods": "goods"}.get(v, "default")
         for ed in ("user", "author"):
             p = os.path.join(outdir, "fx-%s.%s.html" % (v, ed))
-            n = emit(p, ed, d)
+            n = emit(p, ed, d, pack_key)
             print("wrote %-34s %7d bytes" % (os.path.basename(p), n))
