@@ -627,6 +627,10 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
     const entry = authored.continents[cont];
     if (!entry) throw new Error('missing authored continent ' + cont);
     const meta = entry.meta, layout = entry.layout;
+    const baseXfs = layout.zoneXf || {};
+    const variantXfs = calibration.key === 'default' ? {} : (entry.variants?.[calibration.key]?.zoneXf || {});
+    // B10: a future plan may validate sparse overrides against pack-internal fit bounds.
+    const xfs = { ...baseXfs, ...variantXfs };
     const roster = meta.zoneOrder.slice();
     for (const zk of meta.detailZones || []) if (!roster.includes(zk)) roster.push(zk);
     const parsed = new Map(), skipped = [], rootZones = [], contBaseless = [];
@@ -668,7 +672,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       }
     }
 
-    const zones = {}, skippedSet = new Set(skipped), azones = meta.zones || {}, xfs = layout.zoneXf || {};
+    const zones = {}, skippedSet = new Set(skipped), azones = meta.zones || {};
     for (const zk of meta.zoneOrder) {
       if (skippedSet.has(zk)) continue;
       const az = azones[zk];
@@ -676,14 +680,27 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       const geom = geometryRecords(parsed.get(zk).records, az.off, `${cont}/${zk}`);
       const xf = xfs[zk];
       zones[zk] = composeZone(az, geom, isIdentity(xf) ? null : xf);
+      if (Object.prototype.hasOwnProperty.call(variantXfs, zk)) {
+        zones[zk].xfBase = baseXfs[zk] || { tx:0, ty:0, s:1, rot:0 };
+      }
     }
     const allEntry = { zones };
     const skippedOrdered = meta.zoneOrder.filter(zk => skippedSet.has(zk));
     if (skippedOrdered.length) allEntry.skipped = skippedOrdered;
+    const skippedAuthored = {};
+    const skippedXfs = {};
+    for (const [zk, xf] of Object.entries(xfs)) if (skippedSet.has(zk)) skippedXfs[zk] = xf;
+    if (Object.keys(skippedXfs).length) skippedAuthored.zoneXf = skippedXfs;
     if (Object.prototype.hasOwnProperty.call(meta, 'labels') && meta.labels != null) allEntry.labels = meta.labels;
     allEntry.bbox = meta.bbox;
     allEntry.connectors = layout.connectors || [];
-    const links = (layout.links || []).filter(link => !skippedSet.has(link.z1) && !skippedSet.has(link.z2));
+    const allLinks = layout.links || [];
+    const links = allLinks.filter(link => !skippedSet.has(link.z1) && !skippedSet.has(link.z2));
+    const skippedLinks = [];
+    allLinks.forEach((link, i) => {
+      if (skippedSet.has(link.z1) || skippedSet.has(link.z2)) skippedLinks.push({ i, ...link });
+    });
+    if (skippedLinks.length) skippedAuthored.links = skippedLinks;
     if (links.length) allEntry.links = links;
     allEntry.placed = meta.placed || [];
     allEntry.unplaced = meta.unplaced || [];
@@ -721,6 +738,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
     if (extendedPalette.length || Object.keys(dz).length) DETAIL[cont] = { palette: extendedPalette, zones: dz };
     const hubs = layout.hubs || [];
     if (hubs.length && Object.keys(zones).length) HUBS[cont] = hubs;
+    else if (hubs.length) skippedAuthored.hubs = hubs;
+    if (Object.keys(skippedAuthored).length) allEntry.skippedAuthored = skippedAuthored;
   }
 
   if (Object.keys(TRAVEL).length) {

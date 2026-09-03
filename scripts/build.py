@@ -300,8 +300,10 @@ def ensure_cache(data, pack):
                          "Re-run: python scripts/import_pack.py --pack %s" % (why, pack))
 
 
-def build(data=None):
+def build(data=None, pack_key=None):
     data = data or DATA
+    if pack_key is None:
+        pack_key = calibration_key(data)[0]
     world = load(os.path.join(data, "world.json"))
     META = world["meta"]
     order = world["order"]
@@ -324,7 +326,14 @@ def build(data=None):
         gen = cont_dir(cont, os.path.join(data, import_pack.CACHE_DIRNAME))
         meta = load(os.path.join(base, "continent.json"))
         layout = load(os.path.join(base, "layout.json"))
-        xfs = layout.get("zoneXf", {}) or {}
+        base_xfs = layout.get("zoneXf", {}) or {}
+        variant_xfs = {}
+        variant_path = os.path.join(base, "layout.%s.json" % pack_key)
+        if pack_key != "default" and os.path.exists(variant_path):
+            variant_xfs = (load(variant_path).get("zoneXf", {}) or {})
+        # B10: a future plan may validate sparse overrides against pack-internal fit bounds.
+        xfs = dict(base_xfs)
+        xfs.update(variant_xfs)
 
         # Each zone record is composed from the authored layer (name/colour/centroid, which
         # are frozen so a pack swap cannot move a travel cost) plus the regenerated trace.
@@ -339,6 +348,9 @@ def build(data=None):
             zones[zk] = import_pack.compose_zone(
                 azones[zk], load(os.path.join(gen, "geometry", zk + ".json")),
                 None if is_identity(xf) else xf)
+            if zk in variant_xfs:
+                zones[zk]["xfBase"] = base_xfs.get(
+                    zk, {"tx": 0, "ty": 0, "s": 1, "rot": 0})
         catalog = discoveries.get(cont, {"zones": [], "palette": []})
         for record in catalog["zones"]:
             az = {field: record[field] for field in ("name", "color", "cx", "cy")}
@@ -351,12 +363,21 @@ def build(data=None):
         skipped_ordered = [zk for zk in meta["zoneOrder"] if zk in skipped]
         if skipped_ordered:
             entry["skipped"] = skipped_ordered
+        skipped_authored = {}
+        skipped_xfs = {zk: xf for zk, xf in xfs.items() if zk in skipped}
+        if skipped_xfs:
+            skipped_authored["zoneXf"] = skipped_xfs
         if meta.get("labels") is not None:      # continent-level extra labels (oceans, planes)
             entry["labels"] = meta["labels"]
         entry["bbox"] = meta["bbox"]
         entry["connectors"] = layout.get("connectors", [])
-        links = [link for link in layout.get("links", [])
+        all_links = layout.get("links", [])
+        links = [link for link in all_links
                  if link["z1"] not in skipped and link["z2"] not in skipped]
+        skipped_links = [dict({"i": i}, **link) for i, link in enumerate(all_links)
+                         if link["z1"] in skipped or link["z2"] in skipped]
+        if skipped_links:
+            skipped_authored["links"] = skipped_links
         if links:                               # round-trip lock state; omitted when empty
             entry["links"] = links
         entry["placed"] = meta.get("placed", [])
@@ -382,6 +403,10 @@ def build(data=None):
         hubs = layout.get("hubs", [])
         if hubs and zones:
             HUBS[cont] = hubs
+        elif hubs:
+            skipped_authored["hubs"] = hubs
+        if skipped_authored:
+            entry["skippedAuthored"] = skipped_authored
 
     if TRAVEL:
         # Copy before appending so the loaded authored graph remains a distinct value.  A user
@@ -459,7 +484,7 @@ def main():
         template = f.read()
 
     template = strip_regions(template, args.edition)     # strip before injecting
-    data = build(data_root)
+    data = build(data_root, pack_key)
     html = inject(template, *data, credit=cred_text(data_root),
                   version=read_version(), pack_key=pack_key)
 

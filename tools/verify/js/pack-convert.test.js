@@ -39,17 +39,25 @@ function contDir(name) { return name.replace(/ /g, '_').replace(/'/g, ''); }
 
 function loadAuthored(dataRoot) {
   const world = json(path.join(dataRoot, 'world.json'));
+  const packs = json(path.join(dataRoot, 'packs.json'));
   const continents = {};
   for (const cont of world.order) {
     const dir = path.join(dataRoot, 'continents', contDir(cont));
-    continents[cont] = {
+    const entry = {
       meta: json(path.join(dir, 'continent.json')),
       layout: json(path.join(dir, 'layout.json')),
     };
+    const variants = {};
+    for (const key of Object.keys(packs)) {
+      const variant = path.join(dir, `layout.${key}.json`);
+      if (fs.existsSync(variant)) variants[key] = json(variant);
+    }
+    if (Object.keys(variants).length) entry.variants = variants;
+    continents[cont] = entry;
   }
   const travelPath = path.join(dataRoot, 'travel.json');
   return { world, travel: fs.existsSync(travelPath) ? json(travelPath) : {},
-    packs: json(path.join(dataRoot, 'packs.json')), continents };
+    packs, continents };
 }
 
 function reader(selected) {
@@ -204,6 +212,14 @@ function copyFixtureData(root) {
   const data = path.join(root, 'data');
   fs.cpSync(path.join(FX, 'data'), data, { recursive: true });
   return data;
+}
+
+function addEmptyland(data) {
+  const worldPath = path.join(data, 'world.json'), world = json(worldPath);
+  world.meta.Emptyland = { pos:[60,60], uc:10, vc:10, gscale:1, gw:10, gh:10,
+    alt:'Norrath', xpac:'classic' };
+  world.order.push('Emptyland');
+  fs.writeFileSync(worldPath, JSON.stringify(world), 'utf8');
 }
 
 function pythonPipeline(pack, data, ref) {
@@ -363,7 +379,39 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         'maps/Layered', 'maps');
     }
 
-    // 3: ordinal discovery order differs from host-default ICU collation.
+    // 3: Brewall variant, including a cancelled base transform and zero-survivor continent.
+    {
+      const root = path.join(scratch, 'brewall-variant'); fs.mkdirSync(root);
+      const data = copyFixtureData(root); addEmptyland(data);
+      const pack = path.join(root, 'Brewall'); fs.cpSync(path.join(FX, 'pack'), pack, {recursive:true});
+      await compareCase('Brewall variant fixture', pack, pack, 'Brewall', null, data,
+        path.join(root, 'ref.html'), template, colors, (d, result) => {
+          assert.strictEqual(result.report.calibration, 'brewall');
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xf, {tx:10,ty:20,s:1.1,rot:0.25});
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xfBase, {tx:0,ty:0,s:1,rot:0});
+          assert(!Object.prototype.hasOwnProperty.call(d.ALL.Testland.zones.gamma, 'xf'));
+          assert.deepStrictEqual(d.ALL.Testland.zones.gamma.xfBase, {tx:3,ty:-2,s:1,rot:0});
+          assert.deepStrictEqual(d.ALL.Emptyland.skippedAuthored, {
+            zoneXf:{only:{tx:3,ty:4,s:1,rot:0}},
+            hubs:[{x:5,y:6,kind:'spire',label:'Omitted hub'}],
+          });
+        });
+    }
+
+    // 4: distinct Good's Maps variant and Python/browser byte identity.
+    {
+      const root = path.join(scratch, 'goods-variant'); fs.mkdirSync(root);
+      const data = copyFixtureData(root);
+      const pack = path.join(root, "Good's Maps"); fs.cpSync(path.join(FX, 'pack'), pack, {recursive:true});
+      await compareCase("Good's variant fixture", pack, pack, "Good's Maps", null, data,
+        path.join(root, 'ref.html'), template, colors, (d, result) => {
+          assert.strictEqual(result.report.calibration, 'goods');
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xf, {tx:-5,ty:7,s:0.9,rot:-0.1});
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xfBase, {tx:0,ty:0,s:1,rot:0});
+        });
+    }
+
+    // 5: ordinal discovery order differs from host-default ICU collation.
     {
       const root = path.join(scratch, 'collate'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(FX, 'collate');
@@ -390,7 +438,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         });
     }
 
-    // 4: one skipped zone, one filtered link, one surviving link.
+    // 6: one skipped zone, one filtered link, one surviving link.
     {
       const root = path.join(scratch, 'skip-one'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'selected-pack');
@@ -401,11 +449,15 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         assert.deepStrictEqual(d.ALL.Testland.skipped, ['gamma']);
         assert(d.ALL.Testland.links.some(link => link.z1 === 'alpha' && link.z2 === 'beta'));
         assert(!d.ALL.Testland.links.some(link => link.z1 === 'gamma' || link.z2 === 'gamma'));
+        assert.deepStrictEqual(d.ALL.Testland.skippedAuthored, {
+          zoneXf:{gamma:{tx:3,ty:-2,s:1,rot:0}},
+          links:[{i:1,z1:'beta',z2:'gamma',locked:true,manual:true}],
+        });
         assert.deepStrictEqual(result.report.skipped.Testland, manifest.continents.Testland.skippedZones);
       });
     }
 
-    // 5: no rostered source file, but the zero-zone continent remains in ALL.
+    // 7: no rostered source file, but the zero-zone continent remains in ALL.
     {
       const root = path.join(scratch, 'skip-all'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'empty-pack'); fs.mkdirSync(pack);
@@ -416,11 +468,19 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         assert.deepStrictEqual(d.ALL.Testland.skipped, ['alpha', 'beta', 'gamma']);
         assert(!Object.prototype.hasOwnProperty.call(d.DETAIL, 'Testland'));
         assert(!Object.prototype.hasOwnProperty.call(d.HUBS, 'Testland'));
+        assert.deepStrictEqual(d.ALL.Testland.skippedAuthored, {
+          zoneXf:{gamma:{tx:3,ty:-2,s:1,rot:0}},
+          links:[
+            {i:0,z1:'alpha',z2:'beta',locked:false},
+            {i:1,z1:'beta',z2:'gamma',locked:true,manual:true},
+          ],
+          hubs:[{x:5,y:6,kind:'boat',label:'Test </script> hub'}],
+        });
         assert.deepStrictEqual(result.report.skipped.Testland, manifest.continents.Testland.skippedZones);
       });
     }
 
-    // 6: Python cache load and the no-cache twin reject the same tiny nonzero Z.
+    // 8: Python cache load and the no-cache twin reject the same tiny nonzero Z.
     {
       const root = path.join(scratch, 'number-domain'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'number-pack');

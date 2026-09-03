@@ -428,6 +428,73 @@ try:
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
+# --------------------------------------------------------------------- variant composition
+print("\npack-family variants and partial-build authored round trip")
+variant_tmp = tempfile.mkdtemp(prefix="packfx-variants-")
+try:
+    vdata = os.path.join(variant_tmp, "data")
+    shutil.copytree(os.path.join(FX, "data"), vdata)
+    world_path = os.path.join(vdata, "world.json")
+    with open(world_path, encoding="utf-8") as f:
+        vworld = json.load(f)
+    vworld["meta"]["Emptyland"] = {
+        "pos": [60, 60], "uc": 10, "vc": 10, "gscale": 1,
+        "gw": 10, "gh": 10, "alt": "Norrath", "xpac": "classic"}
+    vworld["order"].append("Emptyland")
+    with open(world_path, "w", encoding="utf-8") as f:
+        json.dump(vworld, f)
+
+    brew = os.path.join(variant_tmp, "Brewall")
+    shutil.copytree(PACK, brew)
+    IP.convert(brew, vdata, quiet=True)
+    vb = BUILD.build(vdata)[0]
+    check("Brewall variant supplies the effective transform",
+          vb["Testland"]["zones"]["alpha"]["xf"],
+          {"tx": 10, "ty": 20, "s": 1.1, "rot": 0.25})
+    check("variant zone with no base transform carries explicit identity xfBase",
+          vb["Testland"]["zones"]["alpha"]["xfBase"],
+          {"tx": 0, "ty": 0, "s": 1, "rot": 0})
+    check("explicit identity variant cancels the effective xf",
+          "xf" in vb["Testland"]["zones"]["gamma"], False)
+    check("cancelled variant retains its base transform in xfBase",
+          vb["Testland"]["zones"]["gamma"]["xfBase"],
+          {"tx": 3, "ty": -2, "s": 1, "rot": 0})
+    check("zero-survivor continent preserves omitted hubs",
+          vb["Emptyland"]["skippedAuthored"]["hubs"],
+          [{"x": 5, "y": 6, "kind": "spire", "label": "Omitted hub"}])
+    check("zero-survivor continent preserves skipped zone transforms",
+          vb["Emptyland"]["skippedAuthored"]["zoneXf"],
+          {"only": {"tx": 3, "ty": 4, "s": 1, "rot": 0}})
+
+    layout_path = os.path.join(vdata, "continents", "Testland", "layout.json")
+    with open(layout_path, encoding="utf-8") as f:
+        vlayout = json.load(f)
+    vlayout["links"].append(
+        {"z1": "beta", "z2": "alpha", "locked": True, "manual": True})
+    with open(layout_path, "w", encoding="utf-8") as f:
+        json.dump(vlayout, f)
+    for name in os.listdir(brew):
+        if name.lower() == "gamma.txt" or name.lower().startswith("gamma_"):
+            os.remove(os.path.join(brew, name))
+    IP.convert(brew, vdata, quiet=True)
+    partial = BUILD.build(vdata)[0]["Testland"]
+    check("partial composition preserves a filtered link at its original index",
+          partial["skippedAuthored"]["links"],
+          [{"i": 1, "z1": "beta", "z2": "gamma", "locked": True, "manual": True}])
+    check("surviving links remain on both sides of the filtered index",
+          partial["links"], [vlayout["links"][0], vlayout["links"][2]])
+
+    goods = os.path.join(variant_tmp, "Good's Maps")
+    shutil.copytree(PACK, goods)
+    IP.convert(goods, vdata, quiet=True)
+    vg = BUILD.build(vdata)[0]["Testland"]["zones"]["alpha"]
+    check("Good's variant is distinct from Brewall", vg["xf"],
+          {"tx": -5, "ty": 7, "s": 0.9, "rot": -0.1})
+    check("Good's variant also records identity xfBase", vg["xfBase"],
+          {"tx": 0, "ty": 0, "s": 1, "rot": 0})
+finally:
+    shutil.rmtree(variant_tmp, ignore_errors=True)
+
 # --------------------------------------------------------------------- pack identity
 print("\npack-identity guard warns on the client's own maps/ root")
 root_like = tempfile.mkdtemp(prefix="maps-")

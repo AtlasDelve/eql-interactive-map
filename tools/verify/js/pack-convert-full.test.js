@@ -67,17 +67,25 @@ function json(filename) { return JSON.parse(fs.readFileSync(filename, 'utf8')); 
 function contDir(name) { return name.replace(/ /g, '_').replace(/'/g, ''); }
 
 function loadAuthored(dataRoot) {
-  const world = json(path.join(dataRoot, 'world.json')), continents = {};
+  const world = json(path.join(dataRoot, 'world.json'));
+  const packs = json(path.join(dataRoot, 'packs.json')), continents = {};
   for (const cont of world.order) {
     const dir = path.join(dataRoot, 'continents', contDir(cont));
-    continents[cont] = {
+    const entry = {
       meta: json(path.join(dir, 'continent.json')),
       layout: json(path.join(dir, 'layout.json')),
     };
+    const variants = {};
+    for (const key of Object.keys(packs)) {
+      const variant = path.join(dir, `layout.${key}.json`);
+      if (fs.existsSync(variant)) variants[key] = json(variant);
+    }
+    if (Object.keys(variants).length) entry.variants = variants;
+    continents[cont] = entry;
   }
   const travel = path.join(dataRoot, 'travel.json');
   return { world, travel: fs.existsSync(travel) ? json(travel) : {},
-    packs: json(path.join(dataRoot, 'packs.json')), continents };
+    packs, continents };
 }
 
 function trackingReader(selected) {
