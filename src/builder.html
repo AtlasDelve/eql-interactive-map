@@ -137,11 +137,14 @@ function updateProgress(key) {
 
 async function buildMap({files, packDir, rootDir, version = BUILDER_VERSION}) {
   const result = await convert({authored:AUTHORED, files, colors:COLORS, packDir, rootDir});
-  return {html:buildHTML(TPL, result.data, result.credit, version), report:result.report, credit:result.credit};
+  return {html:buildHTML(TPL, result.data, result.credit, version, result.report.calibration), report:result.report, credit:result.credit};
 }
 
 function renderReport(report) {
   reportElement.replaceChildren();
+  const calibration = document.createElement('p');
+  calibration.textContent = 'calibration: ' + report.calibration;
+  reportElement.appendChild(calibration);
   const skipped = Object.entries(report.skipped || {}).filter(([,zones]) => zones.length);
   if (skipped.length) {
     const heading = document.createElement('p');

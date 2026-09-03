@@ -390,6 +390,27 @@ try:
 
     # -- --only refuses to invent a cache -----------------------------
     print("\n--only updates a cache, it never creates one")
+    identity_root = os.path.join(tmp, "identity")
+    first = os.path.join(identity_root, "first", "Same Pack")
+    second = os.path.join(identity_root, "second", "Same Pack")
+    shutil.copytree(PACK, first)
+    shutil.copytree(PACK, second)
+    IP.convert(first, data, quiet=True)
+    identity_manifest = os.path.join(data, IP.CACHE_DIRNAME, "manifest.json")
+    before_identity = open(identity_manifest, "rb").read()
+    try:
+        IP.convert(second, data, only="Testland", quiet=True)
+    except SystemExit as exc:
+        identity_message = str(exc)
+    else:
+        identity_message = ""
+    check("--only refuses a different absolute path with the same basename",
+          "refuses to mix" in identity_message, True)
+    check("...and names both same-basename paths",
+          first in identity_message and second in identity_message, True)
+    check("...and leaves the seeded manifest byte-identical",
+          open(identity_manifest, "rb").read(), before_identity)
+    IP.convert(PACK, data, quiet=True)
     check("--only works when a complete cache exists",
           IP.convert(PACK, data, only="Testland", quiet=True)["schema"], IP.SCHEMA)
     shutil.rmtree(live)

@@ -205,6 +205,7 @@ const TRAVEL_AVAILABLE=!!(TRAVEL&&Array.isArray(TRAVEL.walk)&&Array.isArray(TRAV
 const TDATA=TRAVEL_AVAILABLE?TRAVEL:{groups:{},capabilities:[],walk:[],routes:[]};
 // world-view connectors: free 2-point lines in globe coords {a:[gx,gy],b:[gx,gy],alt}. Editable at world level.
 /*__DATA_WL__*/const WORLDLINKS=__WORLDLINKS__;/*__END_WL__*/
+const PACKKEY="__PACKKEY__";
 // Realm -> its continents, DERIVED from each continent's own `alt` rather than restated as a
 // literal: the same fact written twice drifts, and the realm a continent belongs to is a
 // property of that continent. Iterate `names`, NEVER META: `names` follows the authored

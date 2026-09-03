@@ -75,7 +75,8 @@ def load_authored(data=DATA):
                     "(missing %s). See: python scripts/import_pack.py "
                     "--print-authored %s" % (cont, zone, ", ".join(missing), cont))
         continents[cont] = {"meta": meta, "layout": layout}
-    return {"world": world, "travel": travel, "continents": continents}
+    packs = build.load(os.path.join(data, "packs.json"))
+    return {"world": world, "travel": travel, "packs": packs, "continents": continents}
 
 
 def color_table():

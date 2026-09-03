@@ -257,7 +257,7 @@ def cmd_lf(path):
     return 1 if bad else 0
 
 
-FORBIDDEN = ["__AUTHOR__", "__END_AUTHOR__", "__USER__", "__END_USER__", "__CRED__", "__VERSION__",
+FORBIDDEN = ["__AUTHOR__", "__END_AUTHOR__", "__USER__", "__END_USER__", "__CRED__", "__VERSION__", "__PACKKEY__",
              "layout.json", "world.json", "build.py",
              "buildLayoutObject", "buildWorldObject", "spliceBetween",
              "getPristine", "exportStandaloneHTML", "exportLayout", "exportWorld",

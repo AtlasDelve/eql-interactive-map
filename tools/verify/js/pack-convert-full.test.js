@@ -76,7 +76,8 @@ function loadAuthored(dataRoot) {
     };
   }
   const travel = path.join(dataRoot, 'travel.json');
-  return { world, travel: fs.existsSync(travel) ? json(travel) : {}, continents };
+  return { world, travel: fs.existsSync(travel) ? json(travel) : {},
+    packs: json(path.join(dataRoot, 'packs.json')), continents };
 }
 
 function trackingReader(selected) {
@@ -320,7 +321,7 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
     throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
   if (!fs.existsSync(userReference)) throw new Error('missing Brewall reference ' + userReference);
-  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
+  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION, result.report.calibration), fs.readFileSync(userReference, 'utf8'));
   for (const cont of authored.world.order) {
     const entry = manifest.continents[cont], label = `Brewall ${cont}`;
     assert.deepStrictEqual(result.report.discovered[cont], entry.discovered || [], `${label}: catalog`);
@@ -401,7 +402,7 @@ async function runRootOnly(mapsRoot, template, colors) {
         entry.discoveredSourceFingerprint || sourceIdentity(new Map()).fingerprint,
         `${label}: discovered fingerprint`);
     }
-    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
+    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION, result.report.calibration), fs.readFileSync(reference, 'utf8'));
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);

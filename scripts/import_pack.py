@@ -756,6 +756,8 @@ def assemble_discoveries(cont, candidates, pack, root, parsed, meta, zone_index,
 
 def convert(pack, data=None, only=None, quiet=False):
     data = data or DATA
+    pack = os.path.abspath(pack)
+    root = root_layer(pack)
     with open(os.path.join(data, "world.json"), "r", encoding="utf-8") as f:
         world = json.load(f)
     order = [c for c in world["order"] if only is None or c == only]
@@ -772,6 +774,23 @@ def convert(pack, data=None, only=None, quiet=False):
             raise SystemExit(
                 "--only needs a complete cache to update, and there isn't one: %s\n"
                 "Convert everything first:  python scripts/import_pack.py" % why)
+        manifest_path = os.path.join(data, CACHE_DIRNAME, "manifest.json")
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            seeded = json.load(f)
+
+        def same_path(a, b):
+            if a is None or b is None:
+                return a is b
+            return os.path.normcase(os.path.normpath(os.path.abspath(a))) == \
+                os.path.normcase(os.path.normpath(os.path.abspath(b)))
+
+        if not same_path(pack, seeded.get("pack")) or not same_path(root, seeded.get("root")):
+            raise SystemExit(
+                "--only refuses to mix map sources in one cache.\n"
+                "Existing cache: pack=%s root=%s\n"
+                "Requested source: pack=%s root=%s\n"
+                "Reconvert the whole cache with: python scripts/import_pack.py --pack %s"
+                % (seeded.get("pack"), seeded.get("root"), pack, root, pack))
 
     # Always recorded in the manifest; printed unless the caller asked for quiet. The only
     # quiet caller is the test fixture, whose 3-zone pack trips the grid-count heuristic by
@@ -789,8 +808,6 @@ def convert(pack, data=None, only=None, quiet=False):
     # installed as <install>/maps/<Pack> gets the client's own maps/ as a per-zone base layer
     # and anything else gets none - in which case every line below behaves exactly as it did
     # before layering existed.
-    root = root_layer(pack)
-
     # Pass A -- index. Build the same global, first-wins name index the viewer gets from
     # DETAIL. Map-file contents are deliberately not read in this pass.
     index_entries = discovery_index_entries(pack, root, data, world)

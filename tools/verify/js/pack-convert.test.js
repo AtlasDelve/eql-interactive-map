@@ -9,6 +9,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   convert, buildHTML, parsePythonFloat, readText, splitLines, pyStrip,
+  calibrationKey,
 } = require('../../../src/pack_convert.js');
 
 const REPO = path.resolve(__dirname, '../../..');
@@ -47,7 +48,8 @@ function loadAuthored(dataRoot) {
     };
   }
   const travelPath = path.join(dataRoot, 'travel.json');
-  return { world, travel: fs.existsSync(travelPath) ? json(travelPath) : {}, continents };
+  return { world, travel: fs.existsSync(travelPath) ? json(travelPath) : {},
+    packs: json(path.join(dataRoot, 'packs.json')), continents };
 }
 
 function reader(selected) {
@@ -223,7 +225,7 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   const reference = fs.readFileSync(ref, 'utf8');
   const files = reader(selected);
   const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
-  const actual = buildHTML(template, result.data, result.credit, VERSION);
+  const actual = buildHTML(template, result.data, result.credit, VERSION, result.report.calibration);
   assertNoPrivateKeys(result.data);
   if (beforeCompare) beforeCompare(result);
   assertSame(label, actual, reference);
@@ -247,6 +249,7 @@ assert.strictEqual(readText(Uint8Array.from([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf,
 const injectPlaceholders = [
   '__ALL__', '__META__', '__DETAIL__', '__HUBS__', '__UNIVERSE__',
   '__WORLDLINKS__', '__TRAVEL__', '__XPACS__', '__CRED__', '__VERSION__',
+  '__PACKKEY__',
 ];
 const injectTokens = injectPlaceholders.join(' ');
 const injectData = {
@@ -255,27 +258,36 @@ const injectData = {
   DETAIL: {}, HUBS: {}, UNIVERSE: [], WORLDLINKS: [], TRAVEL: {}, XPACS: {},
 };
 const injectCredit = `${injectTokens} O'Reilly & <builder> "quoted"`;
-const injectVersion = VERSION;
+const injectVersion = VERSION, injectPackKey = 'brewall';
 const injectTemplate = injectPlaceholders.join('|');
 for (const missing of injectPlaceholders) {
   assert.throws(
-    () => buildHTML(injectTemplate.replace(missing, ''), injectData, injectCredit, injectVersion),
+    () => buildHTML(injectTemplate.replace(missing, ''), injectData, injectCredit, injectVersion, injectPackKey),
     new RegExp(`template missing placeholder ${missing}`),
     missing,
   );
 }
-const injectCode = "import json,sys;sys.path.insert(0,'scripts');import build;p=json.load(sys.stdin);keys=('ALL','META','DETAIL','HUBS','UNIVERSE','WORLDLINKS','TRAVEL','XPACS');sys.stdout.buffer.write(build.inject(p['template'],*(p[k] for k in keys),credit=p['credit'],version=p['version']).encode('utf-8'))";
-const injectPayload = { template: injectTemplate, ...injectData, credit: injectCredit, version: injectVersion };
+const injectCode = "import json,sys;sys.path.insert(0,'scripts');import build;p=json.load(sys.stdin);keys=('ALL','META','DETAIL','HUBS','UNIVERSE','WORLDLINKS','TRAVEL','XPACS');sys.stdout.buffer.write(build.inject(p['template'],*(p[k] for k in keys),credit=p['credit'],version=p['version'],pack_key=p['packKey']).encode('utf-8'))";
+const injectPayload = { template: injectTemplate, ...injectData, credit: injectCredit, version: injectVersion, packKey: injectPackKey };
 const pythonInjected = mustPython(['-c', injectCode], {
   input: Buffer.from(JSON.stringify(injectPayload), 'utf8'),
 }).toString('utf8');
-const jsInjected = buildHTML(injectTemplate, injectData, injectCredit, injectVersion);
+const jsInjected = buildHTML(injectTemplate, injectData, injectCredit, injectVersion, injectPackKey);
 assert.strictEqual(jsInjected, pythonInjected);
 for (const token of injectPlaceholders) {
   assert(jsInjected.split(token).length - 1 >= 2, `${token} did not survive both embeddings`);
 }
 assert(jsInjected.includes('__CRED__') && jsInjected.includes('$&') && jsInjected.includes('$`')
   && jsInjected.includes("$'") && jsInjected.includes('$1'));
+
+const PACKS = json(path.join(FX, 'data', 'packs.json'));
+assert.deepStrictEqual(calibrationKey('maps', PACKS), {key:'default', notice:null});
+assert.deepStrictEqual(calibrationKey('maps/bReWaLl', PACKS), {key:'brewall', notice:null});
+assert.deepStrictEqual(calibrationKey("maps/Good's Maps", PACKS), {key:'goods', notice:null});
+const unknownCalibration = calibrationKey('maps/Other', PACKS);
+assert.strictEqual(unknownCalibration.key, 'default');
+assert(unknownCalibration.notice.includes('Other'));
+console.log('PASS: pack directory selects calibration and unknowns fall back with notice');
 
 const template = strippedTemplate();
 const colors = JSON.parse(mustPython(['scripts/pack_colors.py', '--json']).toString('utf8'));
@@ -303,9 +315,11 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (d, result, manifest, files) => {
         assert.deepStrictEqual(Object.keys(result).sort(), ['credit', 'data', 'report']);
         assert.deepStrictEqual(Object.keys(result.report).sort(), [
-          'baseless', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
+          'baseless', 'calibration', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
           'rootZones', 'skipped', 'unknownRecords', 'unseenColors', 'warnings',
         ]);
+        assert.strictEqual(result.report.calibration, 'default');
+        assert(result.report.warnings.some(w => w.includes('Layered') && w.includes('default calibration')));
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
         assert.strictEqual(result.credit, PINS.cred_on);
         assert.deepStrictEqual(result.report.discovered.Testland, PINS.discovered);

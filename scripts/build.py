@@ -155,6 +155,20 @@ def cred_text(data):
     return text
 
 
+def calibration_key(data):
+    """Return the pack-family calibration key and an optional unknown-family notice."""
+    manifest = load_manifest(data)
+    pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
+    if pack_name.casefold() == "maps":
+        return "default", None
+    packs = load(os.path.join(data, "packs.json"))
+    for key, record in packs.items():
+        if record["dir"].casefold() == pack_name.casefold():
+            return key, None
+    return ("default",
+            "unrecognized map directory %r; using default calibration" % pack_name)
+
+
 def replace_placeholders(template, replacements):
     """Replace only placeholders present in template, never text inserted by a value."""
     for ph in replacements:
@@ -395,7 +409,7 @@ def build(data=None):
 
 
 def inject(template, ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS,
-           *, credit=None, version=None):
+           *, credit=None, version=None, pack_key="default"):
     def j(o):
         # escape "</" so any string value (e.g. a hub label/note containing "</script>")
         # cannot break out of the <script> block it is injected into.
@@ -411,6 +425,7 @@ def inject(template, ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPAC
         replacements["__CRED__"] = html_escape(credit)
     if version is not None:
         replacements["__VERSION__"] = version
+    replacements["__PACKKEY__"] = pack_key
     return replace_placeholders(template, replacements)
 
 
@@ -435,6 +450,10 @@ def main():
     if not os.path.isdir(data_root):
         raise SystemExit("--data: not a directory: " + data_root)
     ensure_cache(data_root, resolve_pack(data_root, args.pack))
+    pack_key, pack_notice = calibration_key(data_root)
+    print("calibration: " + pack_key)
+    if pack_notice:
+        print("NOTICE: " + pack_notice)
 
     with open(TEMPLATE, "r", encoding="utf-8") as f:
         template = f.read()
@@ -442,7 +461,7 @@ def main():
     template = strip_regions(template, args.edition)     # strip before injecting
     data = build(data_root)
     html = inject(template, *data, credit=cred_text(data_root),
-                  version=read_version())
+                  version=read_version(), pack_key=pack_key)
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8", newline="") as f:
