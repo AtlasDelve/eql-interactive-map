@@ -55,9 +55,14 @@ Written down because each one is a mistake worth not repeating:
 
 - **Authored anchors have both geometry and consumer gates.** `verify.py anchors` checks every
   published hub and connector-end host against the selected cache and the measured 358.2-unit
-  bound; changing a host key or local point makes the command fail. The jsdom anchor cases then
-  move host zones, exercise nearest-outline ownership, suppress absent hosts in view and edit
-  modes, round-trip standalone HTML, and free a moved published hub without a jump.
+  bound; changing a host key or local point makes the command fail. When one calibration's source
+  trace has no geometry under a diagnosed authored point, an exact calibration/entry/host/local/
+  distance/AABB pin prints `EXCEPT` instead of widening the bound. A pin fails as `anchor exception
+  stale`, `anchor exception unnecessary`, or `anchor exception unused` when its source measurement
+  changes, the ordinary bound starts passing, or the entry is no longer consumed; re-measure pins
+  from the selected production cache just as the bound is re-measured. The jsdom anchor cases then
+  move host zones, exercise nearest-outline ownership, suppress absent hosts in view and edit modes,
+  round-trip standalone HTML, and free a moved published hub without a jump.
 - **Pack storage and deletion are tested at their real entry points.** `pack-storage.test.js` keeps
   two pack keys isolated and drives per-continent/world legacy migration, reload and reset in both
   editions. `hide-io.test.js` dispatches a real `KeyboardEvent('Delete')`: a published user hub

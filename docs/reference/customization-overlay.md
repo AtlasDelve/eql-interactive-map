@@ -39,6 +39,8 @@ Measured on the root-only cache, 14 of Kunark's 19 links are filtered and none o
 
 **Published continent hubs and connector ends carry authored zone-local anchors because the host zone is an authored decision that must survive a pack swap.** Each record retains its free fallback (`x`/`y` or `xy`) plus `anchor` and local `lx`/`ly`; `hubPos`/`ep` resolve that local point through the host zone's live transform. Deriving the host afresh from each pack was rejected: a nearest-outline tie can silently bind a different zone and then move the travel glyph with it. `ANCHOR_THRESH=1200` remains only the interaction threshold for a new item or an explicit re-anchor; `LINK_THRESH=120` independently governs weld detection.
 
+An authored anchor whose host trace has no geometry under it in one pack stays authored and is carried by an exact, re-measured verifier exception for that calibration and entry; it is never re-derived or moved merely to fit that pack's trace.
+
 **`enterCont` must call `bindES(name)` whenever `EDIT[name]` exists.** `drawCont` calls `ep()` and `hubPos()` without a zone map, so they read the *global* `zones`; a stale binding renders anchored hubs at their published spot and snaps anchored connectors back to canonical. (This was a latent bug before the overlay: edit A, edit B, return to A with Edit off.)
 
 **localStorage keys are suffixed per pack and edition** (`_<pack>_v1` author, `_<pack>_u1` user) because calibration layouts and the two serialization shapes must not consume each other's buffers. Migration is per destination: each continent and the world copies its legacy unsuffixed edition buffer once, writes a destination-specific marker, and never resurrects that legacy value after reset.

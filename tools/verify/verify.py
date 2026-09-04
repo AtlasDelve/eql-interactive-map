@@ -361,15 +361,31 @@ def cmd_hints():
 
 ANCHOR_MEASURED_MAX = 325.558
 ANCHOR_BOUND = 358.2
+ANCHOR_EXCEPTIONS = {
+    "default": {   # client maps/ root: the trace has no geometry under these two authored points
+        "Antonica hubs[13]": {"host": "southkarana", "local": [-27583.0, -4375.0],
+                                "dist": 2069.169, "inside_aabb": True},
+        "Antonica connectors[10].b": {"host": "lavastorm", "local": [-1618.0, 9357.0],
+                                       "dist": 907.000, "inside_aabb": False},
+    },
+}
 
 
-def _check_anchors(ALL, HUBS, rosters):
+def anchor_exceptions_for(pack_key, notice):
+    """Return diagnosed root exceptions, never exceptions for an unknown default family."""
+    return ANCHOR_EXCEPTIONS if pack_key == "default" and notice is None else {}
+
+
+def _check_anchors(ALL, HUBS, rosters, pack_key, exceptions):
     """Check anchored authored positions; migrated Brewall max was 325.558, bound is +10%."""
     bad = checked = 0
     observed = 0.0
+    excepted = 0
+    active_exceptions = exceptions.get(pack_key, {})
+    visited_exceptions = set()
 
     def check(cont, kind, index, suffix, item, anchor, lx, ly):
-        nonlocal bad, checked, observed
+        nonlocal bad, checked, observed, excepted
         where = "%s %s[%d]%s" % (cont, kind, index, suffix)
         if not anchor or lx is None or ly is None:
             print("FAIL  anchor missing: " + where)
@@ -390,19 +406,46 @@ def _check_anchors(ALL, HUBS, rosters):
             return
         point = mapgeom.tpoint(zone, lx, ly)
         dist = mapgeom.dist_to_zone(zone, point[0], point[1])
+        segs = zone.get("segs", [])
+        inside_aabb = True
+        if segs:
+            xs = [v for seg in segs for v in (seg[0], seg[2])]
+            ys = [v for seg in segs for v in (seg[1], seg[3])]
+            inside_aabb = not (
+                lx < min(xs) - ANCHOR_BOUND or lx > max(xs) + ANCHOR_BOUND or
+                ly < min(ys) - ANCHOR_BOUND or ly > max(ys) + ANCHOR_BOUND)
+
+        exception = active_exceptions.get(where)
+        if exception is not None:
+            visited_exceptions.add(where)
+            if dist <= ANCHOR_BOUND and inside_aabb:
+                print("FAIL  anchor exception unnecessary: %s dist=%.3f bound=%.1f" %
+                      (where, dist, ANCHOR_BOUND))
+                bad += 1
+            elif (anchor == exception["host"] and
+                  [float(lx), float(ly)] == [float(v) for v in exception["local"]] and
+                  "%.3f" % dist == "%.3f" % exception["dist"] and
+                  inside_aabb == exception["inside_aabb"]):
+                print("EXCEPT anchor off host (root trace gap): %s host=%s "
+                      "dist=%.3f pinned=%.3f calibration=%s" %
+                      (where, anchor, dist, exception["dist"], pack_key))
+                excepted += 1
+            else:
+                print("FAIL  anchor exception stale: %s host=%s local=%s dist=%.3f "
+                      "pinned=%.3f inside_aabb=%s" %
+                      (where, anchor, [lx, ly], dist, exception["dist"], inside_aabb))
+                bad += 1
+            checked += 1
+            return
+
         observed = max(observed, dist)
         if dist > ANCHOR_BOUND:
             print("FAIL  anchor off host: %s dist=%.3f bound=%.1f" %
                   (where, dist, ANCHOR_BOUND))
             bad += 1
-        segs = zone.get("segs", [])
-        if segs:
-            xs = [v for seg in segs for v in (seg[0], seg[2])]
-            ys = [v for seg in segs for v in (seg[1], seg[3])]
-            if (lx < min(xs) - ANCHOR_BOUND or lx > max(xs) + ANCHOR_BOUND or
-                    ly < min(ys) - ANCHOR_BOUND or ly > max(ys) + ANCHOR_BOUND):
-                print("FAIL  anchor local point outside host bounds: %s host=%s" % (where, anchor))
-                bad += 1
+        if not inside_aabb:
+            print("FAIL  anchor local point outside host bounds: %s host=%s" % (where, anchor))
+            bad += 1
         checked += 1
 
     for cont, entry in ALL.items():
@@ -419,8 +462,11 @@ def _check_anchors(ALL, HUBS, rosters):
                 else:
                     anchor, lx, ly = end.get("anchor"), end.get("lx"), end.get("ly")
                 check(cont, "connectors", i, "." + which, end, anchor, lx, ly)
-    print("checked %d authored anchor(s); observed max distance %.3f (bound %.1f)" %
-          (checked, observed, ANCHOR_BOUND))
+    for where in sorted(set(active_exceptions) - visited_exceptions):
+        print("FAIL  anchor exception unused: %s calibration=%s" % (where, pack_key))
+        bad += 1
+    print("checked %d authored anchor(s); observed max distance %.3f (bound %.1f); %d excepted" %
+          (checked, observed, ANCHOR_BOUND, excepted))
     return bad
 
 
@@ -434,7 +480,9 @@ def cmd_anchors(data=None):
     for cont in world["order"]:
         meta = build.load(os.path.join(build.cont_dir(cont, data), "continent.json"))
         rosters[cont] = set(meta["zoneOrder"])
-    bad = _check_anchors(ALL, HUBS, rosters)
+    pack_key, notice = build.calibration_key(data)
+    bad = _check_anchors(ALL, HUBS, rosters, pack_key,
+                         anchor_exceptions_for(pack_key, notice))
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 
