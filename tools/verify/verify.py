@@ -368,12 +368,16 @@ ANCHOR_EXCEPTIONS = {
         "Antonica connectors[10].b": {"host": "lavastorm", "local": [-1618.0, 9357.0],
                                        "dist": 907.000, "inside_aabb": False},
     },
+    "goods": {   # Good's Maps: the base trace draws no ring under this authored glyph
+        "Antonica hubs[14]": {"host": "southkarana", "local": [-25939.0, -8373.0],
+                                "dist": 461.295, "inside_aabb": True},
+    },
 }
 
 
 def anchor_exceptions_for(pack_key, notice):
-    """Return diagnosed root exceptions, never exceptions for an unknown default family."""
-    return ANCHOR_EXCEPTIONS if pack_key == "default" and notice is None else {}
+    """Return diagnosed family exceptions, never exceptions for an unknown default family."""
+    return ANCHOR_EXCEPTIONS if notice is None and pack_key in ANCHOR_EXCEPTIONS else {}
 
 
 def _check_anchors(ALL, HUBS, rosters, pack_key, exceptions):
@@ -426,7 +430,7 @@ def _check_anchors(ALL, HUBS, rosters, pack_key, exceptions):
                   [float(lx), float(ly)] == [float(v) for v in exception["local"]] and
                   "%.3f" % dist == "%.3f" % exception["dist"] and
                   inside_aabb == exception["inside_aabb"]):
-                print("EXCEPT anchor off host (root trace gap): %s host=%s "
+                print("EXCEPT anchor off host (source trace gap): %s host=%s "
                       "dist=%.3f pinned=%.3f calibration=%s" %
                       (where, anchor, dist, exception["dist"], pack_key))
                 excepted += 1

@@ -60,8 +60,10 @@ Written down because each one is a mistake worth not repeating:
   distance/AABB pin prints `EXCEPT` instead of widening the bound. A pin fails as `anchor exception
   stale`, `anchor exception unnecessary`, or `anchor exception unused` when its source measurement
   changes, the ordinary bound starts passing, or the entry is no longer consumed; re-measure pins
-  from the selected production cache just as the bound is re-measured. The jsdom anchor cases then
-  move host zones, exercise nearest-outline ownership, suppress absent hosts in view and edit modes,
+  from the selected production cache just as the bound is re-measured. The pinned gaps are root
+  `Antonica hubs[13]` and `connectors[10].b`, and Good's `Antonica hubs[14]`; every other anchor in
+  those families and all Brewall anchors use the ordinary bound. The jsdom anchor cases then move
+  host zones, exercise nearest-outline ownership, suppress absent hosts in view and edit modes,
   round-trip standalone HTML, and free a moved published hub without a jump.
 - **Pack storage and deletion are tested at their real entry points.** `pack-storage.test.js` keeps
   two pack keys isolated and drives per-continent/world legacy migration, reload and reset in both

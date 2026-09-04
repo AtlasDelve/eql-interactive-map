@@ -139,7 +139,7 @@ def run_anchor_case(all_data, hubs, pack_key, exceptions):
 exception_match, text = run_anchor_case(anchor_all, mut_hubs, "default", hub_exception)
 check("anchor exception matches the exact diagnosed point", exception_match, 0)
 check("matching anchor exception prints its named EXCEPT line",
-      "EXCEPT anchor off host (root trace gap): Antonica hubs[0]" in text, True)
+      "EXCEPT anchor off host (source trace gap): Antonica hubs[0]" in text, True)
 check("matching anchor exception prints no FAIL line", "FAIL" not in text, True)
 
 stale_distance = copy.deepcopy(hub_exception)
@@ -207,6 +207,8 @@ check("recognized default receives the exception table",
       verify.anchor_exceptions_for("default", None) is verify.ANCHOR_EXCEPTIONS, True)
 check("unrecognized default receives no exceptions",
       verify.anchor_exceptions_for("default", "unrecognized map directory") == {}, True)
+check("Good's receives the exception table",
+      verify.anchor_exceptions_for("goods", None) is verify.ANCHOR_EXCEPTIONS, True)
 check("Brewall receives no exceptions",
       verify.anchor_exceptions_for("brewall", None) == {}, True)
 
