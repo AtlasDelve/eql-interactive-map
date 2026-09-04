@@ -33,11 +33,11 @@ const ROOT_ONLY_EXPECTED = {
   surviving: {
     Antonica: ['ecommons', 'commons', 'kithicor', 'highpass', 'eastkarana', 'northkarana',
       'southkarana', 'lakerathe', 'rathemtn', 'feerrott', 'innothule', 'freportw', 'freporte',
-      'freportn', 'rivervale', 'misty', 'beholder', 'nro', 'oasis', 'sro', 'nektulos',
+      'freportn', 'rivervale', 'misty', 'beholder', 'nro', 'newsebexp', 'oasis', 'sro', 'nektulos',
       'befallen', 'highkeep', 'qey2hh1', 'paw', 'arena', 'oggok', 'cazicthule', 'gukbottom',
       'grobb', 'lavastorm', 'neriaka', 'qeytoqrg', 'guktop', 'soldunga', 'soldungb',
       'soltemple', 'najena', 'neriakb', 'blackburrow', 'qrg', 'qeynos2', 'neriakc',
-      'everfrost', 'qeynos', 'qcat', 'permafrost', 'halas', 'newsebexp'],
+      'everfrost', 'qeynos', 'qcat', 'permafrost', 'halas'],
     Faydwer: ['gfaydark', 'butcher', 'crushbone', 'lfaydark', 'felwithea', 'cauldron',
       'kaladima', 'mistmoore', 'steamfont', 'felwitheb', 'kedge', 'unrest', 'kaladimb', 'akanon'],
     Odus: ['erudnext', 'tox', 'erudnint', 'kerraridge', 'paineel', 'warrens', 'stonebrunt'],
