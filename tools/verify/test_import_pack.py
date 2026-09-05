@@ -1063,6 +1063,50 @@ try:
     except SystemExit:
         complete_guard_ok = False
     check("travel derivation accepts a complete cache", complete_guard_ok, True)
+
+    print("\ntravel derivation resolves authored and legacy connector ends")
+    dtg_data, dtg_travel = DTG.DATA, DTG.TRAVEL
+    layout_path = os.path.join(ldata, "continents", "Testland", "layout.json")
+    with open(layout_path, encoding="utf-8") as f:
+        saved_layout = f.read()
+    try:
+        DTG.DATA = ldata
+        DTG.TRAVEL = os.path.join(ldata, "travel.json")
+        # Both stale fallbacks lie on gamma, far from the authored alpha/beta hosts.
+        # Delete alpha/beta's weld so only the connector can keep that proposal edge.
+        layout = {"zoneXf": {"gamma": {"tx": 10003, "ty": -2, "s": 1, "rot": 0}},
+                  "links": [{"z1": "alpha", "z2": "beta", "deleted": True}],
+                  "connectors": [
+                      {"a": {"xy": [10004, -1], "anchor": "beta", "lx": 3.2, "ly": 8.4},
+                       "b": {"xy": [10005, 0], "anchor": "alpha", "lx": 1.3, "ly": 2.1}},
+                      {"a": [1, 1], "b": [10004, -1]},
+                      {"a": {"xy": [1, 1], "anchor": "absent", "lx": 0, "ly": 0},
+                       "b": [10004, -1]},
+                      {"a": {"xy": [10004, -1], "anchor": "alpha", "lx": 1, "ly": 1},
+                       "b": {"xy": [10005, 0], "anchor": "alpha", "lx": 2, "ly": 2}}]}
+        with open(layout_path, "w", encoding="utf-8") as f:
+            json.dump(layout, f)
+        dzones, _, _ = DTG.load_continent("Testland")
+        check("both authored fallbacks are nearest the third zone",
+              [DTG.nearest_zone(dzones, *end["xy"])[0]
+               for end in layout["connectors"][0].values()], ["gamma", "gamma"])
+        dwalk, dnotes, _ = DTG.derive(["Testland"])
+        pairs = {tuple(e["z"]): e.get("at") for e in dwalk}
+        check("authored connector keeps its hosts despite the deleted weld",
+              pairs.get(("alpha", "beta")), [[1.3, 2.1], [3.2, 8.4]])
+        check("deleted-kept proves the authored connector was consumed",
+              any(n[1] == "deleted-kept" and "alpha <-> beta" in n[2] for n in dnotes), True)
+        check("legacy connector still resolves and inverse-transforms its doorway",
+              pairs.get(("alpha", "gamma")), [[1.0, 1.0], [1.0, 1.0]])
+        check("an absent authored host reports connector-unresolved",
+              any(n[1] == "connector-unresolved" and "connector 2:" in n[2] for n in dnotes), True)
+        check("authored ends on the same host report connector-self",
+              any(n[1] == "connector-self" and "connector 3 " in n[2] for n in dnotes), True)
+    finally:
+        DTG.DATA, DTG.TRAVEL = dtg_data, dtg_travel
+        with open(layout_path, "w", encoding="utf-8") as f:
+            f.write(saved_layout)
+
     check("a pack outside maps/ derives no base layer at all", fman["root"], None)
     check("...and carries no rootNote to assert a second regime",
           "rootNote" in fman, False)
