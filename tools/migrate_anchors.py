@@ -23,9 +23,9 @@ RULED_HOSTS = {
 
 
 def rnd4(value):
-    """Match the template's Math.round(v*1e4)/1e4, including negative ties."""
+    """Match the template's rounding (including negative ties) and number serialisation."""
     out = math.floor(value * 10000 + 0.5) / 10000
-    return 0 if out == 0 else out
+    return int(out) if out.is_integer() else out
 
 
 def point_of_end(end):

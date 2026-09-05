@@ -5,8 +5,8 @@
       "x": 418,
       "y": -2092,
       "anchor": "gfaydark",
-      "lx": 418.0,
-      "ly": -2092.0,
+      "lx": 418,
+      "ly": -2092,
       "kind": "spire",
       "label": "Wizard Spires — Greater Faydark"
     },
@@ -14,8 +14,8 @@
       "x": -7788,
       "y": -2465,
       "anchor": "butcher",
-      "lx": -7788.0,
-      "ly": -2465.0,
+      "lx": -7788,
+      "ly": -2465,
       "kind": "ring",
       "label": "Druid Ring — Butcherblock Mountains"
     },
@@ -23,8 +23,8 @@
       "x": 2592,
       "y": -6233,
       "anchor": "steamfont",
-      "lx": 2592.0,
-      "ly": -6233.0,
+      "lx": 2592,
+      "ly": -6233,
       "kind": "ring",
       "label": "Druid Ring — Steamfont Mountains"
     },
@@ -32,8 +32,8 @@
       "x": -8971,
       "y": 1076,
       "anchor": "butcher",
-      "lx": -8971.0,
-      "ly": 1076.0,
+      "lx": -8971,
+      "ly": 1076,
       "kind": "boat",
       "label": "Boat → Ocean of Tears — Butcherblock Mountains"
     },
@@ -41,8 +41,8 @@
       "x": -8885,
       "y": 498,
       "anchor": "butcher",
-      "lx": -8885.0,
-      "ly": 498.0,
+      "lx": -8885,
+      "ly": 498,
       "kind": "boat",
       "label": "Translocator → Timorous Deep — Butcherblock Mountains"
     }
