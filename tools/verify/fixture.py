@@ -13,7 +13,7 @@ ALL[name] for every continent in the realm, so every name here must exist in bot
 
 Usage: python fixture.py <outdir> [variant ...]
   variants: base anchor-move pack-brewall pack-goods add-hub add-conn add-zone del-hub
-            add-worldlink script-label skip-zone
+            add-worldlink script-label skip-zone skip-zone-brewall
             discovered-zone (default: all)
 """
 import copy
@@ -235,7 +235,7 @@ def variant(name, data):
         # client-side exportStandaloneHTML() escapes every "<" as a JSON unicode
         # escape (template.html). No test covered either until this variant existed.
         HUBS["Antonica"][0]["label"] = "Docks </script><b>x</b>"
-    elif name == "skip-zone":
+    elif name in ("skip-zone", "skip-zone-brewall"):
         skipped_link = copy.deepcopy(ALL["Antonica"]["links"][1])
         del ALL["Antonica"]["zones"]["gamma"]
         ALL["Antonica"]["skipped"] = ["gamma"]
@@ -309,13 +309,13 @@ if __name__ == "__main__":
     outdir = sys.argv[1]
     variants = sys.argv[2:] or ["base", "anchor-move", "pack-brewall", "pack-goods",
                                 "add-hub", "add-conn", "add-zone", "del-hub",
-                                "add-worldlink", "script-label", "skip-zone", "discovered-zone"]
+                                "add-worldlink", "script-label", "skip-zone", "skip-zone-brewall", "discovered-zone"]
     os.makedirs(outdir, exist_ok=True)
     base = base_data()
     for v in variants:
         d = variant(v, base)
         pack_key = {"anchor-move": "brewall", "pack-brewall": "brewall",
-                    "pack-goods": "goods"}.get(v, "default")
+                    "pack-goods": "goods", "skip-zone-brewall": "brewall"}.get(v, "default")
         for ed in ("user", "author"):
             p = os.path.join(outdir, "fx-%s.%s.html" % (v, ed))
             n = emit(p, ed, d, pack_key)

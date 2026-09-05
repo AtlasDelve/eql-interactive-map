@@ -2043,6 +2043,9 @@ function writeStore(o){return writeStoreK(lsKey(),o);}
 function refusePartialAuthor(){for(const c in ALL)if((ALL[c].skipped||[]).length){
  toast('Cannot save versions or export world.json from this partial build — the map pack is missing roster zones.');return true;}
  return false;}
+function refusePartialVariant(){if(PACKKEY!=='default')for(const c in ALL)if((ALL[c].skipped||[]).length){
+ toast('Cannot export layout.'+PACKKEY+'.json from this partial build — overrides for skipped zones would be dropped. Reconvert from a complete pack.');return true;}
+ return false;}
 // Author edition: full snapshots. A sparse overlay cannot express "I added this hub" or
 // "I deleted that one" against a layout.json the author is themselves rewriting.
 function snapshot(){ensureLinks(cur);
@@ -2427,7 +2430,7 @@ function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
  for(const k in e.zones){const xf=e.zones[k].xf;
    if(!isIdentity(xf))zoneXf[k]={tx:R(xf.tx),ty:R(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
  return {connectors,hubs:hubsOut,links,zoneXf};}
-function exportLayout(){const obj=buildLayoutObject(cur),suffix=PACKKEY==='default'?'':('.'+PACKKEY);
+function exportLayout(){if(refusePartialVariant())return;const obj=buildLayoutObject(cur),suffix=PACKKEY==='default'?'':('.'+PACKKEY);
  downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout'+suffix+'.json');
  toast('Exported → data/continents/'+contDirJS(cur)+'/layout'+suffix+'.json  ·  rebuild: python scripts/build.py');}
 let _pristine=null;

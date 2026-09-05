@@ -119,6 +119,16 @@ let ovText;
       !(ov.links || []).some(l => l.deleted && (l.z1 === 'gamma' || l.z2 === 'gamma')), ov.links);
   }
 
+  console.log('\n-- a partial variant refuses an export that would drop skipped overrides');
+  {
+    const a = load(fx('skip-zone-brewall', 'author'));
+    a.ev("enterCont('Antonica');setEdit(true);exportLayout()");
+    eq('partial variant downloads no layout', a.downloads.length, 0);
+    ok('variant refusal names the partial build and its layout file',
+      /partial build/.test(lastToast(a.ev)) && /layout\.brewall\.json/.test(lastToast(a.ev)),
+      lastToast(a.ev));
+  }
+
   console.log('\n-- a variant build exports only transforms changed from its base calibration');
   {
     const a = load(fx('anchor-move', 'author'));
@@ -134,6 +144,11 @@ let ovText;
     eq('resetting exactly to the base removes the entry',
       JSON.parse(a.ev("JSON.stringify(buildLayoutObject('Antonica'))")), { zoneXf: {} });
     a.ev('exportLayout()');
+    eq('complete variant downloads one layout', a.downloads.length, 1);
+    if (a.downloads.length === 1) {
+      eq('complete variant download contains the sparse layout',
+        JSON.parse(await a.downloads[0].text()), { zoneXf: {} });
+    }
     ok('the export toast names layout.brewall.json', /layout\.brewall\.json/.test(lastToast(a.ev)), lastToast(a.ev));
   }
 
