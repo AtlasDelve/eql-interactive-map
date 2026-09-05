@@ -17,6 +17,17 @@
             "statusMessage": "Checking whether AGENTS.md needs an update"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-plan-codex-fold.js\"",
+            "timeout": 10,
+            "statusMessage": "Checking the plan's Codex pass is recorded"
+          }
+        ]
       }
     ]
   }
