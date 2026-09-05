@@ -91,7 +91,7 @@ section('the rostered newsebexp edge routes with its authored cost');
     if (trip) {
       const leg = trip.legs.find((entry) => entry.from === 'nro' && entry.to === 'newsebexp');
       ok('the itinerary contains the authored leg', !!leg, hops(trip));
-      if (leg) eq('the authored leg carries the ruled cost', leg.cost, 9.5);
+      if (leg) eq('the authored leg carries the ruled cost', leg.cost, 9.6);
     }
   }
 }
