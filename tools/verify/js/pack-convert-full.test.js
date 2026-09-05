@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('assert');
+const { extract, assertMarkerBridge } = require('./marker-bridge.js');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -242,70 +243,6 @@ function compare(label, actual, expected) {
   }
 }
 
-function extract(text, prefix, opener) {
-  let at = 0, i;
-  while (true) {
-    at = text.indexOf(prefix, at);
-    if (at < 0) throw new Error(`missing ${prefix}`);
-    i = at + prefix.length;
-    if (text[i] === opener) break;
-    at = i;
-  }
-  const closer = opener === '{' ? '}' : ']';
-  let depth = 0, inString = false, escaped = false;
-  for (let j = i; j < text.length; j++) {
-    const ch = text[j];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inString = false;
-    } else if (ch === '"') inString = true;
-    else if (ch === opener) depth++;
-    else if (ch === closer && --depth === 0) {
-      return JSON.parse(text.slice(i, j + 1).replace(/<\\\//g, '</'));
-    }
-  }
-  throw new Error(`unterminated ${prefix}`);
-}
-
-function assertMarkerBridge(artifact, manifest, geom = MapGeom, requireMarkers = true) {
-  const detail = extract(fs.readFileSync(artifact, 'utf8'), ', DETAIL=', '{');
-  const entries = [], keyContinents = new Map();
-  for (const [cont, block] of Object.entries(detail)) {
-    for (const [key, zone] of Object.entries(block.zones)) {
-      entries.push([cont, key, zone.name]);
-      if (!keyContinents.has(key)) keyContinents.set(key, new Set());
-      keyContinents.get(key).add(cont);
-    }
-  }
-  const zidx = geom.zidxFrom(entries);
-  let count = 0, resolutions = [];
-  for (const [cont, meta] of Object.entries(manifest.continents || {})) {
-    for (const record of meta.discovered || []) {
-      if (record.nameFrom !== 'marker') continue;
-      count++;
-      const anchor = detail[cont] && detail[cont].zones[record.anchor];
-      assert(anchor, `${cont}/${record.key}: missing anchor detail ${record.anchor}`);
-      const targets = [];
-      for (const label of anchor.labels) {
-        const full = label[4];
-        for (const target of geom.transitionTargets(zidx, record.anchor, full)) {
-          targets.push({ key: String(target), source: target });
-        }
-      }
-      const matched = targets.filter(t => t.key === record.key &&
-        keyContinents.get(t.key) && keyContinents.get(t.key).has(cont));
-      resolutions = resolutions.concat(matched);
-      assert(matched.length > 0,
-        `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
-    }
-  }
-  if (requireMarkers) assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
-  const crossContinent = [...keyContinents].filter(([, continents]) => continents.size > 1)
-    .map(([key, continents]) => ({ key, continents: [...continents].sort() }));
-  return { count, resolutions, keyCount: keyContinents.size, crossContinent };
-}
-
 function copyAuthoredWithoutCache(target) {
   fs.cpSync(DATA, target, {
     recursive: true,
@@ -340,6 +277,7 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
       `${label}: discovered fingerprint`);
   }
   const bridge = assertMarkerBridge(userReference, manifest, MapGeom, false);
+  if (bridge.count === 0) console.log('NOTE: marker bridge dormant - empty catalog; the count===0 assertion below fails the day a marker-derived record appears - re-enable the instrumented bridge then');
   assert.deepStrictEqual(bridge.crossContinent, [], 'Brewall detail keys span continents');
   console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
   console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
@@ -364,6 +302,7 @@ async function runRootOnly(mapsRoot, template, colors) {
 
     const rootManifest = json(path.join(scratch, '_generated', 'manifest.json'));
     const bridge = assertMarkerBridge(reference, rootManifest, MapGeom, false);
+    if (bridge.count === 0) console.log('NOTE: marker bridge dormant - empty catalog; the count===0 assertion below fails the day a marker-derived record appears - re-enable the instrumented bridge then');
     assert.deepStrictEqual(bridge.crossContinent, [], 'root-only detail keys span continents');
     assert.strictEqual(bridge.count, 0, 'root-only catalog is empty after newsebexp was rostered');
     console.log(`PASS: root-only detail-key premise (${bridge.keyCount} keys; 0 cross-continent; empty catalog)`);

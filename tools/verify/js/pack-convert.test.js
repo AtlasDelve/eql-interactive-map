@@ -2,6 +2,8 @@
 'use strict';
 
 const assert = require('assert');
+const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js');
+const { assertMarkerBridge } = require('./marker-bridge.js');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
@@ -359,6 +361,36 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         });
         assert.strictEqual(manifest.continents.Testland.discoveredSourceCount, identity.count);
         assert.strictEqual(manifest.continents.Testland.discoveredSourceFingerprint, identity.fingerprint);
+        const reference = path.join(root, 'ref.html');
+        const bridge = assertMarkerBridge(reference, manifest, MapGeom, true);
+        const INDEX_TAG = Symbol('instrumented MapGeom index');
+        const TARGET_TAG = Symbol('instrumented MapGeom target');
+        let indexCalls = 0, transitionCalls = 0, taggedIndex;
+        const instrumented = {
+          zidxFrom(entries) {
+            indexCalls++;
+            taggedIndex = MapGeom.zidxFrom(entries);
+            taggedIndex[INDEX_TAG] = true;
+            return taggedIndex;
+          },
+          transitionTargets(index, zoneKey, label) {
+            transitionCalls++;
+            assert.strictEqual(index, taggedIndex, 'marker bridge bypassed the injected MapGeom index');
+            assert(index[INDEX_TAG], 'marker bridge used an untagged index');
+            return MapGeom.transitionTargets(index, zoneKey, label).map(key => {
+              const tagged = new String(key);
+              tagged[TARGET_TAG] = true;
+              return tagged;
+            });
+          },
+        };
+        const observed = assertMarkerBridge(
+          reference, manifest, instrumented, true);
+        assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
+        assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
+        assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
+          'a marker resolution did not come from the injected MapGeom transition result');
+        console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
         assert.deepStrictEqual(Object.keys(d.ALL.Testland.zones), PINS.build_on.ALL_zone_keys);
         assert.deepStrictEqual(Object.keys(d.DETAIL.Testland.zones), PINS.build_on.DETAIL_zone_keys);
         assert.deepStrictEqual(d.DETAIL.Testland.palette, PINS.build_on.DETAIL_palette);

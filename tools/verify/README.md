@@ -47,11 +47,13 @@ Written down because each one is a mistake worth not repeating:
   resolution, unused aliases/overrides/exclusions, broadened filters,
   normalized display names, weakened offset/exit recovery, sampled nearest points and bypassed
   caches, including a colliding transformed-cache key, a removed transformed-point mapping, wrong
-  missing-scale and rotation defaults, and reversed supplied rotation. The fixture marker bridge
-  separately requires the production `MapGeom` resolver call; its source check is only a secondary
-  signal. This closes the partial-resolver defect
-  that could certify a verifier-local replica instead of the
-  runtime resolution contract.
+  missing-scale and rotation defaults, and reversed supplied rotation. The layered fixture's marker bridge in
+  `marker-bridge.js` requires the production `MapGeom` resolver through an instrumented index
+  and tagged transition results, closing the partial-resolver defect that could certify a
+  verifier-local replica. Both converter suites use the shared dependency-free module. Real-pack
+  bridges are dormant while production catalogs are empty and print a `NOTE`; the root-only
+  `count === 0` assertion fails on the first marker-derived record, requiring instrumentation
+  to be re-enabled on the real-pack path then.
 
 - **Authored anchors have both geometry and consumer gates.** `verify.py anchors` checks every
   published hub and connector-end host against the selected cache and the measured 358.2-unit

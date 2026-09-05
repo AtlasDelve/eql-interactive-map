@@ -408,15 +408,22 @@ assert(parityCall > dependencyBlock && parityCall < quickGate,
 assert(parityCall < npmGate, 'mapgeom parity registration must precede the node_modules gate');
 assert(runner.includes('results.append(("mapgeom Python/JavaScript parity", "SKIP"))'),
   'no-Node branch must append the exact named SKIP result');
-const bridgeSource = fs.readFileSync(path.join(REPO, 'tools', 'verify', 'js',
-  'pack-convert-full.test.js'), 'utf8');
-assert(bridgeSource.includes(
-  "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
-  'real-pack bridge must import MapGeom through the step-1 seam');
-assert(bridgeSource.includes('geom = MapGeom') && bridgeSource.includes('geom.zidxFrom(entries)') &&
+for (const caller of ['pack-convert-full.test.js', 'pack-convert.test.js']) {
+  const source = fs.readFileSync(path.join(__dirname, caller), 'utf8');
+  assert(source.includes(
+    "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
+    `${caller} must import MapGeom through the step-1 seam`);
+  assert(/assertMarkerBridge\([^)]*\bMapGeom\b/.test(source),
+    `${caller} must expose and consume the injected MapGeom seam`);
+  assert(!/function\s+znorm\b/.test(source), `${caller} must not restore local znorm`);
+}
+const bridgeSource = fs.readFileSync(path.join(__dirname, 'marker-bridge.js'), 'utf8');
+assert(bridgeSource.includes('geom.zidxFrom(entries)') &&
   bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
-  'real-pack bridge must expose and consume the injected MapGeom seam');
-assert(!/function\s+znorm\b/.test(bridgeSource), 'real-pack bridge must not restore local znorm');
+  'marker-bridge.js must expose and consume the injected MapGeom seam');
+assert(!/require\s*\([^)]*mapgeom\.js/.test(bridgeSource),
+  'marker-bridge.js must expose and consume the injected MapGeom seam');
+assert(!/function\s+znorm\b/.test(bridgeSource), 'marker-bridge.js must not restore local znorm');
 assert.deepStrictEqual(families, ['numeric', 'transforms', 'resolution', 'discovery classifiers',
   'detail/exit geometry', 'cost paths'], 'all named PASS families must execute in order');
 
