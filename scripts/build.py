@@ -145,7 +145,7 @@ def cred_text(data):
     # Canonical format for the browser twin, including separators:
     #   root: EQL · selected maps folder
     #   pack: EQL · <name> map data[ · N zone(s) from the game's own maps]
-    if pack_name.casefold() == "maps":
+    if pack_name.lower() == "maps":
         text = "EQL · selected maps folder"
     else:
         text = "EQL · %s map data" % pack_name
@@ -159,11 +159,11 @@ def calibration_key(data):
     """Return the pack-family calibration key and an optional unknown-family notice."""
     manifest = load_manifest(data)
     pack_name = os.path.basename(os.path.normpath(manifest["pack"]))
-    if pack_name.casefold() == "maps":
+    if pack_name.lower() == "maps":
         return "default", None
     packs = load(os.path.join(data, "packs.json"))
     for key, record in packs.items():
-        if record["dir"].casefold() == pack_name.casefold():
+        if record["dir"].lower() == pack_name.lower():
             return key, None
     return ("default",
             "unrecognized map directory %r; using default calibration" % pack_name)

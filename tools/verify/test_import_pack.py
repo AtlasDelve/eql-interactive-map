@@ -1076,6 +1076,10 @@ try:
         # Delete alpha/beta's weld so only the connector can keep that proposal edge.
         layout = {"zoneXf": {"gamma": {"tx": 10003, "ty": -2, "s": 1, "rot": 0}},
                   "links": [{"z1": "alpha", "z2": "beta", "deleted": True}],
+                  "hubs": [
+                      {"x": 10004, "y": -1, "anchor": "beta", "kind": "ring", "label": "Gamma"},
+                      {"x": 10004, "y": -1, "kind": "spire", "label": "Gamma"},
+                      {"x": 10004, "y": -1, "anchor": "absent", "kind": "ring", "label": "Missing"}],
                   "connectors": [
                       {"a": {"xy": [10004, -1], "anchor": "beta", "lx": 3.2, "ly": 8.4},
                        "b": {"xy": [10005, 0], "anchor": "alpha", "lx": 1.3, "ly": 2.1}},
@@ -1090,7 +1094,24 @@ try:
         check("both authored fallbacks are nearest the third zone",
               [DTG.nearest_zone(dzones, *end["xy"])[0]
                for end in layout["connectors"][0].values()], ["gamma", "gamma"])
-        dwalk, dnotes, _ = DTG.derive(["Testland"])
+        dwalk, dnotes, dhubs = DTG.derive(["Testland"])
+        hub_rows = {h["ref"]: h for h in dhubs}
+        check("authored hub host wins over its fallback on gamma",
+              hub_rows["Testland:0"]["host"], "beta")
+        check("authored hub distance is the ownership sentinel",
+              hub_rows["Testland:0"]["dist"], 0)
+        check("hub label mismatch follows the authored host",
+              any(n[1] == "hub-host-mismatch" and "hub 0 " in n[2] for n in dnotes), True)
+        check("legacy hub still resolves to gamma", hub_rows["Testland:1"]["host"], "gamma")
+        check("legacy gamma hub has no mismatch note",
+              any(n[1] == "hub-host-mismatch" and "hub 1 " in n[2] for n in dnotes), False)
+        check("absent authored hub host produces the unresolved note",
+              ("Testland", "hub-unresolved", "hub 2 'Missing': authored host absent absent from this cache")
+              in dnotes, True)
+        check("absent authored hub host emits no row", "Testland:2" in hub_rows, False)
+        routes, _ = DTG.scaffold_routes(dhubs)
+        check("route scaffolding uses the authored hub host",
+              next(r["stops"] for r in routes if r["id"] == "druid-network"), ["beta"])
         pairs = {tuple(e["z"]): e.get("at") for e in dwalk}
         check("authored connector keeps its hosts despite the deleted weld",
               pairs.get(("alpha", "beta")), [[1.3, 2.1], [3.2, 8.4]])

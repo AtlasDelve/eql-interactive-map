@@ -314,6 +314,10 @@ assert.deepStrictEqual(calibrationKey("maps/Good's Maps", PACKS), {key:'goods', 
 const unknownCalibration = calibrationKey('maps/Other', PACKS);
 assert.strictEqual(unknownCalibration.key, 'default');
 assert(unknownCalibration.notice.includes('Other'));
+assert.deepStrictEqual(calibrationKey('map\u017f', PACKS), {
+  key: 'default', notice: 'unrecognized map directory "map\u017f"; using default calibration',
+});
+console.log('PASS: long-s basename stays unrecognized under lowercase calibration matching');
 console.log('PASS: pack directory selects calibration and unknowns fall back with notice');
 
 const template = strippedTemplate();

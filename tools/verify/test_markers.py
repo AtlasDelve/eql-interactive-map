@@ -188,6 +188,9 @@ check("known pack basename selects its calibration case-insensitively",
 unknown_key, unknown_notice = fixture_calibration(os.path.join("game", "maps", "Other"))
 check("unknown pack basename uses default calibration", unknown_key, "default")
 check("unknown pack calibration emits a named notice", "Other" in unknown_notice, True)
+check("long-s basename stays unrecognized under lowercase calibration matching",
+      fixture_calibration(os.path.join("game", "map\u017f")),
+      ("default", "unrecognized map directory 'map\u017f'; using default calibration"))
 escaped_credit = build.inject(
     "<div>__CRED__</div>\n" + TPL, {}, {}, {}, {}, [], [], {}, {},
     credit="x</div>&\"'", version=VERSION)

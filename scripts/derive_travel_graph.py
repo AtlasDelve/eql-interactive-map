@@ -138,6 +138,13 @@ def conn_end(zones, end):
     return key, dist, local
 
 
+def hub_host(zones, hub):
+    """Resolve authored ownership, or infer a legacy hub's host from its fallback."""
+    if hub.get("anchor") is not None:
+        return (hub["anchor"], 0.0) if hub["anchor"] in zones else (None, float("inf"))
+    return nearest_zone(zones, hub["x"], hub["y"])
+
+
 def detect_welds(zones):
     """Zone pairs whose outlines come within LINK_THRESH, plus the nearest-approach points.
 
@@ -346,7 +353,12 @@ def derive(conts):
                                   "line." % (k1, k2, gap, LINK_THRESH)))
 
         for i, h in enumerate(layout.get("hubs", [])):
-            k, d = nearest_zone(zones, h["x"], h["y"])
+            k, d = hub_host(zones, h)
+            if h.get("anchor") is not None and k is None:
+                notes.append((cont, "hub-unresolved",
+                              "hub %d %r: authored host %s absent from this cache"
+                              % (i, h.get("label", ""), h["anchor"])))
+                continue
             hub_rows.append({"ref": "%s:%d" % (cont, i), "kind": h["kind"],
                              "label": h.get("label", ""), "host": k, "dist": round(d)})
             if h.get("label") and k and zones[k]["name"].lower() not in h["label"].lower():
