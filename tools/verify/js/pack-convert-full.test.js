@@ -279,7 +279,8 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
   const bridge = assertMarkerBridge(userReference, manifest, MapGeom, false);
   if (bridge.count === 0) console.log('NOTE: marker bridge dormant - empty catalog; the count===0 assertion below fails the day a marker-derived record appears - re-enable the instrumented bridge then');
   assert.deepStrictEqual(bridge.crossContinent, [], 'Brewall detail keys span continents');
-  console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
+  assert.strictEqual(bridge.count, 0, 'Brewall marker-derived catalog requires re-enabling the instrumented bridge');
+  console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent; empty catalog)`);
   console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
   return true;
 }
