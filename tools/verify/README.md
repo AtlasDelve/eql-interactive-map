@@ -263,6 +263,7 @@ Written down because each one is a mistake worth not repeating:
   distant, so calling it an automatic weld makes the author round-trip correctly report a deletion
   and turns the base fixture inconsistent. Layer 1 separately calls `build()` over a partial cache,
   because a viewer fixture with pre-filtered links cannot prove the build performed that filtering.
+  `skip-zone-solo-brewall` keeps every continent non-empty, isolating skipped-zone refusal from a guard that only rejects wholly empty continents.
 - **Two escapes with nothing testing them.** A hub label is free text, so a script-close
   sequence in one would end the `<script>` element it is baked into. `build.py`'s `inject()`
   and the client-side `esc()` in `exportStandaloneHTML` each already prevented that, and

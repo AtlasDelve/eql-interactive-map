@@ -129,6 +129,19 @@ let ovText;
       lastToast(a.ev));
   }
 
+  console.log('\n-- a skipped zone alone blocks partial variant export');
+  {
+    const a = load(fx('skip-zone-solo-brewall', 'author'));
+    const counts = JSON.parse(a.ev('JSON.stringify(Object.fromEntries(Object.entries(ALL).map(([c,d])=>[c,Object.keys(d.zones).length])))'));
+    ok('solo partial variant has surviving zones in every continent',
+      Object.keys(counts).length > 0 && Object.values(counts).every(n => n > 0), counts);
+    a.ev("enterCont('Antonica');setEdit(true);exportLayout()");
+    eq('solo partial variant downloads no layout', a.downloads.length, 0);
+    ok('solo variant refusal names the partial build and its layout file',
+      /partial build/.test(lastToast(a.ev)) && /layout\.brewall\.json/.test(lastToast(a.ev)),
+      lastToast(a.ev));
+  }
+
   console.log('\n-- a variant build exports only transforms changed from its base calibration');
   {
     const a = load(fx('anchor-move', 'author'));
