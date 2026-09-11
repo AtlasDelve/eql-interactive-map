@@ -413,6 +413,12 @@ for (const caller of ['pack-convert-full.test.js', 'pack-convert.test.js']) {
   assert(source.includes(
     "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
     `${caller} must import MapGeom through the step-1 seam`);
+  assert.strictEqual((source.match(/require\s*\([^)]*mapgeom\.js/g) || []).length, 1,
+    `${caller} must require mapgeom.js exactly once`);
+  assert.strictEqual((source.match(/mapgeom\.js/g) || []).length, 1,
+    `${caller} must name mapgeom.js only in the seam import`);
+  assert(!source.includes('require.cache'), `${caller} must not acquire modules through require.cache`);
+  assert(!source.includes('require.resolve'), `${caller} must not acquire modules through require.resolve`);
   assert(/assertMarkerBridge\([^)]*\bMapGeom\b/.test(source),
     `${caller} must expose and consume the injected MapGeom seam`);
   assert(!/function\s+znorm\b/.test(source), `${caller} must not restore local znorm`);
@@ -422,7 +428,7 @@ assert(bridgeSource.includes('geom.zidxFrom(entries)') &&
   bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
   'marker-bridge.js must expose and consume the injected MapGeom seam');
 assert(!/require\s*\([^)]*mapgeom\.js/.test(bridgeSource),
-  'marker-bridge.js must expose and consume the injected MapGeom seam');
+  'marker-bridge.js must not import mapgeom.js directly');
 assert(!/function\s+znorm\b/.test(bridgeSource), 'marker-bridge.js must not restore local znorm');
 assert.deepStrictEqual(families, ['numeric', 'transforms', 'resolution', 'discovery classifiers',
   'detail/exit geometry', 'cost paths'], 'all named PASS families must execute in order');
