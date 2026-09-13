@@ -103,7 +103,15 @@ the right tool for challenging an *implementation* once code exists.
 naming each finding and whether it was folded in or rejected with a reason.
 `.claude/hooks/check-plan-codex-fold.js` blocks the write that would mark a plan ready without
 one; if it fires, run the pass rather than working around it. An `## Arbitration record` counts
-too — that is what the pre-hook plans used to record the same thing.
+too — that is what the pre-hook plans used to record the same thing. A fold section with **no
+content** does not count, and once a plan carries amendments the **newest** `## Amendment N` needs
+its own `## Codex fold — Amendment N`; earlier ones are grandfathered.
+
+**On `ExitPlanMode` the gate is a discipline, not a mechanism — run the pass yourself.** The hook
+is registered for `ExitPlanMode` but has never been observed firing, and the one test of it was
+confounded by Claude Code snapshotting hooks at session start. Whether `PreToolUse` dispatches
+`ExitPlanMode` at all is **open**; the retest and its two outcomes are recorded in the hook's own
+header. Until someone runs it from a fresh session, assume nothing blocks you here.
 
 If Codex is missing, unauthenticated, or the pass fails, say so plainly and continue: a failed or
 skipped Codex pass must never block the `advisor()` call.
@@ -113,10 +121,14 @@ skipped Codex pass must never block the `advisor()` call.
 Both live in `.claude/settings.json`, which is checked in — so they apply to anyone working this
 repo in Claude Code, not just this machine.
 
-- **Plan location.** `plansDirectory: "docs/internal"` makes plan mode write straight to the
-  location `AGENTS.md` requires, instead of the default `~/.claude/plans/`. This is a structural
-  fix, not a reminder: there is no second copy to keep in sync and nothing to forget. You still owe
-  the file a topic name — the harness generates one a later session cannot guess.
+- **Plan location — `plansDirectory` does not work; assume the opposite of what it promises.**
+  `.claude/settings.json` sets `plansDirectory: "docs/internal"`, and it has had no effect since it
+  was added in `b06c67f` (2026-08-13). Plan mode still writes to `~/.claude/plans/<generated-name>.md`
+  — verified directly on 2026-09-13, and by files dated 2026-09-03 and 2026-09-04 sitting there.
+  **So there IS a second copy to keep in sync, and the plan file you must hand to Codex is not the
+  one plan mode wrote.** Move it to `docs/internal/<topic>-plan.md` yourself and give it a topic
+  name; the harness generates one a later session cannot guess. The b9 plan's own *Step 0* is a
+  manual `mv` for exactly this reason — that is the workaround, not an oversight.
 - **Commit-time docs reminder.** A `PreToolUse` hook (`.claude/hooks/check-agent-docs.js`) prints
   the reminder from `AGENTS.md` → *Keeping these instructions current* when a `git commit` is about
   to run, and **names the reference files the change routes to**, derived from `git status` plus a

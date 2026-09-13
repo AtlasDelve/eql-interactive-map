@@ -27,6 +27,12 @@ with a notice rather than failing.
 | 3 | Node + jsdom, real 18 MB artifact | JavaScript parse/stringify identity for all injected blobs after normalizing the intentional `<\/` script-safety escape (Node-only, no installed modules); smoke on both editions; travel search and real routes; the drawn route's state, lifecycle, per-level position sources, realm accounting and leg navigation; the untouched-overlay invariant across all 11 continents; view-vs-edit timing. |
 | 4 | Real browser | The builder directory picker and conversion, `FileReader`, drag-and-drop, genuine downloads, the CSS cascade, and the rendered bitmap. The opt-in `shots.js` sweep captures every continent for human calibration review. |
 
+**The plan-gate hook is not a fifth layer, and wiring it in here would be a mistake.**
+`.claude/hooks/check-plan-codex-fold.test.js` runs standalone (`node` that path, no dependencies)
+because these four layers gate the map artifact and a release tag, while that one gates harness
+plumbing on no release path — coupling them would make a hook edit a release concern. Run it when
+you change the hook, not when you cut a build.
+
 Layer 4 uses `playwright-core` against an **already-installed** Chromium-family browser
 via `executablePath`, which avoids the ~150 MB `playwright install` download. It searches
 Brave, Chrome and Edge in the usual places; override with `EQL_BROWSER=/path/to/browser`.
