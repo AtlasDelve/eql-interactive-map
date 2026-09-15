@@ -21,6 +21,33 @@ function section(t) { console.log('\n-- ' + t); }
 const toastOf = (ev) => ev("document.getElementById('toast').textContent");
 
 // ---------------------------------------------------------------------------
+section('Delete routes through the edition-aware remove policy');
+{
+  const user = load(fx('base'));
+  user.ev("enterCont('Antonica');setEdit(true)");
+  const publishedCount = user.ev('hubs.length');
+  user.ev("sel={type:'hub',id:0};dispatchEvent(new KeyboardEvent('keydown',{key:'Delete'}))");
+  eq('user Delete keeps a published hub in the array', user.ev('hubs.length'), publishedCount);
+  eq('user Delete hides the published hub', user.ev('hubs[0].hidden'), true);
+
+  user.ev("hubs.push({x:0,y:0,kind:'boat',label:'Added',letter:'',note:'',anchor:null,lx:null,ly:null,ref:'',pidx:null,touched:true,hidden:false,userAdded:true});sel={type:'hub',id:hubs.length-1}");
+  const addedCount = user.ev('hubs.length');
+  user.ev("dispatchEvent(new KeyboardEvent('keydown',{key:'Delete'}))");
+  eq('user Delete splices a user-added hub', user.ev('hubs.length'), addedCount - 1);
+
+  user.ev("sel={type:'hub',id:1};refreshInspector();document.getElementById('bHubHide').click()");
+  eq('the user inspector button uses the same hide policy', user.ev('hubs[1].hidden'), true);
+
+  const author = load(fx('base', 'author'));
+  author.ev("enterCont('Antonica');setEdit(true)");
+  const authorCount = author.ev('hubs.length');
+  author.ev("sel={type:'hub',id:0};dispatchEvent(new KeyboardEvent('keydown',{key:'Delete'}))");
+  eq('author Delete splices a published hub', author.ev('hubs.length'), authorCount - 1);
+  author.ev("sel={type:'hub',id:0};refreshInspector();document.getElementById('bHubDel').click()");
+  eq('the author inspector button uses the same splice policy', author.ev('hubs.length'), authorCount - 2);
+}
+
+// ---------------------------------------------------------------------------
 section('hide: not drawn, not hoverable, not clickable');
 {
   const { ev } = load(fx('base'));

@@ -390,6 +390,27 @@ try:
 
     # -- --only refuses to invent a cache -----------------------------
     print("\n--only updates a cache, it never creates one")
+    identity_root = os.path.join(tmp, "identity")
+    first = os.path.join(identity_root, "first", "Same Pack")
+    second = os.path.join(identity_root, "second", "Same Pack")
+    shutil.copytree(PACK, first)
+    shutil.copytree(PACK, second)
+    IP.convert(first, data, quiet=True)
+    identity_manifest = os.path.join(data, IP.CACHE_DIRNAME, "manifest.json")
+    before_identity = open(identity_manifest, "rb").read()
+    try:
+        IP.convert(second, data, only="Testland", quiet=True)
+    except SystemExit as exc:
+        identity_message = str(exc)
+    else:
+        identity_message = ""
+    check("--only refuses a different absolute path with the same basename",
+          "refuses to mix" in identity_message, True)
+    check("...and names both same-basename paths",
+          first in identity_message and second in identity_message, True)
+    check("...and leaves the seeded manifest byte-identical",
+          open(identity_manifest, "rb").read(), before_identity)
+    IP.convert(PACK, data, quiet=True)
     check("--only works when a complete cache exists",
           IP.convert(PACK, data, only="Testland", quiet=True)["schema"], IP.SCHEMA)
     shutil.rmtree(live)
@@ -406,6 +427,73 @@ try:
     check("...and still yields a usable hex", approx.startswith("#") and len(approx), 7)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
+
+# --------------------------------------------------------------------- variant composition
+print("\npack-family variants and partial-build authored round trip")
+variant_tmp = tempfile.mkdtemp(prefix="packfx-variants-")
+try:
+    vdata = os.path.join(variant_tmp, "data")
+    shutil.copytree(os.path.join(FX, "data"), vdata)
+    world_path = os.path.join(vdata, "world.json")
+    with open(world_path, encoding="utf-8") as f:
+        vworld = json.load(f)
+    vworld["meta"]["Emptyland"] = {
+        "pos": [60, 60], "uc": 10, "vc": 10, "gscale": 1,
+        "gw": 10, "gh": 10, "alt": "Norrath", "xpac": "classic"}
+    vworld["order"].append("Emptyland")
+    with open(world_path, "w", encoding="utf-8") as f:
+        json.dump(vworld, f)
+
+    brew = os.path.join(variant_tmp, "Brewall")
+    shutil.copytree(PACK, brew)
+    IP.convert(brew, vdata, quiet=True)
+    vb = BUILD.build(vdata)[0]
+    check("Brewall variant supplies the effective transform",
+          vb["Testland"]["zones"]["alpha"]["xf"],
+          {"tx": 10, "ty": 20, "s": 1.1, "rot": 0.25})
+    check("variant zone with no base transform carries explicit identity xfBase",
+          vb["Testland"]["zones"]["alpha"]["xfBase"],
+          {"tx": 0, "ty": 0, "s": 1, "rot": 0})
+    check("explicit identity variant cancels the effective xf",
+          "xf" in vb["Testland"]["zones"]["gamma"], False)
+    check("cancelled variant retains its base transform in xfBase",
+          vb["Testland"]["zones"]["gamma"]["xfBase"],
+          {"tx": 3, "ty": -2, "s": 1, "rot": 0})
+    check("zero-survivor continent preserves omitted hubs",
+          vb["Emptyland"]["skippedAuthored"]["hubs"],
+          [{"x": 5, "y": 6, "kind": "spire", "label": "Omitted hub"}])
+    check("zero-survivor continent preserves skipped zone transforms",
+          vb["Emptyland"]["skippedAuthored"]["zoneXf"],
+          {"only": {"tx": 3, "ty": 4, "s": 1, "rot": 0}})
+
+    layout_path = os.path.join(vdata, "continents", "Testland", "layout.json")
+    with open(layout_path, encoding="utf-8") as f:
+        vlayout = json.load(f)
+    vlayout["links"].append(
+        {"z1": "beta", "z2": "alpha", "locked": True, "manual": True})
+    with open(layout_path, "w", encoding="utf-8") as f:
+        json.dump(vlayout, f)
+    for name in os.listdir(brew):
+        if name.lower() == "gamma.txt" or name.lower().startswith("gamma_"):
+            os.remove(os.path.join(brew, name))
+    IP.convert(brew, vdata, quiet=True)
+    partial = BUILD.build(vdata)[0]["Testland"]
+    check("partial composition preserves a filtered link at its original index",
+          partial["skippedAuthored"]["links"],
+          [{"i": 1, "z1": "beta", "z2": "gamma", "locked": True, "manual": True}])
+    check("surviving links remain on both sides of the filtered index",
+          partial["links"], [vlayout["links"][0], vlayout["links"][2]])
+
+    goods = os.path.join(variant_tmp, "Good's Maps")
+    shutil.copytree(PACK, goods)
+    IP.convert(goods, vdata, quiet=True)
+    vg = BUILD.build(vdata)[0]["Testland"]["zones"]["alpha"]
+    check("Good's variant is distinct from Brewall", vg["xf"],
+          {"tx": -5, "ty": 7, "s": 0.9, "rot": -0.1})
+    check("Good's variant also records identity xfBase", vg["xfBase"],
+          {"tx": 0, "ty": 0, "s": 1, "rot": 0})
+finally:
+    shutil.rmtree(variant_tmp, ignore_errors=True)
 
 # --------------------------------------------------------------------- pack identity
 print("\npack-identity guard warns on the client's own maps/ root")
@@ -758,6 +846,23 @@ try:
           (10, "4a396c88816e5e22699b0ffba17df76872a89e4ecd46096c5c67c2406944829f"))
     check("the freshness command compares the fixture instead of skipping",
           VERIFY.cmd_discoveryfresh(ldata), 0)
+    fresh_root = os.path.join(ltmp, "freshness-maps")
+    shutil.copytree(ROOTA, fresh_root)
+    fresh_manifest = copy.deepcopy(lman)
+    fresh_manifest["root"] = fresh_root
+    fresh_manifest["pack"] = os.path.join(fresh_root, "Layered")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(fresh_manifest, f, sort_keys=True)
+    with open(os.path.join(fresh_root, "kappa.txt"), "ab") as f:
+        f.write(b"\n")
+    freshness_output = io.StringIO()
+    with redirect_stdout(freshness_output):
+        freshness_mutation = VERIFY.cmd_discoveryfresh(ldata)
+    check("changing a discovered source byte fails discoveryfresh", freshness_mutation, 1)
+    check("the freshness failure names the changed source",
+          "FAIL  discovered source changed: Testland/kappa.txt" in freshness_output.getvalue(), True)
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(lman, f, sort_keys=True)
 
 
     def catalog_rejects(label, mutate, needle):
@@ -958,6 +1063,81 @@ try:
     except SystemExit:
         complete_guard_ok = False
     check("travel derivation accepts a complete cache", complete_guard_ok, True)
+
+    print("\ntravel derivation resolves authored and legacy connector ends")
+    dtg_data, dtg_travel = DTG.DATA, DTG.TRAVEL
+    layout_path = os.path.join(ldata, "continents", "Testland", "layout.json")
+    with open(layout_path, encoding="utf-8") as f:
+        saved_layout = f.read()
+    try:
+        DTG.DATA = ldata
+        DTG.TRAVEL = os.path.join(ldata, "travel.json")
+        # Both stale fallbacks lie on gamma, far from the authored alpha/beta hosts.
+        # Delete alpha/beta's weld so only the connector can keep that proposal edge.
+        layout = {"zoneXf": {"gamma": {"tx": 10003, "ty": -2, "s": 1, "rot": 0}},
+                  "links": [{"z1": "alpha", "z2": "beta", "deleted": True}],
+                  "hubs": [
+                      {"x": 10004, "y": -1, "anchor": "beta", "kind": "ring", "label": "Gamma"},
+                      {"x": 10004, "y": -1, "kind": "spire", "label": "Gamma"},
+                      {"x": 10004, "y": -1, "anchor": "absent", "kind": "ring", "label": "Missing"}],
+                  "connectors": [
+                      {"a": {"xy": [10004, -1], "anchor": "beta", "lx": 3.2, "ly": 8.4},
+                       "b": {"xy": [10005, 0], "anchor": "alpha", "lx": 1.3, "ly": 2.1}},
+                      {"a": [1, 1], "b": [10004, -1]},
+                      {"a": {"xy": [1, 1], "anchor": "absent", "lx": 0, "ly": 0},
+                       "b": [10004, -1]},
+                      {"a": {"xy": [10004, -1], "anchor": "alpha", "lx": 1, "ly": 1},
+                       "b": {"xy": [10005, 0], "anchor": "alpha", "lx": 2, "ly": 2}}]}
+        with open(layout_path, "w", encoding="utf-8") as f:
+            json.dump(layout, f)
+        dzones, _, _ = DTG.load_continent("Testland")
+        check("both authored fallbacks are nearest the third zone",
+              [DTG.nearest_zone(dzones, *end["xy"])[0]
+               for end in layout["connectors"][0].values()], ["gamma", "gamma"])
+        dwalk, dnotes, dhubs = DTG.derive(["Testland"])
+        hub_rows = {h["ref"]: h for h in dhubs}
+        check("authored hub host wins over its fallback on gamma",
+              hub_rows["Testland:0"]["host"], "beta")
+        check("authored hub distance is the ownership sentinel",
+              hub_rows["Testland:0"]["dist"], 0)
+        for label, hub, expected in (
+                ("authored hub_host returns the ownership sentinel without fallback coordinates",
+                 {"anchor": "beta"}, ("beta", 0.0)),
+                ("absent authored hub_host returns unresolved without fallback coordinates",
+                 {"anchor": "absent"}, (None, float("inf")))):
+            try:
+                result = DTG.hub_host(dzones, hub)
+            except Exception as exc:
+                result = (type(exc).__name__, str(exc))
+            check(label, result, expected)
+        check("hub label mismatch follows the authored host",
+              any(n[1] == "hub-host-mismatch" and "hub 0 " in n[2] for n in dnotes), True)
+        check("legacy hub still resolves to gamma", hub_rows["Testland:1"]["host"], "gamma")
+        check("legacy gamma hub has no mismatch note",
+              any(n[1] == "hub-host-mismatch" and "hub 1 " in n[2] for n in dnotes), False)
+        check("absent authored hub host produces the unresolved note",
+              ("Testland", "hub-unresolved", "hub 2 'Missing': authored host absent absent from this cache")
+              in dnotes, True)
+        check("absent authored hub host emits no row", "Testland:2" in hub_rows, False)
+        routes, _ = DTG.scaffold_routes(dhubs)
+        check("route scaffolding uses the authored hub host",
+              next(r["stops"] for r in routes if r["id"] == "druid-network"), ["beta"])
+        pairs = {tuple(e["z"]): e.get("at") for e in dwalk}
+        check("authored connector keeps its hosts despite the deleted weld",
+              pairs.get(("alpha", "beta")), [[1.3, 2.1], [3.2, 8.4]])
+        check("deleted-kept proves the authored connector was consumed",
+              any(n[1] == "deleted-kept" and "alpha <-> beta" in n[2] for n in dnotes), True)
+        check("legacy connector still resolves and inverse-transforms its doorway",
+              pairs.get(("alpha", "gamma")), [[1.0, 1.0], [1.0, 1.0]])
+        check("an absent authored host reports connector-unresolved",
+              any(n[1] == "connector-unresolved" and "connector 2:" in n[2] for n in dnotes), True)
+        check("authored ends on the same host report connector-self",
+              any(n[1] == "connector-self" and "connector 3 " in n[2] for n in dnotes), True)
+    finally:
+        DTG.DATA, DTG.TRAVEL = dtg_data, dtg_travel
+        with open(layout_path, "w", encoding="utf-8") as f:
+            f.write(saved_layout)
+
     check("a pack outside maps/ derives no base layer at all", fman["root"], None)
     check("...and carries no rootNote to assert a second regime",
           "rootNote" in fman, False)

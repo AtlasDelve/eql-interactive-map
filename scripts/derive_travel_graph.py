@@ -15,7 +15,7 @@ Nothing here runs at build time. build.py reads data/travel.json verbatim.
 
 Walk edges come from three sources, unioned:
   * geometric welds   - zone outlines within LINK_THRESH of each other
-  * connectors        - each endpoint resolved to its nearest zone (the viewer's own rule)
+  * connectors        - authored hosts/local doorways, or nearest zones for legacy arrays
   * manual links      - layout.json links flagged {"manual": true}
 
 ...minus the deleted-plus-no-connector case. layout.json's links[].deleted is an EDITOR
@@ -127,6 +127,22 @@ def nearest_zone(zones, px, py):
         if d is not None and d < bd:
             bd, best = d, k
     return best, bd
+
+
+def conn_end(zones, end):
+    """Return ownership, distance and local doorway; authored anchors outrank fallback xy."""
+    if isinstance(end, dict):
+        return end["anchor"], 0.0, (end["lx"], end["ly"])
+    key, dist = nearest_zone(zones, *end)
+    local = mapgeom.tinv(zones[key], *end) if key is not None else None
+    return key, dist, local
+
+
+def hub_host(zones, hub):
+    """Resolve authored ownership, or infer a legacy hub's host from its fallback."""
+    if hub.get("anchor") is not None:
+        return (hub["anchor"], 0.0) if hub["anchor"] in zones else (None, float("inf"))
+    return nearest_zone(zones, hub["x"], hub["y"])
 
 
 def detect_welds(zones):
@@ -245,14 +261,14 @@ def derive(conts):
         keys = set(zones)
         welds = detect_welds(zones)
 
-        # connectors -> zone pairs, using the viewer's nearest-zone rule
+        # Authored ownership survives stale fallbacks; only legacy ends guess a host.
         conn_pairs, conn_at, loose = {}, {}, []
         for i, c in enumerate(layout.get("connectors", [])):
-            ka, da = nearest_zone(zones, c["a"][0], c["a"][1])
-            kb, db = nearest_zone(zones, c["b"][0], c["b"][1])
-            if ka is None or kb is None or da > ANCHOR_THRESH or db > ANCHOR_THRESH:
+            ka, da, pa = conn_end(zones, c["a"])
+            kb, db, pb = conn_end(zones, c["b"])
+            if ka not in zones or kb not in zones or da > ANCHOR_THRESH or db > ANCHOR_THRESH:
                 notes.append((cont, "connector-unresolved",
-                              "connector %d: %s(%.0f) / %s(%.0f) exceeds ANCHOR_THRESH"
+                              "connector %d: %s(%.0f) / %s(%.0f) absent host or exceeds ANCHOR_THRESH"
                               % (i, ka, da, kb, db)))
                 continue
             if ka == kb:
@@ -263,12 +279,11 @@ def derive(conts):
             pair = (ka, kb) if ka < kb else (kb, ka)
             conn_pairs.setdefault(pair, []).append(i)
             if pair not in conn_at:
-                # store per-zone LOCAL coords so the point follows its zone, exactly as
-                # connector anchors (la/lb) already do
-                pa = mapgeom.tinv(zones[pair[0]], *(c["a"] if pair[0] == ka else c["b"]))
-                pb = mapgeom.tinv(zones[pair[1]], *(c["b"] if pair[0] == ka else c["a"]))
-                conn_at[pair] = [[round(pa[0], 1), round(pa[1], 1)],
-                                 [round(pb[0], 1), round(pb[1], 1)]]
+                # Preserve authored locals verbatim; legacy inverse transforms retain
+                # their one-decimal output boundary. Sort points with their owners.
+                pa = list(pa) if isinstance(c["a"], dict) else [round(v, 1) for v in pa]
+                pb = list(pb) if isinstance(c["b"], dict) else [round(v, 1) for v in pb]
+                conn_at[pair] = [pa, pb] if pair[0] == ka else [pb, pa]
             if max(da, db) > REVIEW_DIST:
                 loose.append((i, pair, da, db))
 
@@ -338,7 +353,12 @@ def derive(conts):
                                   "line." % (k1, k2, gap, LINK_THRESH)))
 
         for i, h in enumerate(layout.get("hubs", [])):
-            k, d = nearest_zone(zones, h["x"], h["y"])
+            k, d = hub_host(zones, h)
+            if h.get("anchor") is not None and k is None:
+                notes.append((cont, "hub-unresolved",
+                              "hub %d %r: authored host %s absent from this cache"
+                              % (i, h.get("label", ""), h["anchor"])))
+                continue
             hub_rows.append({"ref": "%s:%d" % (cont, i), "kind": h["kind"],
                              "label": h.get("label", ""), "host": k, "dist": round(d)})
             if h.get("label") and k and zones[k]["name"].lower() not in h["label"].lower():

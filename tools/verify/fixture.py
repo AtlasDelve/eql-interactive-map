@@ -12,7 +12,8 @@ ALL[name] for every continent in the realm, so every name here must exist in bot
 "Antonica" carries the interesting geometry; "Kunark" is the gated one; the rest are stubs.
 
 Usage: python fixture.py <outdir> [variant ...]
-  variants: base add-hub add-conn add-zone del-hub add-worldlink script-label skip-zone
+  variants: base anchor-move pack-brewall pack-goods add-hub add-conn add-zone del-hub
+            add-worldlink script-label skip-zone skip-zone-brewall skip-zone-solo-brewall
             discovered-zone (default: all)
 """
 import copy
@@ -66,17 +67,24 @@ def base_data():
     ALL["Antonica"] = {
         "zones": zs,
         "bbox": [0, 0, 6300, 1000],
-        "connectors": [{"a": [1000, 500], "b": [1050, 500]},
-                       {"a": [2050, 500], "b": [5300, 400]}],
+        "connectors": [
+            {"a": {"xy": [1000, 500], "anchor": "alpha", "lx": 1000, "ly": 500},
+             "b": {"xy": [1050, 500], "anchor": "beta", "lx": 1050, "ly": 500}},
+            {"a": {"xy": [2050, 500], "anchor": "beta", "lx": 2050, "ly": 500},
+             "b": {"xy": [5300, 400], "anchor": "gamma", "lx": 5000, "ly": 500}},
+        ],
         # a published lock EXCEPTION: alpha|beta welds but ships unlocked
         "links": [{"z1": "alpha", "z2": "beta", "locked": False},
                   {"z1": "beta", "z2": "gamma", "locked": True, "manual": True}],
         "placed": ["alpha", "beta", "gamma"], "unplaced": [],
     }
     HUBS["Antonica"] = [
-        {"x": 500, "y": 500, "kind": "boat", "label": "Alpha Docks"},
-        {"x": 1550, "y": 500, "kind": "spire", "label": "Beta Spires"},
-        {"x": 5500, "y": 500, "kind": "portal", "label": "Gamma Portal", "letter": "G"},
+        {"x": 500, "y": 500, "anchor": "alpha", "lx": 500, "ly": 500,
+         "kind": "boat", "label": "Alpha Docks"},
+        {"x": 1550, "y": 500, "anchor": "beta", "lx": 1550, "ly": 500,
+         "kind": "spire", "label": "Beta Spires"},
+        {"x": 5500, "y": 500, "anchor": "gamma", "lx": 5200, "ly": 600,
+         "kind": "portal", "label": "Gamma Portal", "letter": "G"},
     ]
 
     # --- Faydwer: a second real continent, so multi-continent state is covered.
@@ -87,7 +95,9 @@ def base_data():
         "zones": {"delta": zone("Delta Coast", 0, 0, 800, 800, "#c9a0dc"),
                   "zeta": zone("Zeta Hollow", 3000, 0, 3800, 800, "#a0c9dc")},
         "bbox": [0, 0, 3800, 800],
-        "connectors": [{"a": [0, 400], "b": [800, 400]}],
+        # Keep one legacy endpoint so connEndOf's compatibility branch remains exercised.
+        "connectors": [{"a": [0, 400],
+                        "b": {"xy": [800, 400], "anchor": "delta", "lx": 800, "ly": 400}}],
         "placed": ["delta", "zeta"], "unplaced": [],
     }
     # The note lives on the arrival anchor of boat-alpha-delta, so alpha->delta carries it
@@ -95,9 +105,11 @@ def base_data():
     # Faydwer:1 is the hidden hub in an IN-RANGE continent -- Faydwer is classic, but this dock
     # exists only to serve the route to Kunark, so it goes when that route does. It is the one
     # case the hub rule is really about, and it is separable only because it is its own hub.
-    HUBS["Faydwer"] = [{"x": 400, "y": 400, "kind": "ring", "label": "Delta Ring",
+    HUBS["Faydwer"] = [{"x": 400, "y": 400, "anchor": "delta", "lx": 400, "ly": 400,
+                        "kind": "ring", "label": "Delta Ring",
                         "note": "Ring of Delta\nMossy Shard (consumed)"},
-                       {"x": 700, "y": 400, "kind": "boat", "label": "Delta Far Docks"}]
+                       {"x": 700, "y": 400, "anchor": "delta", "lx": 700, "ly": 400,
+                        "kind": "boat", "label": "Delta Far Docks"}]
 
     # --- Kunark: the GATED continent. Its one zone is reachable only through a route whose
     # far end is here, so at the first expansion the route leaves the graph and the zone -- the
@@ -197,8 +209,12 @@ def base_data():
 def variant(name, data):
     """Simulate an author shipping an update, so R5 (additive survival) can be tested."""
     ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS = copy.deepcopy(data)
-    if name == "base":
+    if name in ("base", "pack-brewall", "pack-goods"):
         pass
+    elif name == "anchor-move":
+        # Stand in for an effective pack variant: authored local anchors stay fixed while the
+        # host transform changes, so flat fallback rendering is observably wrong.
+        ALL["Antonica"]["zones"]["gamma"]["xf"]["tx"] += 600
     elif name == "add-hub":
         # inserted in the MIDDLE, so a naive index-keyed overlay would misapply
         HUBS["Antonica"].insert(1, {"x": 900, "y": 900, "kind": "boat",
@@ -219,11 +235,24 @@ def variant(name, data):
         # client-side exportStandaloneHTML() escapes every "<" as a JSON unicode
         # escape (template.html). No test covered either until this variant existed.
         HUBS["Antonica"][0]["label"] = "Docks </script><b>x</b>"
-    elif name == "skip-zone":
+    elif name in ("skip-zone", "skip-zone-brewall", "skip-zone-solo-brewall"):
+        skipped_link = copy.deepcopy(ALL["Antonica"]["links"][1])
         del ALL["Antonica"]["zones"]["gamma"]
         ALL["Antonica"]["skipped"] = ["gamma"]
         ALL["Antonica"]["links"] = [l for l in ALL["Antonica"]["links"]
                                       if l["z1"] != "gamma" and l["z2"] != "gamma"]
+        ALL["Antonica"]["skippedAuthored"] = {
+            "zoneXf": {"gamma": {"tx": 300, "ty": -100, "s": 1.0, "rot": 0.0}},
+            "links": [dict({"i": 1}, **skipped_link)],
+        }
+        if name in ("skip-zone", "skip-zone-brewall"):
+            ALL["Plane of Hate"]["zones"] = {}
+            ALL["Plane of Hate"]["skipped"] = ["only"]
+            ALL["Plane of Hate"]["skippedAuthored"] = {"hubs": [
+                {"x": 200, "y": 200, "anchor": "only", "lx": 200, "ly": 200,
+                 "kind": "teleport", "label": "Suppressed Plane Hub", "letter": "H"}
+            ]}
+            HUBS.pop("Plane of Hate", None)
         TRAVEL["routes"].extend([
             {"id": "spire-beta-gamma", "kind": "spire", "capability": None,
              "topology": "anywhere", "name": "Beta/Gamma spires",
@@ -266,11 +295,12 @@ def variant(name, data):
     return ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS
 
 
-def emit(path, edition, data):
+def emit(path, edition, data, pack_key="default"):
     with open(B.TEMPLATE, "r", encoding="utf-8") as f:
         tpl = f.read()
     tpl = B.strip_regions(tpl, edition)
-    html = B.inject(tpl, *data, credit="EQL · fixture map data", version=B.read_version())
+    html = B.inject(tpl, *data, credit="EQL · fixture map data", version=B.read_version(),
+                    pack_key=pack_key)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     return len(html)
@@ -278,13 +308,18 @@ def emit(path, edition, data):
 
 if __name__ == "__main__":
     outdir = sys.argv[1]
-    variants = sys.argv[2:] or ["base", "add-hub", "add-conn", "add-zone", "del-hub",
-                                "add-worldlink", "script-label", "skip-zone", "discovered-zone"]
+    variants = sys.argv[2:] or ["base", "anchor-move", "pack-brewall", "pack-goods",
+                                "add-hub", "add-conn", "add-zone", "del-hub",
+                                "add-worldlink", "script-label", "skip-zone", "skip-zone-brewall",
+                                "skip-zone-solo-brewall", "discovered-zone"]
     os.makedirs(outdir, exist_ok=True)
     base = base_data()
     for v in variants:
         d = variant(v, base)
+        pack_key = {"anchor-move": "brewall", "pack-brewall": "brewall",
+                    "pack-goods": "goods", "skip-zone-brewall": "brewall",
+                    "skip-zone-solo-brewall": "brewall"}.get(v, "default")
         for ed in ("user", "author"):
             p = os.path.join(outdir, "fx-%s.%s.html" % (v, ed))
-            n = emit(p, ed, d)
+            n = emit(p, ed, d, pack_key)
             print("wrote %-34s %7d bytes" % (os.path.basename(p), n))

@@ -20,6 +20,7 @@
     "runnyeye",
     "beholder",
     "nro",
+    "newsebexp",
     "oasis",
     "sro",
     "nektulos",
@@ -71,6 +72,7 @@
     "runnyeye",
     "beholder",
     "nro",
+    "newsebexp",
     "oasis",
     "sro",
     "nektulos",
@@ -142,6 +144,7 @@
     "freporte",
     "freportn",
     "nro",
+    "newsebexp",
     "oasis",
     "sro",
     "rathemtn",
@@ -349,6 +352,16 @@
       "off": [
         3711.55,
         -6064.85
+      ]
+    },
+    "newsebexp": {
+      "name": "New Sebilis Expedition",
+      "color": "#8f78d4",
+      "cx": 4311,
+      "cy": -4484,
+      "off": [
+        4363.55,
+        -4290.85
       ]
     },
     "oasis": {

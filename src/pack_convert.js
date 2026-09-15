@@ -9,7 +9,7 @@ const LAYER_SUFFIXES = ['', '_1', '_2', '_3'];
 const PY_WS = '[\\t\\n\\v\\f\\r \\x1c-\\x1f\\x85\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]';
 const PY_STRIP = new RegExp('^' + PY_WS + '+|' + PY_WS + '+$', 'g');
 const FLOAT_RE = /^[+-]?(?:(?:inf(?:inity)?|nan)|(?:(?:[0-9](?:_?[0-9])*)(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.(?:[0-9](?:_?[0-9])*))(?:[eE][+-]?(?:[0-9](?:_?[0-9])*))?)$/i;
-const PLACEHOLDERS = ['__WORLDLINKS__', '__UNIVERSE__', '__DETAIL__', '__TRAVEL__', '__VERSION__', '__XPACS__', '__META__', '__HUBS__', '__CRED__', '__ALL__'];
+const PLACEHOLDERS = ['__WORLDLINKS__', '__UNIVERSE__', '__DETAIL__', '__PACKKEY__', '__TRAVEL__', '__VERSION__', '__XPACS__', '__META__', '__HUBS__', '__CRED__', '__ALL__'];
 // Keep these measured thresholds aligned with scripts/pack_colors.py; see docs/reference/pack-import.md.
 const LIFT_MAX = 205.0;
 const LIFT_LUMA = 124.3;
@@ -565,17 +565,26 @@ function creditText(packDir, rootCount) {
   return text;
 }
 
+function calibrationKey(packDir, packs) {
+  const name = basename(packDir);
+  if (name.toLowerCase() === 'maps') return {key:'default', notice:null};
+  for (const [key, record] of Object.entries(packs || {})) {
+    if (String(record.dir).toLowerCase() === name.toLowerCase()) return {key, notice:null};
+  }
+  return {key:'default', notice:`unrecognized map directory ${JSON.stringify(name)}; using default calibration`};
+}
+
 function jsonForScript(value) {
   return JSON.stringify(value).replace(/<\//g, '<\\/');
 }
 
-function buildHTML(template, data, credit, version) {
+function buildHTML(template, data, credit, version, packKey = 'default') {
   const replacements = {
     __ALL__: jsonForScript(data.ALL), __META__: jsonForScript(data.META),
     __DETAIL__: jsonForScript(data.DETAIL), __HUBS__: jsonForScript(data.HUBS),
     __UNIVERSE__: jsonForScript(data.UNIVERSE), __WORLDLINKS__: jsonForScript(data.WORLDLINKS),
     __TRAVEL__: jsonForScript(data.TRAVEL), __XPACS__: jsonForScript(data.XPACS),
-    __CRED__: htmlEscape(credit), __VERSION__: version,
+    __CRED__: htmlEscape(credit), __VERSION__: version, __PACKKEY__: packKey,
   };
   for (const ph of PLACEHOLDERS) if (!template.includes(ph)) throw new Error('template missing placeholder ' + ph);
   const pattern = new RegExp(PLACEHOLDERS.map(ph => ph.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|'), 'g');
@@ -590,6 +599,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   rootDir = rootDir == null ? null : pathJoin(rootDir);
   if (!packDir) throw new Error('packDir is required');
 
+  const calibration = calibrationKey(packDir, authored.packs);
+
   const index = makeFileIndex(files);
   const world = authored.world, order = world.order;
   const ALL = {}, META = world.meta, DETAIL = {}, HUBS = {};
@@ -597,6 +608,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   let TRAVEL = authored.travel || {};
   const XPACS = world.xpacs || {};
   const skippedReport = {}, rootReport = {}, baseless = [], unseen = [], warnings = looksLikeRootMaps(index, packDir);
+  if (calibration.notice) warnings.push(calibration.notice);
   const collisions = index.collisions.map(pair => `file key collision: ${pair[0]} | ${pair[1]}`);
   const unknownRecords = {}, discoveredReport = {}, discoveredSourcesReport = {};
   let rootCount = 0;
@@ -615,6 +627,10 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
     const entry = authored.continents[cont];
     if (!entry) throw new Error('missing authored continent ' + cont);
     const meta = entry.meta, layout = entry.layout;
+    const baseXfs = layout.zoneXf || {};
+    const variantXfs = calibration.key === 'default' ? {} : (entry.variants?.[calibration.key]?.zoneXf || {});
+    // B10: a future plan may validate sparse overrides against pack-internal fit bounds.
+    const xfs = { ...baseXfs, ...variantXfs };
     const roster = meta.zoneOrder.slice();
     for (const zk of meta.detailZones || []) if (!roster.includes(zk)) roster.push(zk);
     const parsed = new Map(), skipped = [], rootZones = [], contBaseless = [];
@@ -656,7 +672,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       }
     }
 
-    const zones = {}, skippedSet = new Set(skipped), azones = meta.zones || {}, xfs = layout.zoneXf || {};
+    const zones = {}, skippedSet = new Set(skipped), azones = meta.zones || {};
     for (const zk of meta.zoneOrder) {
       if (skippedSet.has(zk)) continue;
       const az = azones[zk];
@@ -664,14 +680,27 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
       const geom = geometryRecords(parsed.get(zk).records, az.off, `${cont}/${zk}`);
       const xf = xfs[zk];
       zones[zk] = composeZone(az, geom, isIdentity(xf) ? null : xf);
+      if (Object.prototype.hasOwnProperty.call(variantXfs, zk)) {
+        zones[zk].xfBase = baseXfs[zk] || { tx:0, ty:0, s:1, rot:0 };
+      }
     }
     const allEntry = { zones };
     const skippedOrdered = meta.zoneOrder.filter(zk => skippedSet.has(zk));
     if (skippedOrdered.length) allEntry.skipped = skippedOrdered;
+    const skippedAuthored = {};
+    const skippedXfs = {};
+    for (const [zk, xf] of Object.entries(xfs)) if (skippedSet.has(zk)) skippedXfs[zk] = xf;
+    if (Object.keys(skippedXfs).length) skippedAuthored.zoneXf = skippedXfs;
     if (Object.prototype.hasOwnProperty.call(meta, 'labels') && meta.labels != null) allEntry.labels = meta.labels;
     allEntry.bbox = meta.bbox;
     allEntry.connectors = layout.connectors || [];
-    const links = (layout.links || []).filter(link => !skippedSet.has(link.z1) && !skippedSet.has(link.z2));
+    const allLinks = layout.links || [];
+    const links = allLinks.filter(link => !skippedSet.has(link.z1) && !skippedSet.has(link.z2));
+    const skippedLinks = [];
+    allLinks.forEach((link, i) => {
+      if (skippedSet.has(link.z1) || skippedSet.has(link.z2)) skippedLinks.push({ i, ...link });
+    });
+    if (skippedLinks.length) skippedAuthored.links = skippedLinks;
     if (links.length) allEntry.links = links;
     allEntry.placed = meta.placed || [];
     allEntry.unplaced = meta.unplaced || [];
@@ -709,6 +738,8 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
     if (extendedPalette.length || Object.keys(dz).length) DETAIL[cont] = { palette: extendedPalette, zones: dz };
     const hubs = layout.hubs || [];
     if (hubs.length && Object.keys(zones).length) HUBS[cont] = hubs;
+    else if (hubs.length) skippedAuthored.hubs = hubs;
+    if (Object.keys(skippedAuthored).length) allEntry.skippedAuthored = skippedAuthored;
   }
 
   if (Object.keys(TRAVEL).length) {
@@ -731,6 +762,7 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
   const data = { ALL, META, DETAIL, HUBS, UNIVERSE, WORLDLINKS, TRAVEL, XPACS };
   for (const [name, value] of Object.entries(data)) validateNumbers(value, name);
   const report = {
+    calibration: calibration.key,
     skipped: skippedReport, rootZones: rootReport, baseless,
     unseenColors: [...new Set(unseen)].sort(), warnings, collisions: [...new Set(collisions)].sort(),
     unknownRecords, discovered: discoveredReport, discoveryRejected: discoveries.rejected,
@@ -742,6 +774,6 @@ async function convert({ authored, files, colors, packDir, rootDir }) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     convert, buildHTML, roundHalfEven, lift, readText, splitLines, pyStrip,
-    parsePythonFloat, parsePythonIntFloat, validateNumbers, creditText,
+    parsePythonFloat, parsePythonIntFloat, validateNumbers, creditText, calibrationKey,
   };
 }

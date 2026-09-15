@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('assert');
+const { extract, assertMarkerBridge } = require('./marker-bridge.js');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -33,11 +34,11 @@ const ROOT_ONLY_EXPECTED = {
   surviving: {
     Antonica: ['ecommons', 'commons', 'kithicor', 'highpass', 'eastkarana', 'northkarana',
       'southkarana', 'lakerathe', 'rathemtn', 'feerrott', 'innothule', 'freportw', 'freporte',
-      'freportn', 'rivervale', 'misty', 'beholder', 'nro', 'oasis', 'sro', 'nektulos',
+      'freportn', 'rivervale', 'misty', 'beholder', 'nro', 'newsebexp', 'oasis', 'sro', 'nektulos',
       'befallen', 'highkeep', 'qey2hh1', 'paw', 'arena', 'oggok', 'cazicthule', 'gukbottom',
       'grobb', 'lavastorm', 'neriaka', 'qeytoqrg', 'guktop', 'soldunga', 'soldungb',
       'soltemple', 'najena', 'neriakb', 'blackburrow', 'qrg', 'qeynos2', 'neriakc',
-      'everfrost', 'qeynos', 'qcat', 'permafrost', 'halas', 'newsebexp'],
+      'everfrost', 'qeynos', 'qcat', 'permafrost', 'halas'],
     Faydwer: ['gfaydark', 'butcher', 'crushbone', 'lfaydark', 'felwithea', 'cauldron',
       'kaladima', 'mistmoore', 'steamfont', 'felwitheb', 'kedge', 'unrest', 'kaladimb', 'akanon'],
     Odus: ['erudnext', 'tox', 'erudnint', 'kerraridge', 'paineel', 'warrens', 'stonebrunt'],
@@ -48,8 +49,7 @@ const ROOT_ONLY_EXPECTED = {
     'Timorous Deep': ['timorous'], 'Plane of Fear': ['fearplane'], 'Plane of Hate': [],
     'Plane of Sky': ['airplane'],
   },
-  discovered: [{ cont: 'Antonica', key: 'newsebexp', anchor: 'nro', nameFrom: 'marker',
-    name: 'New Sebilis Expedition', from: 'pack' }],
+  discovered: [],
   credit: 'EQL · selected maps folder',
 };
 
@@ -67,16 +67,25 @@ function json(filename) { return JSON.parse(fs.readFileSync(filename, 'utf8')); 
 function contDir(name) { return name.replace(/ /g, '_').replace(/'/g, ''); }
 
 function loadAuthored(dataRoot) {
-  const world = json(path.join(dataRoot, 'world.json')), continents = {};
+  const world = json(path.join(dataRoot, 'world.json'));
+  const packs = json(path.join(dataRoot, 'packs.json')), continents = {};
   for (const cont of world.order) {
     const dir = path.join(dataRoot, 'continents', contDir(cont));
-    continents[cont] = {
+    const entry = {
       meta: json(path.join(dir, 'continent.json')),
       layout: json(path.join(dir, 'layout.json')),
     };
+    const variants = {};
+    for (const key of Object.keys(packs)) {
+      const variant = path.join(dir, `layout.${key}.json`);
+      if (fs.existsSync(variant)) variants[key] = json(variant);
+    }
+    if (Object.keys(variants).length) entry.variants = variants;
+    continents[cont] = entry;
   }
   const travel = path.join(dataRoot, 'travel.json');
-  return { world, travel: fs.existsSync(travel) ? json(travel) : {}, continents };
+  return { world, travel: fs.existsSync(travel) ? json(travel) : {},
+    packs, continents };
 }
 
 function trackingReader(selected) {
@@ -234,70 +243,6 @@ function compare(label, actual, expected) {
   }
 }
 
-function extract(text, prefix, opener) {
-  let at = 0, i;
-  while (true) {
-    at = text.indexOf(prefix, at);
-    if (at < 0) throw new Error(`missing ${prefix}`);
-    i = at + prefix.length;
-    if (text[i] === opener) break;
-    at = i;
-  }
-  const closer = opener === '{' ? '}' : ']';
-  let depth = 0, inString = false, escaped = false;
-  for (let j = i; j < text.length; j++) {
-    const ch = text[j];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inString = false;
-    } else if (ch === '"') inString = true;
-    else if (ch === opener) depth++;
-    else if (ch === closer && --depth === 0) {
-      return JSON.parse(text.slice(i, j + 1).replace(/<\\\//g, '</'));
-    }
-  }
-  throw new Error(`unterminated ${prefix}`);
-}
-
-function assertMarkerBridge(artifact, manifest, geom = MapGeom, requireMarkers = true) {
-  const detail = extract(fs.readFileSync(artifact, 'utf8'), ', DETAIL=', '{');
-  const entries = [], keyContinents = new Map();
-  for (const [cont, block] of Object.entries(detail)) {
-    for (const [key, zone] of Object.entries(block.zones)) {
-      entries.push([cont, key, zone.name]);
-      if (!keyContinents.has(key)) keyContinents.set(key, new Set());
-      keyContinents.get(key).add(cont);
-    }
-  }
-  const zidx = geom.zidxFrom(entries);
-  let count = 0, resolutions = [];
-  for (const [cont, meta] of Object.entries(manifest.continents || {})) {
-    for (const record of meta.discovered || []) {
-      if (record.nameFrom !== 'marker') continue;
-      count++;
-      const anchor = detail[cont] && detail[cont].zones[record.anchor];
-      assert(anchor, `${cont}/${record.key}: missing anchor detail ${record.anchor}`);
-      const targets = [];
-      for (const label of anchor.labels) {
-        const full = label[4];
-        for (const target of geom.transitionTargets(zidx, record.anchor, full)) {
-          targets.push({ key: String(target), source: target });
-        }
-      }
-      const matched = targets.filter(t => t.key === record.key &&
-        keyContinents.get(t.key) && keyContinents.get(t.key).has(cont));
-      resolutions = resolutions.concat(matched);
-      assert(matched.length > 0,
-        `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
-    }
-  }
-  if (requireMarkers) assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
-  const crossContinent = [...keyContinents].filter(([, continents]) => continents.size > 1)
-    .map(([key, continents]) => ({ key, continents: [...continents].sort() }));
-  return { count, resolutions, keyCount: keyContinents.size, crossContinent };
-}
-
 function copyAuthoredWithoutCache(target) {
   fs.cpSync(DATA, target, {
     recursive: true,
@@ -320,7 +265,7 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
     throw new Error(`Brewall pack bytes differ from the cache fingerprint; run python scripts/import_pack.py (read ${identity.count} files, fingerprint ${identity.fingerprint})`);
   }
   if (!fs.existsSync(userReference)) throw new Error('missing Brewall reference ' + userReference);
-  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(userReference, 'utf8'));
+  compare('Brewall real pack', buildHTML(template, result.data, result.credit, VERSION, result.report.calibration), fs.readFileSync(userReference, 'utf8'));
   for (const cont of authored.world.order) {
     const entry = manifest.continents[cont], label = `Brewall ${cont}`;
     assert.deepStrictEqual(result.report.discovered[cont], entry.discovered || [], `${label}: catalog`);
@@ -332,8 +277,10 @@ async function runBrewall(pack, selected, packDir, rootDir, template, colors) {
       `${label}: discovered fingerprint`);
   }
   const bridge = assertMarkerBridge(userReference, manifest, MapGeom, false);
+  if (bridge.count === 0) console.log('NOTE: marker bridge dormant - empty catalog; the count===0 assertion below fails the day a marker-derived record appears - re-enable the instrumented bridge then');
   assert.deepStrictEqual(bridge.crossContinent, [], 'Brewall detail keys span continents');
-  console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
+  assert.strictEqual(bridge.count, 0, 'Brewall marker-derived catalog requires re-enabling the instrumented bridge');
+  console.log(`PASS: Brewall marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent; empty catalog)`);
   console.log(`PASS: Brewall real pack (${identity.count} source files compared, fingerprint current)`);
   return true;
 }
@@ -355,37 +302,11 @@ async function runRootOnly(mapsRoot, template, colors) {
     if (run.status !== 0) throw new Error(`root-only build failed: ${run.stderr.toString('utf8')}`);
 
     const rootManifest = json(path.join(scratch, '_generated', 'manifest.json'));
-    const bridge = assertMarkerBridge(reference, rootManifest);
+    const bridge = assertMarkerBridge(reference, rootManifest, MapGeom, false);
+    if (bridge.count === 0) console.log('NOTE: marker bridge dormant - empty catalog; the count===0 assertion below fails the day a marker-derived record appears - re-enable the instrumented bridge then');
     assert.deepStrictEqual(bridge.crossContinent, [], 'root-only detail keys span continents');
-    console.log(`PASS: root-only marker-bridge premise (${bridge.keyCount} keys; 0 cross-continent)`);
-    const INDEX_TAG = Symbol('instrumented MapGeom index');
-    const TARGET_TAG = Symbol('instrumented MapGeom target');
-    let indexCalls = 0, transitionCalls = 0, taggedIndex;
-    const instrumented = {
-      zidxFrom(entries) {
-        indexCalls++;
-        taggedIndex = MapGeom.zidxFrom(entries);
-        taggedIndex[INDEX_TAG] = true;
-        return taggedIndex;
-      },
-      transitionTargets(index, zoneKey, label) {
-        transitionCalls++;
-        assert.strictEqual(index, taggedIndex, 'marker bridge bypassed the injected MapGeom index');
-        assert(index[INDEX_TAG], 'marker bridge used an untagged index');
-        return MapGeom.transitionTargets(index, zoneKey, label).map(key => {
-          const tagged = new String(key);
-          tagged[TARGET_TAG] = true;
-          return tagged;
-        });
-      },
-    };
-    const observed = assertMarkerBridge(
-      reference, json(path.join(scratch, '_generated', 'manifest.json')), instrumented);
-    assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
-    assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
-    assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
-      'a marker resolution did not come from the injected MapGeom transition result');
-    console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
+    assert.strictEqual(bridge.count, 0, 'root-only catalog is empty after newsebexp was rostered');
+    console.log(`PASS: root-only detail-key premise (${bridge.keyCount} keys; 0 cross-continent; empty catalog)`);
 
     const packDir = path.basename(mapsRoot), files = trackingReader(mapsRoot);
     const authored = loadAuthored(scratch);
@@ -401,7 +322,7 @@ async function runRootOnly(mapsRoot, template, colors) {
         entry.discoveredSourceFingerprint || sourceIdentity(new Map()).fingerprint,
         `${label}: discovered fingerprint`);
     }
-    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION), fs.readFileSync(reference, 'utf8'));
+    compare('root-only real pack', buildHTML(template, result.data, result.credit, VERSION, result.report.calibration), fs.readFileSync(reference, 'utf8'));
     const skipped = Object.values(result.report.skipped).filter(zones => zones.length);
     const skippedCount = skipped.reduce((n, zones) => n + zones.length, 0);
     const surviving = Object.values(result.data.ALL).reduce((n, cont) => n + Object.keys(cont.zones).length, 0);

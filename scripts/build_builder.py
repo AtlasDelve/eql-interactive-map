@@ -57,6 +57,7 @@ def converter_payload(mapgeom_path=MAPGEOM, converter_path=CONVERTER):
 def load_authored(data=DATA):
     """Load only committed author decisions, in authored continent order."""
     world = build.load(os.path.join(data, "world.json"))
+    packs = build.load(os.path.join(data, "packs.json"))
     travel_path = os.path.join(data, "travel.json")
     travel = build.load(travel_path) if os.path.exists(travel_path) else {}
     continents = {}
@@ -74,8 +75,16 @@ def load_authored(data=DATA):
                     "continent.json for %s has no complete zones entry for %r "
                     "(missing %s). See: python scripts/import_pack.py "
                     "--print-authored %s" % (cont, zone, ", ".join(missing), cont))
-        continents[cont] = {"meta": meta, "layout": layout}
-    return {"world": world, "travel": travel, "continents": continents}
+        entry = {"meta": meta, "layout": layout}
+        variants = {}
+        for key in packs:
+            variant_path = os.path.join(cdir, "layout.%s.json" % key)
+            if os.path.exists(variant_path):
+                variants[key] = build.load(variant_path)
+        if variants:
+            entry["variants"] = variants
+        continents[cont] = entry
+    return {"world": world, "travel": travel, "packs": packs, "continents": continents}
 
 
 def color_table():

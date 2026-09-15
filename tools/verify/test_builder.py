@@ -199,6 +199,10 @@ def main():
         check("builder and map carry the same three notice lines",
               map_notice, builder_notice)
         embedded_template = json.loads(builder.extract_payload(real_html, "template"))
+        embedded_authored = json.loads(builder.extract_payload(real_html, "authored"))
+        check("builder embeds the pack-family table",
+              embedded_authored["packs"],
+              {"brewall": {"dir": "Brewall"}, "goods": {"dir": "Good's Maps"}})
         user_template = build.strip_regions(source_template, "user")
         author_template = build.strip_regions(source_template, "author")
         check("embedded template equals current user edition", embedded_template, user_template)
@@ -215,7 +219,7 @@ def main():
         }
         check("user template scan returns the expected failures", user_rc, 1)
         check("user template scan has the exact unfilled-token set",
-              user_forbidden_tokens, {"__CRED__": 1, "__VERSION__": 1})
+              user_forbidden_tokens, {"__CRED__": 1, "__VERSION__": 1, "__PACKKEY__": 1})
         check("user template scan has zero missing declarations", user_missing, [])
         author_rc, author_scan = strip_output(author_template, os.path.join(td, "author-template.html"))
         author_forbidden = [line for line in author_scan.splitlines() if line.startswith("FORBIDDEN")]

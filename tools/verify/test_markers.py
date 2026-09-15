@@ -129,13 +129,14 @@ HUBS = {"Antonica": [{"x": 0, "y": 0, "kind": "boat", "label": LBL}]}
 # though the label itself contains spaces. A new placeholder therefore goes on the END,
 # or that index silently starts reading a different structure.
 TPL = ("__ALL__\n__META__\n__DETAIL__\n__HUBS__\n__UNIVERSE__\n__WORLDLINKS__\n"
-       "__TRAVEL__\n__XPACS__\n__VERSION__")
+       "__TRAVEL__\n__XPACS__\n__VERSION__\n__PACKKEY__")
 VERSION = build.read_version()
 out = build.inject(TPL, {}, {}, {}, HUBS, [], [], {}, {}, version=VERSION)
 check("no raw '</' survives inject()", "</" in out, False)
 check("escaped payload still parses to the original label",
       json.loads(out.split("\n")[3])["Antonica"][0]["label"], LBL)
-check("version substitutes as raw constrained text", out.split("\n")[-1], VERSION)
+check("version substitutes as raw constrained text", out.split("\n")[-2], VERSION)
+check("default pack key substitutes for fixture calls", out.split("\n")[-1], "default")
 
 # --- credit: format, escaping, missing-placeholder guard, and one-pass assembly ---
 def fixture_credit(pack, root_counts, discovered=None):
@@ -152,12 +153,27 @@ def fixture_credit(pack, root_counts, discovered=None):
         return build.cred_text(data)
 
 
+def fixture_calibration(pack):
+    with tempfile.TemporaryDirectory() as data:
+        generated = os.path.join(data, build.import_pack.CACHE_DIRNAME)
+        os.makedirs(generated)
+        with open(os.path.join(generated, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"pack": pack}, f)
+        with open(os.path.join(data, "packs.json"), "w", encoding="utf-8") as f:
+            json.dump({"brewall": {"dir": "Brewall"},
+                       "goods": {"dir": "Good's Maps"}}, f)
+        return build.calibration_key(data)
+
+
 check("credit names a community pack exactly",
       fixture_credit(os.path.join("game", "maps", "Brewall"), []),
       "EQL · Brewall map data")
 check("credit does not infer provenance from maps dirname",
       fixture_credit(os.path.join("game", "maps"), []),
       "EQL · selected maps folder")
+check("credit preserves a long-s basename under lowercase matching",
+      fixture_credit(os.path.join("game", "mapſ"), []),
+      "EQL · mapſ map data")
 check("credit singular root-zone clause",
       fixture_credit(os.path.join("game", "maps", "Layered"), [1]),
       "EQL · Layered map data · 1 zone from the game's own maps")
@@ -168,6 +184,16 @@ check("credit counts root-sourced discoveries in the manifest",
       fixture_credit(os.path.join("game", "maps", "Layered"), [],
                      [{"key": "new", "from": "root"}, {"key": "packnew", "from": "pack"}]),
       "EQL · Layered map data · 1 zone from the game's own maps")
+check("maps root selects default calibration",
+      fixture_calibration(os.path.join("game", "maps")), ("default", None))
+check("known pack basename selects its calibration case-insensitively",
+      fixture_calibration(os.path.join("game", "maps", "bReWaLl")), ("brewall", None))
+unknown_key, unknown_notice = fixture_calibration(os.path.join("game", "maps", "Other"))
+check("unknown pack basename uses default calibration", unknown_key, "default")
+check("unknown pack calibration emits a named notice", "Other" in unknown_notice, True)
+check("long-s basename stays unrecognized under lowercase calibration matching",
+      fixture_calibration(os.path.join("game", "map\u017f")),
+      ("default", "unrecognized map directory 'map\u017f'; using default calibration"))
 escaped_credit = build.inject(
     "<div>__CRED__</div>\n" + TPL, {}, {}, {}, {}, [], [], {}, {},
     credit="x</div>&\"'", version=VERSION)

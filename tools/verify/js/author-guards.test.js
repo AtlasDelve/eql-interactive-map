@@ -86,13 +86,41 @@ let ovText;
                    { z1: 'beta', z2: 'gamma', locked: true, manual: true }]);
   }
 
-  console.log('\n-- partial builds protect authored state while user overlays remain safe');
+  console.log('\n-- cross-continent zone entry binds the destination edit state');
+  {
+    const a = load(fx('discovered-zone', 'author'));
+    a.ev("enterCont('Antonica');setEdit(true);setEdit(false)");
+    a.ev("enterCont('Faydwer');setEdit(true)");
+    eq('previous continent welds are already built', a.ev("EDIT['Faydwer'].linksReady"), true);
+    const destination = a.ev("Object.keys(EDIT['Antonica'].zones)");
+    const previous = a.ev("Object.keys(EDIT['Faydwer'].zones)");
+    ok('destination and previous rosters differ', JSON.stringify(destination) !== JSON.stringify(previous));
+    a.ev("enterZone('Antonica','alpha')");
+    eq('cross-continent entry reaches the destination zone', a.ev('[cur,level]'), ['Antonica', 'zone']);
+    eq('zone entry binds the destination roster', a.ev('Object.keys(zones)'), destination);
+    // Direct invocation pins the latent consumer; the zone UI hides the save controls.
+    eq('zone-level snapshot contains the destination roster', a.ev('Object.keys(snapshot().zones)'), destination);
+  }
+
+  console.log('\n-- partial builds round-trip layout data while unsafe author actions stay blocked');
   {
     const a = load(fx('skip-zone', 'author'));
-    a.ev("enterCont('Antonica');exportLayout();exportWorld();saveVersion()");
-    eq('partial author export/save downloads nothing', a.downloads.length, 0);
-    eq('partial author save writes no browser snapshot', Object.keys(a.store), []);
+    a.ev("enterCont('Antonica');setEdit(true);exportLayout();exportWorld();saveVersion()");
+    eq('partial layout export succeeds while world export stays blocked', a.downloads.length, 1);
+    eq('partial author save writes no browser snapshot',
+      Object.keys(a.store).filter(k=>!k.endsWith('_migrated')), []);
     ok('the refusal names the partial build', /partial build/.test(lastToast(a.ev)), lastToast(a.ev));
+    const partial = JSON.parse(await a.downloads[0].text());
+    eq('base export restores the skipped zone transform verbatim', partial.zoneXf.gamma,
+      { tx: 300, ty: -100, s: 1, rot: 0 });
+    eq('base export reinserts the filtered link at its original index', partial.links,
+      [{ z1: 'alpha', z2: 'beta', locked: false },
+       { z1: 'beta', z2: 'gamma', locked: true, manual: true }]);
+    a.ev("buildEditState('Plane of Hate')");
+    eq('an omitted-continent hub array is copied verbatim and in order',
+      JSON.parse(a.ev("JSON.stringify(buildLayoutObject('Plane of Hate').hubs)")),
+      [{ x: 200, y: 200, anchor: 'only', lx: 200, ly: 200,
+         kind: 'teleport', label: 'Suppressed Plane Hub', letter: 'H' }]);
 
     const full = load(fx('base', 'author'));
     full.ev("enterCont('Antonica');setEdit(true);exportLayout();exportWorld()");
@@ -105,6 +133,52 @@ let ovText;
     ok('partial overlay retains the skipped key in its authored roster', ov.zoneKeys.includes('gamma'), ov.zoneKeys);
     ok('partial overlay records no false deletion touching gamma',
       !(ov.links || []).some(l => l.deleted && (l.z1 === 'gamma' || l.z2 === 'gamma')), ov.links);
+  }
+
+  console.log('\n-- a partial variant refuses an export that would drop skipped overrides');
+  {
+    const a = load(fx('skip-zone-brewall', 'author'));
+    a.ev("enterCont('Antonica');setEdit(true);exportLayout()");
+    eq('partial variant downloads no layout', a.downloads.length, 0);
+    ok('variant refusal names the partial build and its layout file',
+      /partial build/.test(lastToast(a.ev)) && /layout\.brewall\.json/.test(lastToast(a.ev)),
+      lastToast(a.ev));
+  }
+
+  console.log('\n-- a skipped zone alone blocks partial variant export');
+  {
+    const a = load(fx('skip-zone-solo-brewall', 'author'));
+    const counts = JSON.parse(a.ev('JSON.stringify(Object.fromEntries(Object.entries(ALL).map(([c,d])=>[c,Object.keys(d.zones).length])))'));
+    ok('solo partial variant has surviving zones in every continent',
+      Object.keys(counts).length > 0 && Object.values(counts).every(n => n > 0), counts);
+    a.ev("enterCont('Antonica');setEdit(true);exportLayout()");
+    eq('solo partial variant downloads no layout', a.downloads.length, 0);
+    ok('solo variant refusal names the partial build and its layout file',
+      /partial build/.test(lastToast(a.ev)) && /layout\.brewall\.json/.test(lastToast(a.ev)),
+      lastToast(a.ev));
+  }
+
+  console.log('\n-- a variant build exports only transforms changed from its base calibration');
+  {
+    const a = load(fx('anchor-move', 'author'));
+    a.ev("enterCont('Antonica');setEdit(true)");
+    ok('the single repo-export button names this build variant',
+      /layout\.brewall\.json/.test(a.ev("document.getElementById('bExport').textContent")));
+    eq('untouched variant exports no zone entries',
+      JSON.parse(a.ev("JSON.stringify(buildLayoutObject('Antonica'))")), { zoneXf: {} });
+    a.ev('zones.alpha.xf.tx=77');
+    eq('a changed zone is the only sparse variant entry',
+      Object.keys(JSON.parse(a.ev("JSON.stringify(buildLayoutObject('Antonica').zoneXf)"))), ['alpha']);
+    a.ev('zones.alpha.xf=xfIn(ALL.Antonica.zones.alpha.xfBase||ALL.Antonica.zones.alpha.xf)');
+    eq('resetting exactly to the base removes the entry',
+      JSON.parse(a.ev("JSON.stringify(buildLayoutObject('Antonica'))")), { zoneXf: {} });
+    a.ev('exportLayout()');
+    eq('complete variant downloads one layout', a.downloads.length, 1);
+    if (a.downloads.length === 1) {
+      eq('complete variant download contains the sparse layout',
+        JSON.parse(await a.downloads[0].text()), { zoneXf: {} });
+    }
+    ok('the export toast names layout.brewall.json', /layout\.brewall\.json/.test(lastToast(a.ev)), lastToast(a.ev));
   }
 
   console.log('\nRESULT: ' + (fails ? 'FAIL' : 'PASS'));

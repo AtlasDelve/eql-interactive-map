@@ -205,6 +205,7 @@ const TRAVEL_AVAILABLE=!!(TRAVEL&&Array.isArray(TRAVEL.walk)&&Array.isArray(TRAV
 const TDATA=TRAVEL_AVAILABLE?TRAVEL:{groups:{},capabilities:[],walk:[],routes:[]};
 // world-view connectors: free 2-point lines in globe coords {a:[gx,gy],b:[gx,gy],alt}. Editable at world level.
 /*__DATA_WL__*/const WORLDLINKS=__WORLDLINKS__;/*__END_WL__*/
+const PACKKEY="__PACKKEY__";
 // Realm -> its continents, DERIVED from each continent's own `alt` rather than restated as a
 // literal: the same fact written twice drifts, and the realm a continent belongs to is a
 // property of that continent. Iterate `names`, NEVER META: `names` follows the authored
@@ -321,9 +322,8 @@ function recomputeXpac(){
    if(inBuild(s)&&!XPAC_CONT.has(z.cont)){XPAC_ROUTE.add(r.id);break;}}}
  // A hub goes when its own stop is absent, its continent does not exist yet, or every route that
  // references it has gone. Membership of XPAC_ROUTE, deliberately NOT tRouteOn: a capability
- // says "you cannot use this" and must not add or remove glyphs. HUBS has no host-zone key, so an
- // unreferenced hub in a skipped zone can still float; current data exposes none outside the
- // wholly absent Plane of Hate, whose hub set the build omits.
+ // says "you cannot use this" and must not add or remove glyphs. Pack-skipped host zones are a
+ // separate authored-anchor rule enforced by hostAbsent at each draw/pick/route consumer.
  // The `>=1` guard is load-bearing and dormant: without it the vacuous "all zero referencing
  // routes are hidden" fires and the first hub nobody routes through silently disappears.
  for(const k in XPAC_HUB)delete XPAC_HUB[k];
@@ -670,9 +670,13 @@ function tInv(z,X,Y){const xf=z.xf||IDENTITY,dx=X-z.cx-xf.tx,dy=Y-z.cy-xf.ty;
  const c=Math.cos(-xf.rot),si=Math.sin(-xf.rot),rx=(dx*c-dy*si)/xf.s,ry=(dx*si+dy*c)/xf.s;
  return [z.cx+rx, z.cy+ry];}
 function zoneCentroid(z){const xf=z.xf||IDENTITY;return [z.cx+xf.tx, z.cy+xf.ty];}
-function ep(c,which,zmap){zmap=zmap||zones;const anc=which==='a'?c.anchorA:c.anchorB, loc=which==='a'?c.la:c.lb;
- if(anc&&zmap[anc]&&loc)return tPoint(zmap[anc],loc[0],loc[1]);
- return which==='a'?c.a:c.b;}
+function connEndOf(c,which){const p=c[which],ap=which==='a'?'anchorA':'anchorB',lp=which==='a'?'la':'lb';
+ const xy=Array.isArray(p)?p:((p&&p.xy)||[0,0]);
+ if(ap in c||lp in c){const loc=c[lp];return {xy,anchor:c[ap]||null,lx:loc&&loc[0],ly:loc&&loc[1]};}
+ return {xy,anchor:(p&&p.anchor)||null,lx:p&&p.lx,ly:p&&p.ly};}
+function ep(c,which,zmap){zmap=zmap||zones;const e=connEndOf(c,which);
+ if(e.anchor&&zmap[e.anchor]&&e.lx!=null)return tPoint(zmap[e.anchor],e.lx,e.ly);
+ return e.xy;}
 function hubPos(h,zmap){zmap=zmap||zones;if(h.anchor&&zmap[h.anchor]&&h.lx!=null)return tPoint(zmap[h.anchor],h.lx,h.ly);return [h.x,h.y];}
 // World-level twin of ep(): an anchored world-connector end is stored as a globe-unit offset
 // from its continent's position, so the line follows and stretches as that landmass is dragged.
@@ -689,6 +693,10 @@ let zones={}, conns=[], hubs=[], zoneLinks=[], delLinks=[];
 let editMode=false, tool='select', newHubKind='boat', autoAnchor=true;
 let showHidden=false;   // ghost-view toggle: transient edit-mode UI state, never part of the overlay
 function isGhost(o){return !!o.hidden&&!showHidden;}   // skipped entirely: not drawn, not hoverable, not clickable
+function hostAbsent(cont,item){const skipped=(ALL[cont]&&ALL[cont].skipped)||[];
+ const absent=a=>!!a&&skipped.indexOf(a)>=0;
+ if(item&&('a' in item||'b' in item))return absent(connEndOf(item,'a').anchor)||absent(connEndOf(item,'b').anchor);
+ return !!(item&&absent(item.anchor));}
 let sel=null, hoverZone=null, pendingConn=null, hoverLink=null, linkScreens=[];
 let WEDIT=null;   // global (universe + world) edit-state, parallel to EDIT[cont]; holds realm/continent positions + world connectors
 // accessors: read live edit-state when present, else the committed injected data (so edits show with Edit off)
@@ -727,8 +735,8 @@ function drawCont(){const d=contData(cur),dpr=devicePixelRatio,selz=tSelZone();
  const conns=d.conns||[];
  if(conns.length){ctx.save();ctx.setLineDash([9*dpr,6*dpr]);ctx.lineWidth=1.6*dpr;
   for(let i=0;i<conns.length;i++){const c=conns[i];
-   if(isGhost(c))continue;                                   // hidden: pickConnEndpoint/pickConnBody skip it too
-   const A=ep(c,'a'),B=ep(c,'b');
+   if(isGhost(c)||hostAbsent(cur,c))continue;                 // hidden/absent: every picker skips it too
+   const A=ep(c,'a',d.zones),B=ep(c,'b',d.zones);
    ctx.globalAlpha=c.hidden?0.30:1;
    ctx.strokeStyle=(editMode&&sel&&sel.type==='conn'&&sel.id===i)?'#ffffff':(c.userAdded?USER_ADDED_COL:'#ffd24a');
    ctx.beginPath();ctx.moveTo(wx(A[0]),wy(A[1]));ctx.lineTo(wx(B[0]),wy(B[1]));ctx.stroke();}
@@ -752,8 +760,8 @@ function drawCont(){const d=contData(cur),dpr=devicePixelRatio,selz=tSelZone();
  for(let i=0;i<harr.length;i++){const h=harr[i];
   // Two independent skips, never one. isGhost is the user's own hide, which "Show hidden"
   // reveals; expansion hiding says the thing does not exist yet and no toggle may resurrect it.
-  if(isGhost(h)||xpacHubHidden(cur,pubHubIdx(h,i)))continue;
-  const P=hubPos(h),X=wx(P[0]),Y=wy(P[1]);
+  if(isGhost(h)||hostAbsent(cur,h)||xpacHubHidden(cur,pubHubIdx(h,i)))continue;
+  const P=hubPos(h,d.zones),X=wx(P[0]),Y=wy(P[1]);
   ctx.globalAlpha=h.hidden?0.32:1;
   drawHub(h,X,Y,hr);
   if(h.userAdded)markUserAdded(X,Y,hr);
@@ -832,10 +840,9 @@ function enterWorld(){level="world";cur=null;zcur=null;hover=null;focus=null;wv=
 // guard belongs where the transition happens rather than on each caller that must remember it.
 function enterCont(name){if(!XPAC_CONT.has(name))return;
  level="continent";cur=name;zcur=null;hover=null;focus=null;zhover=null;cv.style.cursor='';document.getElementById('bAlt').style.display='none';
- // Rebind the global zones/conns/hubs aliases whenever this continent already has live
- // edit-state. drawCont() calls ep() and hubPos() without a zone map, so they read the
- // GLOBAL `zones`; leaving it pointed at another continent makes anchored hubs render at
- // their published spot and anchored connectors snap back to canonical.
+ // Rebind the mutable aliases whenever this continent already has live edit-state. Plain view
+ // passes contData(name).zones explicitly, so stale aliases from another edited continent cannot
+ // affect published anchors; editor-only helpers still use these aliases.
  if(EDIT[name])bindES(name);
  /*__USER__*/else applyStoredCont(name);/*__END_USER__*/
  const dt=DETAIL[name]?' - click a zone for full detail':'';
@@ -845,6 +852,7 @@ function enterCont(name){if(!XPAC_CONT.has(name))return;
  fitBox(contBbox(name));draw();}
 function enterZone(cont,z){if(!XPAC_CONT.has(cont))return;
  level="zone";cur=cont;zcur=z;hover=null;focus=null;zhover=null;cv.style.cursor='';document.getElementById('bAlt').style.display='none';
+ if(EDIT[cont])bindES(cont);
  zdata=DETAIL[cont].zones[z]; zpal=DETAIL[cont].palette; zgroups={};
  for(const s of zdata.segs){(zgroups[s[4]]=zgroups[s[4]]||[]).push(s);}
  zlinks=[];
@@ -906,10 +914,9 @@ addEventListener('keydown',e=>{
  if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA'))return;
  if(e.key==='Escape'){sel=null;pendingConn=null;refreshInspector();draw();}
  else if(e.key==='Delete'||e.key==='Backspace'){if(sel){
-   if(sel.type==='conn'){conns.splice(sel.id,1);sel=null;}
-   else if(sel.type==='hub'){hubs.splice(sel.id,1);sel=null;}
-   else if(sel.type==='wconn'){worldConns().splice(sel.id,1);sel=null;}
-   refreshInspector();draw();}}});
+   if(sel.type==='conn'||sel.type==='hub')removeItem(sel.type,sel.id);
+   else if(sel.type==='wconn'){worldConns().splice(sel.id,1);sel=null;refreshInspector();draw();}
+ }}});
 document.getElementById('bAlt').onclick=()=>{alt=(alt==="Norrath")?"The Planes":"Norrath";enterWorld();};
 document.getElementById('bBack').onclick=()=>{ if(level==="zone")enterCont(cur); else if(level==="continent")enterWorld(); else enterUniverse(); };
 document.getElementById('bFit').onclick=()=>{focus=null;hover=null;
@@ -1014,7 +1021,8 @@ function tRouteOn(r){return !XPAC_ROUTE.has(r.id)&&(!r.capability||!!TCAPS[r.cap
 // splices the array, shifting every index below it.
 function tHubAnchor(r,i){return (r.hubs&&r.hubs[i])||null;}
 function tPubHub(anchor){const p=anchor?anchor.lastIndexOf(':'):-1;if(p<0)return null;
- const list=HUBS[anchor.slice(0,p)];return (list&&list[+anchor.slice(p+1)])||null;}
+ const cont=anchor.slice(0,p),list=HUBS[cont],h=(list&&list[+anchor.slice(p+1)])||null;
+ return h&&!hostAbsent(cont,h)?h:null;}
 function tHubNote(r,i){const h=tPubHub(tHubAnchor(r,i));return (h&&h.note)||'';}
 // Edges are a LIST per node, not a neighbour-keyed map. Two routes can reach the same
 // neighbour and a route can duplicate a walk edge; a last-wins map keeps a worse cost paired
@@ -1179,7 +1187,7 @@ function tHubScreen(anchor,cont){if(!anchor)return null;
  if(xpacHubHidden(cont,i))return null;   // `i` IS the published index here, straight off the anchor
  const e=EDIT[cont];let h=pub;
  if(e){const j=resolveRef(e.hubs,hubRefOf(pub),i);if(j<0)return null;h=e.hubs[j];}
- if(isGhost(h))return null;
+ if(isGhost(h)||hostAbsent(cont,h))return null;
  return hubPos(h,e?e.zones:ALL[cont].zones);}
 function tHubRing(X,Y){const dpr=devicePixelRatio,r=11*dpr+7*dpr;
  ctx.save();
@@ -1519,7 +1527,7 @@ function bindES(cont){const e=EDIT[cont];zones=e.zones;conns=e.conns;hubs=e.hubs
 // shape. Captured ONCE from published data at build time: dragging a connector overwrites its
 // own a/b, so recomputing the hint later would no longer match what was shipped.
 function hubRefOf(h){return h.kind+'|'+(h.label||'');}
-function connRefOf(c){const R=Math.round,a=c.a||[0,0],b=c.b||[0,0];
+function connRefOf(c){const R=Math.round,a=connEndOf(c,'a').xy,b=connEndOf(c,'b').xy;
  return R(a[0])+','+R(a[1])+'|'+R(b[0])+','+R(b[1]);}
 // Weld pair keys are order-independent: detectLinks emits z1/z2 in zoneOrder while
 // addManualLink writes whichever zone was selected first, so the same weld can arrive as
@@ -1530,13 +1538,13 @@ function buildEditState(cont){const a=ALL[cont];const zs={};
    zs[k]={name:z.name,color:z.color,segs:z.segs,cx:z.cx,cy:z.cy,aabb:segAABB(z.segs),
      xf:z.xf?{tx:z.xf.tx||0,ty:z.xf.ty||0,s:(z.xf.s==null?1:z.xf.s),rot:z.xf.rot||0}:{tx:0,ty:0,s:1,rot:0}};}
  const es={zones:zs,
-   conns:(a.connectors||[]).map(c=>({a:c.a?c.a.slice():[0,0],b:c.b?c.b.slice():[0,0],anchorA:null,anchorB:null,la:null,lb:null,
-     ref:connRefOf(c),touched:false,hidden:false,userAdded:false})),
+   conns:(a.connectors||[]).map(c=>{const o={a:[0,0],b:[0,0],anchorA:null,anchorB:null,la:null,lb:null,
+     ref:connRefOf(c),touched:false,hidden:false,userAdded:false};endIn(o,'a',c.a);endIn(o,'b',c.b);return o;}),
    // pidx is the PUBLISHED index, captured here alongside the content hint and for the same
    // reason: this array is about to be spliced and appended to, and nothing else in the entry
    // can say where it came from.
-   hubs:(HUBS[cont]||[]).map((h,i)=>({x:h.x,y:h.y,kind:h.kind,label:h.label,letter:h.letter||'',note:h.note||'',anchor:null,lx:null,ly:null,
-     ref:hubRefOf(h),pidx:i,touched:false,hidden:false,userAdded:false})),
+   hubs:(HUBS[cont]||[]).map((h,i)=>{const o={x:h.x,y:h.y,kind:h.kind,label:h.label,letter:h.letter||'',note:h.note||'',anchor:null,lx:null,ly:null,
+     ref:hubRefOf(h),pidx:i,touched:false,hidden:false,userAdded:false};hubPosIn(o,h);return o;}),
    labels:a.labels, zoneLinks:[], linksReady:false, pendingLinks:null,
    deletedLinks:(a.links||[]).filter(l=>l.deleted).map(l=>({z1:l.z1,z2:l.z2}))};   // auto pairs the user removed
  EDIT[cont]=es; bindES(cont);
@@ -1547,8 +1555,8 @@ function buildEditState(cont){const a=ALL[cont];const zs={};
  // actually opens, so applying a customization on plain continent view stays cheap.
  // Anchoring, by contrast, is cheap and stays eager - and it must run BEFORE any user
  // transform is applied, so anchors resolve against published positions (see applyContOverlay).
- for(const c of conns){anchorConnEnd(c,'a',false);anchorConnEnd(c,'b',false);}   // auto-anchor as POC baseline
- for(const h of hubs)anchorHub(h,false);
+ for(const c of conns){if(!c.anchorA)anchorConnEnd(c,'a',false);if(!c.anchorB)anchorConnEnd(c,'b',false);}
+ for(const h of hubs)if(!h.anchor)anchorHub(h,false);
  return es;}
 // Deferred second half of buildEditState. Idempotent; safe to call on every edit entry.
 function ensureLinks(cont){cont=cont||cur;const e=EDIT[cont];if(!e||e.linksReady)return;
@@ -1655,11 +1663,11 @@ function deleteLink(i){const L=zoneLinks[i];if(!L)return;
 /* ---- edit overlay (drawn atop drawCont only when editMode) ---- */
 function drawEditOverlay(dpr,hr){
  ctx.lineWidth=1.4*dpr;
- for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;
-  const A=ep(c,'a'),B=ep(c,'b'),strong=sel&&sel.type==='conn'&&sel.id===i;
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c)||hostAbsent(cur,c))continue;
+  const A=ep(c,'a',zones),B=ep(c,'b',zones),strong=sel&&sel.type==='conn'&&sel.id===i;
   drawEndpoint(wx(A[0]),wy(A[1]),c.anchorA,strong);drawEndpoint(wx(B[0]),wy(B[1]),c.anchorB,strong);}
  if(sel&&sel.type==='zone'&&zones[sel.id])drawZoneGizmo(zones[sel.id]);
- if(sel&&sel.type==='hub'&&hubs[sel.id]){const h=hubs[sel.id],P=hubPos(h);
+ if(sel&&sel.type==='hub'&&hubs[sel.id]&&!hostAbsent(cur,hubs[sel.id])){const h=hubs[sel.id],P=hubPos(h,zones);
   ctx.strokeStyle=h.anchor?'#66d68f':'#ffd24a';ctx.lineWidth=2*dpr;ctx.beginPath();ctx.arc(wx(P[0]),wy(P[1]),hr+9*dpr,0,7);ctx.stroke();}
  if(pendingConn){const X=wx(pendingConn[0]),Y=wy(pendingConn[1]);
   ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(X,Y,5*dpr,0,7);ctx.fill();}
@@ -1710,7 +1718,7 @@ function pickZone(worldx,worldy){let best=null,ba=1e18;
  for(const k in zones){const z=zones[k];const inv=tInv(z,worldx,worldy);const [x0,y0,x1,y1]=z.aabb;
   if(inv[0]>=x0&&inv[0]<=x1&&inv[1]>=y0&&inv[1]<=y1){const a=(x1-x0)*(y1-y0);if(a<ba){ba=a;best=k;}}}
  return best;}
-function pickHubAt(mx,my){for(const s of hubScreens){const dx=mx-s.X,dy=my-s.Y,rr=(s.r+6*devicePixelRatio);
+function pickHubAt(mx,my){for(const s of hubScreens){if(hostAbsent(cur,s.h))continue;const dx=mx-s.X,dy=my-s.Y,rr=(s.r+6*devicePixelRatio);
   if(dx*dx+dy*dy<=rr*rr)return s.i;}return null;}
 function distSegPx(mx,my,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
  let t=l2?((mx-ax)*dx+(my-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));
@@ -1718,12 +1726,12 @@ function distSegPx(mx,my,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
 // Connectors are iterated directly rather than through a screen-space cache, so each of these
 // needs its own hidden guard (unlike hubs, where the single hubScreens skip covers everything).
 function pickConnEndpoint(mx,my){const R=9*devicePixelRatio;
- for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;const A=ep(c,'a'),B=ep(c,'b');
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c)||hostAbsent(cur,c))continue;const A=ep(c,'a',zones),B=ep(c,'b',zones);
   if(Math.hypot(mx-wx(A[0]),my-wy(A[1]))<=R)return {i,which:'a'};
   if(Math.hypot(mx-wx(B[0]),my-wy(B[1]))<=R)return {i,which:'b'};}
  return null;}
 function pickConnBody(mx,my){const R=7*devicePixelRatio;
- for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c))continue;const A=ep(c,'a'),B=ep(c,'b');
+ for(let i=0;i<conns.length;i++){const c=conns[i];if(isGhost(c)||hostAbsent(cur,c))continue;const A=ep(c,'a',zones),B=ep(c,'b',zones);
   if(distSegPx(mx,my,wx(A[0]),wy(A[1]),wx(B[0]),wy(B[1]))<=R)return i;}
  return null;}
 
@@ -1839,6 +1847,9 @@ function editMouseUp(e){
    cannot express it - so canHide() is paired and the author keeps today's Delete. */
 /*__AUTHOR__*/function canHide(){return false;}/*__END_AUTHOR__*/
 /*__USER__*/function canHide(){return true;}/*__END_USER__*/
+function removeItem(kind,i){const arr=(kind==='hub')?hubs:conns;if(!arr[i])return;
+ if(canHide()&&!arr[i].userAdded){hideItem(kind,i);return;}
+ arr.splice(i,1);sel=null;refreshHiddenUI();refreshInspector();draw();}
 function hideItem(kind,i){const arr=(kind==='hub')?hubs:conns;if(!arr[i])return;
  arr[i].hidden=true;sel=null;
  toast('Hidden. Restore it from “Hidden items”, or tick Show hidden and click it.');
@@ -1901,6 +1912,9 @@ function snapLink(i,moveKey){const L=zoneLinks[i];if(!zones[L.z1]||!zones[L.z2])
 function refreshInspector(){
  const body=document.getElementById('inspBody');
  if(!editMode){insp.style.display='none';return;}
+ if(sel&&((sel.type==='hub'&&hubs[sel.id]&&hostAbsent(cur,hubs[sel.id]))||
+          (sel.type==='conn'&&conns[sel.id]&&hostAbsent(cur,conns[sel.id])))){
+   sel=null;insp.style.display='none';return;}
  insp.style.display='block';   // explicit block (never clear inline style — the #insp{display:none} cascade bug)
  if(!sel){body.innerHTML='<div class="hint">Click a zone, connector, or hub on the map to edit it here. Click a 🔒 padlock to lock/unlock joined zones.</div>';return;}
  if(sel.type==='zone'){const z=zones[sel.id];
@@ -1932,9 +1946,9 @@ function refreshInspector(){
   body.querySelector('#bAncA').onclick=()=>toggleAnchor(sel.id,'a');
   body.querySelector('#bAncB').onclick=()=>toggleAnchor(sel.id,'b');
   const cdel=body.querySelector('#bConnDel');
-  if(cdel)cdel.onclick=()=>{conns.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  if(cdel)cdel.onclick=()=>removeItem('conn',sel.id);
   const chide=body.querySelector('#bConnHide');
-  if(chide)chide.onclick=()=>hideItem('conn',sel.id);
+  if(chide)chide.onclick=()=>removeItem('conn',sel.id);
  } else if(sel.type==='hub'){const h=hubs[sel.id];
   // Content rows render only when this hub's text is editable (canEditHubContent, paired by
   // edition). When it is not, show the same facts read-only so the selection is still legible.
@@ -1959,12 +1973,12 @@ function refreshInspector(){
    const hl=body.querySelector('#hLetter');if(hl)hl.oninput=ev=>{h.letter=ev.target.value;draw();};
    body.querySelector('#hLabel').oninput=ev=>{h.label=ev.target.value;};
    body.querySelector('#hNote').oninput=ev=>{h.note=ev.target.value;draw();};}
-  body.querySelector('#hAnc').onclick=()=>{if(h.anchor){h.anchor=null;h.lx=null;h.ly=null;}else{anchorHub(h,true);}
+  body.querySelector('#hAnc').onclick=()=>{if(h.anchor){const p=hubPos(h,zones);h.x=p[0];h.y=p[1];h.anchor=null;h.lx=null;h.ly=null;}else{anchorHub(h,true);}
    h.touched=true;refreshInspector();draw();};   // anchor/free moves the hub without any drag
   const hdel=body.querySelector('#bHubDel');
-  if(hdel)hdel.onclick=()=>{hubs.splice(sel.id,1);sel=null;refreshInspector();draw();};
+  if(hdel)hdel.onclick=()=>removeItem('hub',sel.id);
   const hhide=body.querySelector('#bHubHide');
-  if(hhide)hhide.onclick=()=>hideItem('hub',sel.id);
+  if(hhide)hhide.onclick=()=>removeItem('hub',sel.id);
  } else if(sel.type==='uni'){const en=uEntities()[sel.id];
   body.innerHTML=`<h2>Realm · ${en?en.name:''}</h2>
    <div class="hint">Drag the realm on the map to reposition it. Save a version or export your layout to keep it.</div>
@@ -2001,14 +2015,22 @@ function toggleWlAnchor(idx,which){const l=worldConns()[idx];if(!l)return;
  refreshInspector();draw();}
 
 /* ---- persistence: localStorage version history (per continent) + customization file export ---- */
-// Keys are suffixed per edition. The author build stores full snapshots and the user build
-// stores sparse overlays, so a shared key would have each misparse the other's buffer when
-// both are opened from the same origin. Nothing has shipped, so no migration is needed.
-/*__AUTHOR__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_v1';}
-function worldLsKey(){return 'eql_editor_world_v1';}/*__END_AUTHOR__*/
-/*__USER__*/function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_u1';}
-function worldLsKey(){return 'eql_editor_world_u1';}/*__END_USER__*/
+// Edition and pack both belong in the destination key: author snapshots and user overlays have
+// different shapes, while calibrations have different coordinate frames.
+/*__AUTHOR__*/function legacyLsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_v1';}
+function legacyWorldLsKey(){return 'eql_editor_world_v1';}
+function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_'+PACKKEY+'_v1';}
+function worldLsKey(){return 'eql_editor_world_'+PACKKEY+'_v1';}/*__END_AUTHOR__*/
+/*__USER__*/function legacyLsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_u1';}
+function legacyWorldLsKey(){return 'eql_editor_world_u1';}
+function lsKeyFor(c){return 'eql_editor_'+contDirJS(c)+'_'+PACKKEY+'_u1';}
+function worldLsKey(){return 'eql_editor_world_'+PACKKEY+'_u1';}/*__END_USER__*/
 function lsKey(){return lsKeyFor(cur);}
+function migrateStoreKey(dest,legacy){try{const marker=dest+'_migrated';
+ if(localStorage.getItem(dest)===null&&localStorage.getItem(marker)===null){const old=localStorage.getItem(legacy);
+   if(old!==null)localStorage.setItem(dest,old);localStorage.setItem(marker,'1');}}catch(e){}}
+function migrateContStore(c){migrateStoreKey(lsKeyFor(c),legacyLsKeyFor(c));}
+function migrateWorldStore(){migrateStoreKey(worldLsKey(),legacyWorldLsKey());}
 // Latest stored state for a continent/world, or null. Used by the view-mode apply hook to
 // decide whether to build edit-state at all, so an uncustomized viewer pays nothing.
 function storedState(k){const o=readStoreK(k);return o.versions.length?o.versions[o.versions.length-1].state:null;}
@@ -2020,7 +2042,10 @@ function readStore(){return readStoreK(lsKey());}
 function writeStore(o){return writeStoreK(lsKey(),o);}
 /*__AUTHOR__*/
 function refusePartialAuthor(){for(const c in ALL)if((ALL[c].skipped||[]).length){
- toast('Cannot save or export authored data from this partial build — the map pack is missing roster zones.');return true;}
+ toast('Cannot save versions or export world.json from this partial build — the map pack is missing roster zones.');return true;}
+ return false;}
+function refusePartialVariant(){if(PACKKEY!=='default')for(const c in ALL)if((ALL[c].skipped||[]).length){
+ toast('Cannot export layout.'+PACKKEY+'.json from this partial build — overrides for skipped zones would be dropped. Reconvert from a complete pack.');return true;}
  return false;}
 // Author edition: full snapshots. A sparse overlay cannot express "I added this hub" or
 // "I deleted that one" against a layout.json the author is themselves rewriting.
@@ -2074,7 +2099,7 @@ function revertLast(){const o=readStore();
  if(o.versions.length)applyState(o.versions[o.versions.length-1].state);else {buildEditState(cur);if(editMode)ensureLinks(cur);}
  sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
  toast(o.versions.length?('Reverted to v'+o.versions.length):'Reverted to the published map.');}
-function loadLatest(){const o=readStore();if(o.versions.length){applyState(o.versions[o.versions.length-1].state);return true;}return false;}
+function loadLatest(){migrateContStore(cur);const o=readStore();if(o.versions.length){applyState(o.versions[o.versions.length-1].state);return true;}return false;}
 function buildHist(){const sel2=document.getElementById('histSel');const o=readStoreK(curStoreKey());
  sel2.innerHTML='';
  if(!o.versions.length){const op=document.createElement('option');op.textContent='(no saved versions)';op.value='-1';sel2.appendChild(op);sel2.disabled=true;return;}
@@ -2136,9 +2161,9 @@ function endOut(c,which){const anc=which==='a'?c.anchorA:c.anchorB,loc=which==='
  const p=(which==='a'?c.a:c.b)||[0,0],o={xy:[Math.round(p[0]),Math.round(p[1])]};
  if(anc&&loc){o.anchor=anc;o.lx=rnd4(loc[0]);o.ly=rnd4(loc[1]);}
  return o;}
-function endIn(c,which,p){if(!p)return;const xy=p.xy?p.xy.slice():null;
- if(which==='a'){if(xy)c.a=xy;if(p.anchor){c.anchorA=p.anchor;c.la=[p.lx,p.ly];}else{c.anchorA=null;c.la=null;}}
- else{if(xy)c.b=xy;if(p.anchor){c.anchorB=p.anchor;c.lb=[p.lx,p.ly];}else{c.anchorB=null;c.lb=null;}}}
+function endIn(c,which,p){if(!p)return;const e=connEndOf({[which]:p},which),xy=e.xy.slice();
+ if(which==='a'){c.a=xy;if(e.anchor){c.anchorA=e.anchor;c.la=[e.lx,e.ly];}else{c.anchorA=null;c.la=null;}}
+ else{c.b=xy;if(e.anchor){c.anchorB=e.anchor;c.lb=[e.lx,e.ly];}else{c.anchorB=null;c.lb=null;}}}
 /* The world-link twin. Anchor state has to persist for one reason: a MANUAL free or bind would
    otherwise be silently undone by the next auto-anchor pass at edit-state build time - which is
    also why the else branches below must stay. Writing only `if(p.anchor){...}` leaves the derived
@@ -2212,7 +2237,7 @@ function worldOverlay(){if(!WEDIT)return null;const o={};
  if(wt.length)o.worldConns=wt; if(wh.length)o.worldConnsHidden=wh; if(wa.length)o.worldConnsAdded=wa;
  return Object.keys(o).length?o:null;}
 // Whole-document overlay: every continent with live edit-state, plus the world level.
-function buildOverlay(){const ov={v:OVERLAY_V,continents:{},world:{}};
+function buildOverlay(){const ov={v:OVERLAY_V,pack:PACKKEY,continents:{},world:{}};
  for(const c in EDIT){const o=contOverlay(c);if(o)ov.continents[c]=o;}
  const w=worldOverlay();if(w)ov.world=w;
  return ov;}
@@ -2322,6 +2347,7 @@ function importOverlay(text){let ov;
  if(!ov||typeof ov!=='object'||Array.isArray(ov)){toast('That file is not a layout — nothing changed.');return;}
  if(ov.v!==OVERLAY_V&&ov.v!==1){
    toast('This layout is version '+(ov.v===undefined?'(unknown)':ov.v)+', but this map reads version '+OVERLAY_V+' — nothing changed.');return;}
+ const packWarning=typeof ov.pack==='string'&&ov.pack!==PACKKEY;
  const conts=(ov.continents&&typeof ov.continents==='object')?ov.continents:{};
  let drops=0,applied=0;
  for(const c in conts){
@@ -2347,7 +2373,8 @@ function importOverlay(text){let ov;
  if(level==='continent'&&cur)fitBox(contBbox(cur));
  draw();
  toast('Layout imported — '+applied+' continent'+(applied===1?'':'s')
-   +(drops?(' · '+drops+' entr'+(drops===1?'y':'ies')+' skipped (map data changed)'):''));}
+   +(drops?(' · '+drops+' entr'+(drops===1?'y':'ies')+' skipped (map data changed)'):'')
+   +(packWarning?(' · warning: layout pack '+ov.pack+', this build '+PACKKEY):''));}
 function importOverlayFile(f){if(!f)return;
  const r=new FileReader();
  r.onload=()=>importOverlay(String(r.result));
@@ -2360,9 +2387,9 @@ function importOverlayFile(f){if(!f)return;
    inside setEdit. Guard on a stored buffer actually existing, so an uncustomized viewer
    builds nothing at all; and note the state is deliberately left linksReady:false, so plain
    viewing never runs the weld detector. */
-function applyStoredCont(name){const st=storedState(lsKeyFor(name));if(!st)return;
+function applyStoredCont(name){migrateContStore(name);const st=storedState(lsKeyFor(name));if(!st)return;
  buildEditState(name);reportDrops(applyContOverlay(name,st));}
-function applyStoredWorld(){if(WEDIT)return;const st=storedState(worldLsKey());if(!st)return;
+function applyStoredWorld(){if(WEDIT)return;migrateWorldStore();const st=storedState(worldLsKey());if(!st)return;
  buildWorldEditState();reportDrops(applyWorldOverlay(st));}
 /*__END_USER__*/
 
@@ -2373,9 +2400,20 @@ function downloadBlob(text,type,fname){const blob=new Blob([text],{type});const 
  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},0);}
 
 /*__AUTHOR__*//* ---- durable export (§F) ---- */
+function restoreSkippedLinks(cont,links){const skipped=ALL[cont].skippedAuthored;
+ const out=links.map(l=>Object.assign({},l));
+ if(skipped&&skipped.links)for(const saved of skipped.links.slice().sort((a,b)=>a.i-b.i)){
+   const l=Object.assign({},saved);const i=l.i;delete l.i;out.splice(i,0,l);}
+ return out;}
+function buildVariantLayout(cont){const e=EDIT[cont],zoneXf={};
+ for(const k in e.zones){const z=ALL[cont].zones[k],base=xfIn(z&&(z.xfBase||z.xf)),live=e.zones[k].xf;
+   if(!sameXf(live,base))zoneXf[k]=xfOut(live);}
+ return {zoneXf};}
 function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
- const connectors=e.conns.map(c=>{const A=ep(c,'a',e.zones),B=ep(c,'b',e.zones);return {a:[R(A[0]),R(A[1])],b:[R(B[0]),R(B[1])]};});
- const hubsOut=e.hubs.map(h=>{const P=hubPos(h,e.zones);const o={x:R(P[0]),y:R(P[1]),kind:h.kind,label:h.label};
+ if(PACKKEY!=='default')return buildVariantLayout(cont);
+ const connectors=e.conns.map(c=>({a:endOut(c,'a'),b:endOut(c,'b')}));
+ const skipped=ALL[cont].skippedAuthored||{};
+ const hubsOut=skipped.hubs?JSON.parse(JSON.stringify(skipped.hubs)):e.hubs.map(h=>{const o=Object.assign(hubPosOut(h),{kind:h.kind,label:h.label});
    if(hubHasLetter(h.kind)&&h.letter)o.letter=h.letter;if(h.note)o.note=h.note;return o;});   // letter on portal/teleport; note when present
  // Welds are detected lazily (ensureLinks). If this continent's edit-state was built without
  // them - importOverlay does that for every continent in the file - zoneLinks is empty, and
@@ -2388,13 +2426,14 @@ function buildLayoutObject(cont){const e=EDIT[cont];const R=Math.round;
     if(l.manual)links.push({z1:l.z1,z2:l.z2,locked:l.locked,manual:true});
     else if(!l.locked)links.push({z1:l.z1,z2:l.z2,locked:false});}
   for(const d of (e.deletedLinks||[]))links.push({z1:d.z1,z2:d.z2,deleted:true});}
- const zoneXf={};
+ links=restoreSkippedLinks(cont,links);
+ const zoneXf=Object.assign({},skipped.zoneXf||{});
  for(const k in e.zones){const xf=e.zones[k].xf;
    if(!isIdentity(xf))zoneXf[k]={tx:R(xf.tx),ty:R(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
  return {connectors,hubs:hubsOut,links,zoneXf};}
-function exportLayout(){if(refusePartialAuthor())return;const obj=buildLayoutObject(cur);
- downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout.json');
- toast('Exported → data/continents/'+contDirJS(cur)+'/layout.json  ·  rebuild: python scripts/build.py');}
+function exportLayout(){if(refusePartialVariant())return;const obj=buildLayoutObject(cur),suffix=PACKKEY==='default'?'':('.'+PACKKEY);
+ downloadBlob(JSON.stringify(obj,null,2),'application/json',contDirJS(cur)+'.layout'+suffix+'.json');
+ toast('Exported → data/continents/'+contDirJS(cur)+'/layout'+suffix+'.json  ·  rebuild: python scripts/build.py');}
 let _pristine=null;
 // Captured once at first edit-entry (setEdit), before any edit action mutates transient UI (toast/bAuto),
 // so the standalone export ships a clean template. Pure viewers never enter edit -> never pay the ~17MB snapshot.
@@ -2407,14 +2446,15 @@ function exportStandaloneHTML(){
    for(const k in e.zones){const xf=e.zones[k].xf;if(!outAll[c].zones[k])continue;
      if(isIdentity(xf))delete outAll[c].zones[k].xf;
      else outAll[c].zones[k].xf={tx:Math.round(xf.tx),ty:Math.round(xf.ty),s:Math.round(xf.s*1e4)/1e4,rot:Math.round(xf.rot*1e5)/1e5};}
-   outAll[c].connectors=e.conns.map(cc=>{const A=ep(cc,'a',e.zones),B=ep(cc,'b',e.zones);return {a:[Math.round(A[0]),Math.round(A[1])],b:[Math.round(B[0]),Math.round(B[1])]};});
+   outAll[c].connectors=e.conns.map(cc=>({a:endOut(cc,'a'),b:endOut(cc,'b')}));
    // same lazy-weld guard as buildLayoutObject: an unvisited continent has no zoneLinks, and
    // recomputing from it would strip the published links out of the distributable
    if(e.linksReady){
      const lk=[];for(const l of e.zoneLinks){if(l.manual)lk.push({z1:l.z1,z2:l.z2,locked:l.locked,manual:true});else if(!l.locked)lk.push({z1:l.z1,z2:l.z2,locked:false});}
      for(const d of (e.deletedLinks||[]))lk.push({z1:d.z1,z2:d.z2,deleted:true});
-     if(lk.length)outAll[c].links=lk;else if(outAll[c].links)delete outAll[c].links;}
-   const hh=e.hubs.map(h=>{const P=hubPos(h,e.zones);const o={x:Math.round(P[0]),y:Math.round(P[1]),kind:h.kind,label:h.label};if(hubHasLetter(h.kind)&&h.letter)o.letter=h.letter;if(h.note)o.note=h.note;return o;});
+     const full=restoreSkippedLinks(c,lk);if(full.length)outAll[c].links=full;else if(outAll[c].links)delete outAll[c].links;}
+   const suppressed=ALL[c].skippedAuthored&&ALL[c].skippedAuthored.hubs;
+   const hh=suppressed?JSON.parse(JSON.stringify(suppressed)):e.hubs.map(h=>{const o=Object.assign(hubPosOut(h),{kind:h.kind,label:h.label});if(hubHasLetter(h.kind)&&h.letter)o.letter=h.letter;if(h.note)o.note=h.note;return o;});
    if(hh.length)outHubs[c]=hh;else delete outHubs[c];}
  const esc=s=>s.replace(/</g,'\\u003c');
  // world/universe edits (WEDIT) merged into deep copies; never mutate the live consts
@@ -2598,7 +2638,7 @@ function worldRevertLast(){const o=readStoreK(worldLsKey());if(!o.versions.lengt
  if(o.versions.length)worldApplyState(o.versions[o.versions.length-1].state);else buildWorldEditState();
  sel=null;pendingConn=null;refreshInspector();buildHist();markSaved();draw();
  toast(o.versions.length?('Reverted to world v'+o.versions.length):'Reverted to the published map.');}
-function worldLoadLatest(){const o=readStoreK(worldLsKey());if(o.versions.length){worldApplyState(o.versions[o.versions.length-1].state);return true;}return false;}
+function worldLoadLatest(){migrateWorldStore();const o=readStoreK(worldLsKey());if(o.versions.length){worldApplyState(o.versions[o.versions.length-1].state);return true;}return false;}
 
 /*__AUTHOR__*//* ---- world durable export: a full world.json ---- */
 function buildWorldObject(){const r2=v=>Math.round(v*100)/100,r3=v=>Math.round(v*1e3)/1e3,r4=v=>Math.round(v*1e4)/1e4;
@@ -2628,7 +2668,7 @@ function configEditbar(){const isCont=level==='continent',isWorld=level==='world
  // concept, so the padlock sub-line gets its own rule rather than riding the block.
  document.getElementById('anchorBlock').style.display=(isCont||isWorld)?'':'none';
  document.getElementById('weldHint').style.display=isCont?'':'none';
- /*__AUTHOR__*/document.getElementById('bExport').innerHTML=isCont?'&#10515; Export layout.json':'&#10515; Export world.json';/*__END_AUTHOR__*/}
+ /*__AUTHOR__*/document.getElementById('bExport').innerHTML=isCont?('&#10515; Export layout'+(PACKKEY==='default'?'':('.'+PACKKEY))+'.json'):'&#10515; Export world.json';/*__END_AUTHOR__*/}
 function viewDesc(){
  if(level==='universe')return 'Choose a realm. Norrath and The Planes are mapped; others await EQL data.';
  if(level==='world')return alt==="Norrath"?'Click a landmass to zoom in. Scroll = zoom, drag = pan.':'The Outer Planes - portal realms beyond Norrath. Click a plane to zoom in.';

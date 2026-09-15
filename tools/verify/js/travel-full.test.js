@@ -52,7 +52,7 @@ section('the roster the runtime built from authored and catalog-derived edges');
   const keys = JSON.parse(ev('JSON.stringify(Object.keys(TZONES))'));
   const authored = keys.filter((key) => !discoveredKeys.has(key));
   const derived = keys.filter((key) => discoveredKeys.has(key)).sort();
-  eq('77 authored routed zones, matching what verify.py travel reports', authored.length, 77);
+  eq('78 authored routed zones, matching what verify.py travel reports', authored.length, 78);
   eq('derived routed zones match the discovery catalog', derived,
     discovered.map((record) => record.key).sort());
   eq('no node is missing a name', ev('Object.keys(TZONES).filter(k=>!TZONES[k].name).length'), 0);
@@ -81,18 +81,17 @@ section('every routed zone is findable by typing its own name');
     + ' routed zones also have a detail map (reported, not enforced)');
 }
 
-section('a catalog-derived edge routes with its stored cost');
+section('the rostered newsebexp edge routes with its authored cost');
 {
-  const record = discovered.find((entry) => entry.key === 'newsebexp');
-  ok('the live catalog contains newsebexp', !!record, discovered.map((entry) => entry.key));
-  if (record) {
-    const edge = record.edges[0];
-    const trip = plan([edge.z], [record.key]);
-    ok(`${edge.z} -> newsebexp routes`, !!trip, trip);
+  const edge = authoredTravel.walk.find((entry) => entry.z.includes('newsebexp') && entry.z.includes('nro'));
+  ok('authored travel contains nro|newsebexp', !!edge, authoredTravel.walk.map((entry) => entry.z));
+  if (edge) {
+    const trip = plan(['nro'], ['newsebexp']);
+    ok('nro -> newsebexp routes', !!trip, trip);
     if (trip) {
-      const leg = trip.legs.find((entry) => entry.from === edge.z && entry.to === record.key);
-      ok('the itinerary contains the catalog-derived leg', !!leg, hops(trip));
-      if (leg) eq('the derived leg carries the catalog cost', leg.cost, edge.cost);
+      const leg = trip.legs.find((entry) => entry.from === 'nro' && entry.to === 'newsebexp');
+      ok('the itinerary contains the authored leg', !!leg, hops(trip));
+      if (leg) eq('the authored leg carries the ruled cost', leg.cost, 9.6);
     }
   }
 }

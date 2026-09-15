@@ -2,6 +2,8 @@
 'use strict';
 
 const assert = require('assert');
+const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js');
+const { assertMarkerBridge } = require('./marker-bridge.js');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +11,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   convert, buildHTML, parsePythonFloat, readText, splitLines, pyStrip,
+  calibrationKey,
 } = require('../../../src/pack_convert.js');
 
 const REPO = path.resolve(__dirname, '../../..');
@@ -38,16 +41,25 @@ function contDir(name) { return name.replace(/ /g, '_').replace(/'/g, ''); }
 
 function loadAuthored(dataRoot) {
   const world = json(path.join(dataRoot, 'world.json'));
+  const packs = json(path.join(dataRoot, 'packs.json'));
   const continents = {};
   for (const cont of world.order) {
     const dir = path.join(dataRoot, 'continents', contDir(cont));
-    continents[cont] = {
+    const entry = {
       meta: json(path.join(dir, 'continent.json')),
       layout: json(path.join(dir, 'layout.json')),
     };
+    const variants = {};
+    for (const key of Object.keys(packs)) {
+      const variant = path.join(dir, `layout.${key}.json`);
+      if (fs.existsSync(variant)) variants[key] = json(variant);
+    }
+    if (Object.keys(variants).length) entry.variants = variants;
+    continents[cont] = entry;
   }
   const travelPath = path.join(dataRoot, 'travel.json');
-  return { world, travel: fs.existsSync(travelPath) ? json(travelPath) : {}, continents };
+  return { world, travel: fs.existsSync(travelPath) ? json(travelPath) : {},
+    packs, continents };
 }
 
 function reader(selected) {
@@ -204,6 +216,14 @@ function copyFixtureData(root) {
   return data;
 }
 
+function addEmptyland(data) {
+  const worldPath = path.join(data, 'world.json'), world = json(worldPath);
+  world.meta.Emptyland = { pos:[60,60], uc:10, vc:10, gscale:1, gw:10, gh:10,
+    alt:'Norrath', xpac:'classic' };
+  world.order.push('Emptyland');
+  fs.writeFileSync(worldPath, JSON.stringify(world), 'utf8');
+}
+
 function pythonPipeline(pack, data, ref) {
   const imp = runPython(['scripts/import_pack.py', '--pack', pack, '--data', data]);
   if (imp.status !== 0) throw new Error(`import failed: ${imp.stderr.toString('utf8')}`);
@@ -223,12 +243,21 @@ async function compareCase(label, pack, selected, packDir, rootDir, data, ref, t
   const reference = fs.readFileSync(ref, 'utf8');
   const files = reader(selected);
   const result = await convert({ authored: loadAuthored(data), files, colors, packDir, rootDir });
-  const actual = buildHTML(template, result.data, result.credit, VERSION);
+  const actual = buildHTML(template, result.data, result.credit, VERSION, result.report.calibration);
   assertNoPrivateKeys(result.data);
   if (beforeCompare) beforeCompare(result);
   assertSame(label, actual, reference);
   if (inspect) inspect(blobs(reference), result, json(path.join(data, '_generated', 'manifest.json')), files);
   console.log(`PASS: ${label}`);
+  return { actual, reference, result };
+}
+
+function removeLastDerivedEdge(html, travel) {
+  const changed = JSON.parse(JSON.stringify(travel));
+  changed.walk.pop();
+  const before = 'const TRAVEL=' + JSON.stringify(travel);
+  assert(html.includes(before), 'artifact contains the exact injected travel declaration');
+  return html.replace(before, 'const TRAVEL=' + JSON.stringify(changed));
 }
 
 // Python float grammar: reject what Number() accepts, accept what Number() alone rejects.
@@ -247,6 +276,7 @@ assert.strictEqual(readText(Uint8Array.from([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf,
 const injectPlaceholders = [
   '__ALL__', '__META__', '__DETAIL__', '__HUBS__', '__UNIVERSE__',
   '__WORLDLINKS__', '__TRAVEL__', '__XPACS__', '__CRED__', '__VERSION__',
+  '__PACKKEY__',
 ];
 const injectTokens = injectPlaceholders.join(' ');
 const injectData = {
@@ -255,27 +285,40 @@ const injectData = {
   DETAIL: {}, HUBS: {}, UNIVERSE: [], WORLDLINKS: [], TRAVEL: {}, XPACS: {},
 };
 const injectCredit = `${injectTokens} O'Reilly & <builder> "quoted"`;
-const injectVersion = VERSION;
+const injectVersion = VERSION, injectPackKey = 'brewall';
 const injectTemplate = injectPlaceholders.join('|');
 for (const missing of injectPlaceholders) {
   assert.throws(
-    () => buildHTML(injectTemplate.replace(missing, ''), injectData, injectCredit, injectVersion),
+    () => buildHTML(injectTemplate.replace(missing, ''), injectData, injectCredit, injectVersion, injectPackKey),
     new RegExp(`template missing placeholder ${missing}`),
     missing,
   );
 }
-const injectCode = "import json,sys;sys.path.insert(0,'scripts');import build;p=json.load(sys.stdin);keys=('ALL','META','DETAIL','HUBS','UNIVERSE','WORLDLINKS','TRAVEL','XPACS');sys.stdout.buffer.write(build.inject(p['template'],*(p[k] for k in keys),credit=p['credit'],version=p['version']).encode('utf-8'))";
-const injectPayload = { template: injectTemplate, ...injectData, credit: injectCredit, version: injectVersion };
+const injectCode = "import json,sys;sys.path.insert(0,'scripts');import build;p=json.load(sys.stdin);keys=('ALL','META','DETAIL','HUBS','UNIVERSE','WORLDLINKS','TRAVEL','XPACS');sys.stdout.buffer.write(build.inject(p['template'],*(p[k] for k in keys),credit=p['credit'],version=p['version'],pack_key=p['packKey']).encode('utf-8'))";
+const injectPayload = { template: injectTemplate, ...injectData, credit: injectCredit, version: injectVersion, packKey: injectPackKey };
 const pythonInjected = mustPython(['-c', injectCode], {
   input: Buffer.from(JSON.stringify(injectPayload), 'utf8'),
 }).toString('utf8');
-const jsInjected = buildHTML(injectTemplate, injectData, injectCredit, injectVersion);
+const jsInjected = buildHTML(injectTemplate, injectData, injectCredit, injectVersion, injectPackKey);
 assert.strictEqual(jsInjected, pythonInjected);
 for (const token of injectPlaceholders) {
   assert(jsInjected.split(token).length - 1 >= 2, `${token} did not survive both embeddings`);
 }
 assert(jsInjected.includes('__CRED__') && jsInjected.includes('$&') && jsInjected.includes('$`')
   && jsInjected.includes("$'") && jsInjected.includes('$1'));
+
+const PACKS = json(path.join(FX, 'data', 'packs.json'));
+assert.deepStrictEqual(calibrationKey('maps', PACKS), {key:'default', notice:null});
+assert.deepStrictEqual(calibrationKey('maps/bReWaLl', PACKS), {key:'brewall', notice:null});
+assert.deepStrictEqual(calibrationKey("maps/Good's Maps", PACKS), {key:'goods', notice:null});
+const unknownCalibration = calibrationKey('maps/Other', PACKS);
+assert.strictEqual(unknownCalibration.key, 'default');
+assert(unknownCalibration.notice.includes('Other'));
+assert.deepStrictEqual(calibrationKey('map\u017f', PACKS), {
+  key: 'default', notice: 'unrecognized map directory "map\u017f"; using default calibration',
+});
+console.log('PASS: long-s basename stays unrecognized under lowercase calibration matching');
+console.log('PASS: pack directory selects calibration and unknowns fall back with notice');
 
 const template = strippedTemplate();
 const colors = JSON.parse(mustPython(['scripts/pack_colors.py', '--json']).toString('utf8'));
@@ -303,9 +346,11 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
       await compareCase('layered pack fixture', pack, selected, 'maps/Layered', 'maps', data, path.join(root, 'ref.html'), template, colors, (d, result, manifest, files) => {
         assert.deepStrictEqual(Object.keys(result).sort(), ['credit', 'data', 'report']);
         assert.deepStrictEqual(Object.keys(result.report).sort(), [
-          'baseless', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
+          'baseless', 'calibration', 'collisions', 'discovered', 'discoveredSources', 'discoveryRejected',
           'rootZones', 'skipped', 'unknownRecords', 'unseenColors', 'warnings',
         ]);
+        assert.strictEqual(result.report.calibration, 'default');
+        assert(result.report.warnings.some(w => w.includes('Layered') && w.includes('default calibration')));
         assert.deepStrictEqual(result.report.rootZones.Testland, ['gamma']);
         assert.strictEqual(result.credit, PINS.cred_on);
         assert.deepStrictEqual(result.report.discovered.Testland, PINS.discovered);
@@ -320,6 +365,36 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         });
         assert.strictEqual(manifest.continents.Testland.discoveredSourceCount, identity.count);
         assert.strictEqual(manifest.continents.Testland.discoveredSourceFingerprint, identity.fingerprint);
+        const reference = path.join(root, 'ref.html');
+        const bridge = assertMarkerBridge(reference, manifest, MapGeom, true);
+        const INDEX_TAG = Symbol('instrumented MapGeom index');
+        const TARGET_TAG = Symbol('instrumented MapGeom target');
+        let indexCalls = 0, transitionCalls = 0, taggedIndex;
+        const instrumented = {
+          zidxFrom(entries) {
+            indexCalls++;
+            taggedIndex = MapGeom.zidxFrom(entries);
+            taggedIndex[INDEX_TAG] = true;
+            return taggedIndex;
+          },
+          transitionTargets(index, zoneKey, label) {
+            transitionCalls++;
+            assert.strictEqual(index, taggedIndex, 'marker bridge bypassed the injected MapGeom index');
+            assert(index[INDEX_TAG], 'marker bridge used an untagged index');
+            return MapGeom.transitionTargets(index, zoneKey, label).map(key => {
+              const tagged = new String(key);
+              tagged[TARGET_TAG] = true;
+              return tagged;
+            });
+          },
+        };
+        const observed = assertMarkerBridge(
+          reference, manifest, instrumented, true);
+        assert(indexCalls >= 1, 'instrumented zidxFrom was not consumed');
+        assert(transitionCalls >= 1, 'instrumented transitionTargets was not consumed');
+        assert(observed.resolutions.length >= 1 && observed.resolutions.every(r => r.source[TARGET_TAG]),
+          'a marker resolution did not come from the injected MapGeom transition result');
+        console.log(`PASS: marker-derived catalog entries bridge to anchor zlinks (${bridge.count} checked; MapGeom ownership observed)`);
         assert.deepStrictEqual(Object.keys(d.ALL.Testland.zones), PINS.build_on.ALL_zone_keys);
         assert.deepStrictEqual(Object.keys(d.DETAIL.Testland.zones), PINS.build_on.DETAIL_zone_keys);
         assert.deepStrictEqual(d.DETAIL.Testland.palette, PINS.build_on.DETAIL_palette);
@@ -349,7 +424,66 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         'maps/Layered', 'maps');
     }
 
-    // 3: ordinal discovery order differs from host-default ICU collation.
+    // Discovery-on travel fixture: unlike the builder's intentionally travel-less fixture,
+    // this has a complete authored prefix so both converter pipelines must append the catalog.
+    {
+      const root = path.join(scratch, 'discovery-travel'); fs.mkdirSync(root);
+      const data = copyFixtureData(root);
+      fs.copyFileSync(path.join(FX, 'discovery-travel.json'), path.join(data, 'travel.json'));
+      const selected = path.join(FX, 'layered', 'maps'), pack = path.join(selected, 'Layered');
+      const ref = path.join(root, 'python.html');
+      const built = await compareCase('discovery-on travel fixture', pack, selected,
+        'maps/Layered', 'maps', data, ref, template, colors, (d, result) => {
+          assert.deepStrictEqual(result.data.TRAVEL.walk[0], {z:['alpha','beta'],cost:4.2});
+          assert(result.data.TRAVEL.walk.length > 1, 'catalog edges appended after authored prefix');
+        });
+      const pass = runPython(['tools/verify/verify.py', 'derivedtravel', ref, data]);
+      assert.strictEqual(pass.status, 0, pass.stdout.toString('utf8'));
+
+      for (const [label, html] of [['Python', built.reference], ['browser', built.actual]]) {
+        const mutant = path.join(root, label.toLowerCase() + '-missing-edge.html');
+        fs.writeFileSync(mutant, removeLastDerivedEdge(html, built.result.data.TRAVEL));
+        const failed = runPython(['tools/verify/verify.py', 'derivedtravel', mutant, data]);
+        assert.notStrictEqual(failed.status, 0, `${label} derived-edge removal unexpectedly passed`);
+        assert(failed.stdout.toString('utf8').includes('derived walk tail'),
+          `${label} mutation did not report the derived tail`);
+      }
+      console.log('PASS: removing a derived edge from either converter artifact fails verification');
+    }
+
+    // 3: Brewall variant, including a cancelled base transform and zero-survivor continent.
+    {
+      const root = path.join(scratch, 'brewall-variant'); fs.mkdirSync(root);
+      const data = copyFixtureData(root); addEmptyland(data);
+      const pack = path.join(root, 'Brewall'); fs.cpSync(path.join(FX, 'pack'), pack, {recursive:true});
+      await compareCase('Brewall variant fixture', pack, pack, 'Brewall', null, data,
+        path.join(root, 'ref.html'), template, colors, (d, result) => {
+          assert.strictEqual(result.report.calibration, 'brewall');
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xf, {tx:10,ty:20,s:1.1,rot:0.25});
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xfBase, {tx:0,ty:0,s:1,rot:0});
+          assert(!Object.prototype.hasOwnProperty.call(d.ALL.Testland.zones.gamma, 'xf'));
+          assert.deepStrictEqual(d.ALL.Testland.zones.gamma.xfBase, {tx:3,ty:-2,s:1,rot:0});
+          assert.deepStrictEqual(d.ALL.Emptyland.skippedAuthored, {
+            zoneXf:{only:{tx:3,ty:4,s:1,rot:0}},
+            hubs:[{x:5,y:6,kind:'spire',label:'Omitted hub'}],
+          });
+        });
+    }
+
+    // 4: distinct Good's Maps variant and Python/browser byte identity.
+    {
+      const root = path.join(scratch, 'goods-variant'); fs.mkdirSync(root);
+      const data = copyFixtureData(root);
+      const pack = path.join(root, "Good's Maps"); fs.cpSync(path.join(FX, 'pack'), pack, {recursive:true});
+      await compareCase("Good's variant fixture", pack, pack, "Good's Maps", null, data,
+        path.join(root, 'ref.html'), template, colors, (d, result) => {
+          assert.strictEqual(result.report.calibration, 'goods');
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xf, {tx:-5,ty:7,s:0.9,rot:-0.1});
+          assert.deepStrictEqual(d.ALL.Testland.zones.alpha.xfBase, {tx:0,ty:0,s:1,rot:0});
+        });
+    }
+
+    // 5: ordinal discovery order differs from host-default ICU collation.
     {
       const root = path.join(scratch, 'collate'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(FX, 'collate');
@@ -376,7 +510,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         });
     }
 
-    // 4: one skipped zone, one filtered link, one surviving link.
+    // 6: one skipped zone, one filtered link, one surviving link.
     {
       const root = path.join(scratch, 'skip-one'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'selected-pack');
@@ -387,11 +521,15 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         assert.deepStrictEqual(d.ALL.Testland.skipped, ['gamma']);
         assert(d.ALL.Testland.links.some(link => link.z1 === 'alpha' && link.z2 === 'beta'));
         assert(!d.ALL.Testland.links.some(link => link.z1 === 'gamma' || link.z2 === 'gamma'));
+        assert.deepStrictEqual(d.ALL.Testland.skippedAuthored, {
+          zoneXf:{gamma:{tx:3,ty:-2,s:1,rot:0}},
+          links:[{i:1,z1:'beta',z2:'gamma',locked:true,manual:true}],
+        });
         assert.deepStrictEqual(result.report.skipped.Testland, manifest.continents.Testland.skippedZones);
       });
     }
 
-    // 5: no rostered source file, but the zero-zone continent remains in ALL.
+    // 7: no rostered source file, but the zero-zone continent remains in ALL.
     {
       const root = path.join(scratch, 'skip-all'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'empty-pack'); fs.mkdirSync(pack);
@@ -402,11 +540,19 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eql-pack-convert-'));
         assert.deepStrictEqual(d.ALL.Testland.skipped, ['alpha', 'beta', 'gamma']);
         assert(!Object.prototype.hasOwnProperty.call(d.DETAIL, 'Testland'));
         assert(!Object.prototype.hasOwnProperty.call(d.HUBS, 'Testland'));
+        assert.deepStrictEqual(d.ALL.Testland.skippedAuthored, {
+          zoneXf:{gamma:{tx:3,ty:-2,s:1,rot:0}},
+          links:[
+            {i:0,z1:'alpha',z2:'beta',locked:false},
+            {i:1,z1:'beta',z2:'gamma',locked:true,manual:true},
+          ],
+          hubs:[{x:5,y:6,kind:'boat',label:'Test </script> hub'}],
+        });
         assert.deepStrictEqual(result.report.skipped.Testland, manifest.continents.Testland.skippedZones);
       });
     }
 
-    // 6: Python cache load and the no-cache twin reject the same tiny nonzero Z.
+    // 8: Python cache load and the no-cache twin reject the same tiny nonzero Z.
     {
       const root = path.join(scratch, 'number-domain'); fs.mkdirSync(root);
       const data = copyFixtureData(root), pack = path.join(root, 'number-pack');

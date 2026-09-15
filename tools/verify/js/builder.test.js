@@ -163,6 +163,10 @@ async function main() {
     const flatReference = pythonReference(path.join(FX, 'pack'), flatData, path.join(flatRoot, 'ref.html'));
     check('Python reference artifact contains LF only', () => assert(!flatReference.includes('\r')));
     const flat = await pageBuild(page, flatFiles, flatChoice.record);
+    check('builder report carries the calibration line', () => {
+      page.w.renderReport(flat.built.report);
+      assert(page.w.document.getElementById('report').textContent.includes('calibration: default'));
+    });
     check('page output is byte-identical to Python over flat pack', () =>
       assertSame('flat builder', flat.built.html, flatReference));
     const mismatchedVersion = fs.readFileSync(path.join(REPO, 'VERSION'), 'ascii').trim() + '-mismatch';

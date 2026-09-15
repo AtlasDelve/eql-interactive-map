@@ -187,6 +187,20 @@ const MapGeom = (() => {
     return point;
   }
 
+  function distToZone(zone, px, py) {
+    let best = Infinity;
+    for (const seg of zone.segs) {
+      const a = tpoint(zone, seg[0], seg[1]), b = tpoint(zone, seg[2], seg[3]);
+      const dx = b[0] - a[0], dy = b[1] - a[1], length2 = dx * dx + dy * dy;
+      let t = length2 ? ((px - a[0]) * dx + (py - a[1]) * dy) / length2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const qx = a[0] + t * dx, qy = a[1] + t * dy;
+      const distance2 = (px - qx) ** 2 + (py - qy) ** 2;
+      if (distance2 < best) best = distance2;
+    }
+    return Math.sqrt(best);
+  }
+
   function costPoints(zone, transformed) {
     const key = transformed ? '_cpts_t' : '_cpts';
     if (!Object.prototype.hasOwnProperty.call(zone, key)) {
@@ -230,7 +244,7 @@ const MapGeom = (() => {
     COST_SAMPLE, UNITS_PER_COST, ZALIAS, DISCOVERY_EXCLUDE, DISCOVERED_ZONE_COLOR,
     LINK_OVERRIDE, roundHalfEven, round1, norm, tpoint, tinv, znorm, zidxFrom,
     resolveZone, transitionTargets, discoverySeriesStem, discoveryDerivedParent,
-    discoveryDisplayName, detailOffset, exitPointsFrom, nearestOutlinePoint, costPoints,
+    discoveryDisplayName, detailOffset, exitPointsFrom, nearestOutlinePoint, distToZone, costPoints,
     costBetween,
   });
 })();

@@ -9,6 +9,7 @@ Usage:
     python verify.py strip    USER.html       # strip-completeness greps
     python verify.py linediff A.html B.html   # show changed lines (for small deltas)
     python verify.py hints                    # ref-hint collision check over data/
+    python verify.py anchors                  # authored hub/connector host attachments
     python verify.py discoveryfresh           # discovered source bytes + fingerprints
     python verify.py derivedtravel ARTIFACT    # catalog edges appended to injected travel
     python verify.py travel                   # authored travel graph + expansion declaration
@@ -20,6 +21,10 @@ import math
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
+import build  # noqa: E402
+import mapgeom  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))          # tools/verify/ -> repo root
@@ -121,13 +126,14 @@ def cmd_datacmp(a, b):
     return 1 if bad else 0
 
 
-def cmd_derivedtravel(path):
-    """Require the artifact's travel tail to be the non-empty manifest catalog append."""
+def cmd_derivedtravel(path, data=None):
+    """Require the artifact's travel tail to equal the manifest catalog append, including empty."""
+    data_root = os.path.abspath(data or os.path.join(REPO, "data"))
     data = extract(path)
     travel = data["TRAVEL"]
-    with open(os.path.join(REPO, "data", "travel.json"), encoding="utf-8") as f:
+    with open(os.path.join(data_root, "travel.json"), encoding="utf-8") as f:
         authored = json.load(f)
-    with open(os.path.join(REPO, "data", "_generated", "manifest.json"),
+    with open(os.path.join(data_root, "_generated", "manifest.json"),
               encoding="utf-8") as f:
         manifest = json.load(f)
 
@@ -171,12 +177,11 @@ def cmd_derivedtravel(path):
         if tuple(sorted(pair)) in authored_pairs:
             print("FAIL  derived walk edge duplicates an authored pair: %s|%s" % pair)
             bad += 1
-    if not derived:
-        print("FAIL  discovery-on artifact has no derived walk edges")
-        bad += 1
-    else:
+    if records:
         print("compared %d derived walk edge(s): %s" %
               (len(derived), ", ".join("%s>%s" % tuple(edge["z"]) for edge in derived)))
+    else:
+        print("NOTE: discovery catalog is empty; compared an empty derived travel tail")
 
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
@@ -257,7 +262,7 @@ def cmd_lf(path):
     return 1 if bad else 0
 
 
-FORBIDDEN = ["__AUTHOR__", "__END_AUTHOR__", "__USER__", "__END_USER__", "__CRED__", "__VERSION__",
+FORBIDDEN = ["__AUTHOR__", "__END_AUTHOR__", "__USER__", "__END_USER__", "__CRED__", "__VERSION__", "__PACKKEY__",
              "layout.json", "world.json", "build.py",
              "buildLayoutObject", "buildWorldObject", "spliceBetween",
              "getPristine", "exportStandaloneHTML", "exportLayout", "exportWorld",
@@ -328,7 +333,9 @@ def cmd_hints():
         hubs = lay.get("hubs", []) or []
         hh = [h.get("kind", "") + "|" + (h.get("label", "") or "") for h in hubs]
         conns = lay.get("connectors", []) or []
-        ch = ["%d,%d|%d,%d" % (c2["a"][0], c2["a"][1], c2["b"][0], c2["b"][1]) for c2 in conns]
+        def xy(end):
+            return end if isinstance(end, list) else end["xy"]
+        ch = ["%d,%d|%d,%d" % tuple(xy(c2["a"]) + xy(c2["b"])) for c2 in conns]
         for name, arr in (("hubs", hh), ("conns", ch)):
             u = len(set(arr))
             flag = "" if u == len(arr) else "  <-- COLLISION"
@@ -350,6 +357,140 @@ def cmd_hints():
     return 1 if bad else 0
 
 
+# ------------------------------------------------------------------ authored anchors
+
+ANCHOR_MEASURED_MAX = 325.558
+ANCHOR_BOUND = 358.2
+ANCHOR_EXCEPTIONS = {
+    "default": {   # client maps/ root: the trace has no geometry under these two authored points
+        "Antonica hubs[13]": {"host": "southkarana", "local": [-27583.0, -4375.0],
+                                "dist": 2069.169, "inside_aabb": True},
+        "Antonica connectors[10].b": {"host": "lavastorm", "local": [-1618.0, 9357.0],
+                                       "dist": 907.000, "inside_aabb": False},
+    },
+    "goods": {   # Good's Maps: the base trace draws no ring under this authored glyph
+        "Antonica hubs[14]": {"host": "southkarana", "local": [-25939.0, -8373.0],
+                                "dist": 461.295, "inside_aabb": True},
+    },
+}
+
+
+def anchor_exceptions_for(pack_key, notice):
+    """Return diagnosed family exceptions, never exceptions for an unknown default family."""
+    return ANCHOR_EXCEPTIONS if notice is None and pack_key in ANCHOR_EXCEPTIONS else {}
+
+
+def _check_anchors(ALL, HUBS, rosters, pack_key, exceptions):
+    """Check anchored authored positions; migrated Brewall max was 325.558, bound is +10%."""
+    bad = checked = 0
+    observed = 0.0
+    excepted = 0
+    active_exceptions = exceptions.get(pack_key, {})
+    visited_exceptions = set()
+
+    def check(cont, kind, index, suffix, item, anchor, lx, ly):
+        nonlocal bad, checked, observed, excepted
+        where = "%s %s[%d]%s" % (cont, kind, index, suffix)
+        if not anchor or lx is None or ly is None:
+            print("FAIL  anchor missing: " + where)
+            bad += 1
+            return
+        if anchor not in rosters.get(cont, set()):
+            print("FAIL  anchor host outside roster: %s host=%s" % (where, anchor))
+            bad += 1
+            return
+        skipped = set(ALL[cont].get("skipped", []))
+        if anchor in skipped:
+            checked += 1
+            return
+        zone = ALL[cont].get("zones", {}).get(anchor)
+        if not zone:
+            print("FAIL  anchor host absent without skipped marker: %s host=%s" % (where, anchor))
+            bad += 1
+            return
+        point = mapgeom.tpoint(zone, lx, ly)
+        dist = mapgeom.dist_to_zone(zone, point[0], point[1])
+        segs = zone.get("segs", [])
+        inside_aabb = True
+        if segs:
+            xs = [v for seg in segs for v in (seg[0], seg[2])]
+            ys = [v for seg in segs for v in (seg[1], seg[3])]
+            inside_aabb = not (
+                lx < min(xs) - ANCHOR_BOUND or lx > max(xs) + ANCHOR_BOUND or
+                ly < min(ys) - ANCHOR_BOUND or ly > max(ys) + ANCHOR_BOUND)
+
+        exception = active_exceptions.get(where)
+        if exception is not None:
+            visited_exceptions.add(where)
+            if dist <= ANCHOR_BOUND and inside_aabb:
+                print("FAIL  anchor exception unnecessary: %s dist=%.3f bound=%.1f" %
+                      (where, dist, ANCHOR_BOUND))
+                bad += 1
+            elif (anchor == exception["host"] and
+                  [float(lx), float(ly)] == [float(v) for v in exception["local"]] and
+                  "%.3f" % dist == "%.3f" % exception["dist"] and
+                  inside_aabb == exception["inside_aabb"]):
+                print("EXCEPT anchor off host (source trace gap): %s host=%s "
+                      "dist=%.3f pinned=%.3f calibration=%s" %
+                      (where, anchor, dist, exception["dist"], pack_key))
+                excepted += 1
+            else:
+                print("FAIL  anchor exception stale: %s host=%s local=%s dist=%.3f "
+                      "pinned=%.3f inside_aabb=%s" %
+                      (where, anchor, [lx, ly], dist, exception["dist"], inside_aabb))
+                bad += 1
+            checked += 1
+            return
+
+        observed = max(observed, dist)
+        if dist > ANCHOR_BOUND:
+            print("FAIL  anchor off host: %s dist=%.3f bound=%.1f" %
+                  (where, dist, ANCHOR_BOUND))
+            bad += 1
+        if not inside_aabb:
+            print("FAIL  anchor local point outside host bounds: %s host=%s" % (where, anchor))
+            bad += 1
+        checked += 1
+
+    for cont, entry in ALL.items():
+        hubs = HUBS.get(cont)
+        if hubs is None:
+            hubs = (entry.get("skippedAuthored") or {}).get("hubs", [])
+        for i, hub in enumerate(hubs or []):
+            check(cont, "hubs", i, "", hub, hub.get("anchor"), hub.get("lx"), hub.get("ly"))
+        for i, connector in enumerate(entry.get("connectors", []) or []):
+            for which in ("a", "b"):
+                end = connector.get(which)
+                if isinstance(end, list):
+                    anchor = lx = ly = None
+                else:
+                    anchor, lx, ly = end.get("anchor"), end.get("lx"), end.get("ly")
+                check(cont, "connectors", i, "." + which, end, anchor, lx, ly)
+    for where in sorted(set(active_exceptions) - visited_exceptions):
+        print("FAIL  anchor exception unused: %s calibration=%s" % (where, pack_key))
+        bad += 1
+    print("checked %d authored anchor(s); observed max distance %.3f (bound %.1f); %d excepted" %
+          (checked, observed, ANCHOR_BOUND, excepted))
+    return bad
+
+
+def cmd_anchors(data=None):
+    """Validate production-composed anchors against authored rosters and transformed outlines."""
+    data = os.path.abspath(data or os.path.join(REPO, "data"))
+    built = build.build(data)
+    ALL, HUBS = built[0], built[3]
+    world = build.load(os.path.join(data, "world.json"))
+    rosters = {}
+    for cont in world["order"]:
+        meta = build.load(os.path.join(build.cont_dir(cont, data), "continent.json"))
+        rosters[cont] = set(meta["zoneOrder"])
+    pack_key, notice = build.calibration_key(data)
+    bad = _check_anchors(ALL, HUBS, rosters, pack_key,
+                         anchor_exceptions_for(pack_key, notice))
+    print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
 def cmd_discoveryfresh(data=None):
     """Recompute every discovered input's metadata and per-continent content digest."""
     data = data or os.path.join(REPO, "data")
@@ -362,7 +503,7 @@ def cmd_discoveryfresh(data=None):
         print("\nRESULT: FAIL (1)")
         return 1
 
-    bad = compared = catalogs = 0
+    bad = compared = catalogs = discovered = 0
     for cont, entry in manifest.get("continents", {}).items():
         sources = entry.get("discoveredSources")
         if sources is None:
@@ -371,6 +512,7 @@ def cmd_discoveryfresh(data=None):
                 bad += 1
             continue
         catalogs += 1
+        discovered += len(entry.get("discovered", []))
         pairs = []
         for name, expected in sorted(sources.items()):
             tag = expected.get("from")
@@ -409,6 +551,8 @@ def cmd_discoveryfresh(data=None):
 
     print("compared %d discovered source file(s) across %d continent catalog(s)"
           % (compared, catalogs))
+    if discovered == 0:
+        print("NOTE: discovery catalog is empty; there are no discovered source bytes to compare")
     print("\nRESULT: %s" % ("PASS" if bad == 0 else "FAIL (%d)" % bad))
     return 1 if bad else 0
 

@@ -183,8 +183,9 @@ all-or-nothing resolution makes unrepresentable.
 
 **The measured root-only result is 89 surviving zones and 32 skips across five continents.** The
 skips are Antonica `runnyeye`; Odus `hole`; Kunark 17 named keys; Velious 12 named keys; and Plane
-of Hate `hateplane`. The 89 survivors are 88 authored root-supplied zones plus the discovered
-`Antonica/newsebexp` append. Plane of Hate therefore remains in `ALL` with an empty `zones` object
+of Hate `hateplane`. All 89 survivors are authored roster entries resolved from the root;
+`Antonica/newsebexp` is rostered and the discovery catalog is empty. Plane of Hate therefore remains
+in `ALL` with an empty `zones` object
 and its one-key skip list, while `DETAIL` and `HUBS` omit it. The real-pack parity test pins the
 complete per-continent skip and survivor arrays, not only these counts. Keeping every continent
 preserves authored order and keeps the partial-build author interlock observable even when a whole
@@ -354,6 +355,13 @@ on `overthere`), so weld detection, proposals and doorways all differ by pack.
 **Identify a pack by content, never by path.** The same path can hold a different revision and
 the same pack can sit at different paths, so `manifest.sourceFingerprint` is a sha256 over
 sorted `(filename, sha256)` pairs and the path is only a human hint. `--audit` prints both.
+
+**Pack calibration is the ruled exception, not a second identity claim.** `data/packs.json` maps a
+lower-cased (`str.lower` / `toLowerCase`, the same fold the importer applies to the `maps` root) directory basename to the authored transform family that was calibrated for it; the
+client `maps` root selects `default`, and an unknown basename selects `default` with a notice. This
+does not certify a revision or provenance — those still come from source fingerprints and manifest
+records — it only chooses among committed `layout.<pack>.json` placement overrides, and the browser
+and command-line converters apply the same ruling.
 
 **And `overrides` rulings are pack-conditional, so the audit reports rather than prescribes.** A
 ruling exists because *some* pack's geometry could not derive an edge; this proposal agreeing is

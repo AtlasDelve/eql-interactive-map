@@ -330,8 +330,8 @@ section('the derived sets reach the draw, pick and navigation paths');
   xpac('classic');
 
   // World links get the same pidx treatment as hubs, and they need it just as much: BOTH editions
-  // can splice this array (the keyboard Delete handler and the inspector's Delete button are
-  // unmarked), and afterwards the live index of every link below the deleted one is off by one. On
+  // can splice this array (wconn deliberately remains outside the continent removeItem policy),
+  // and afterwards the live index of every link below the deleted one is off by one. On
   // real data that puts Antonica<->Timorous Deep back on the classic globe.
   ev('enterWorld();setEdit(true)');
   // What the draw and pick loops would keep, labelled by published index -- 'added' for a link

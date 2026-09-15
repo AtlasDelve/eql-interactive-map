@@ -22,10 +22,16 @@ with a notice rather than failing.
 
 | | Layer | What it covers |
 |---|---|---|
-| 1 | Python | Marker-walker and declaration-locator mutation tests; `inject()` data escaping; credit formatting/escaping/substitution order; the pack importer against a synthetic pack; browser-builder embedding, closed inputs, cache-independence, refusals and script-data escaping; strip completeness; CLI artifact LF bytes; injected-data equivalence between editions; catalog differential, source-freshness and artifact travel-tail contracts; JS-canonical number spellings; ref-hint collision check. |
-| 2 | jsdom, ~100 KB fixtures | Overlay build/apply/resolve, hide-restore, ghost alpha, author-edition guards, script-close escaping through the standalone export, browser-builder adapter/conversion identity modulo line endings (`assertSame` normalizes them); the browser-built artifact's LF bytes are asserted here, and the CLI artifact's independently in layer 1, so normalized parity establishes byte identity. Covers tokenization/report/download seams, travel-graph **semantics**, and world-link anchoring mechanics. Fast, and canonical data can be **mutated to simulate an update**. |
+| 1 | Python | Marker-walker and declaration-locator mutation tests; `inject()` data escaping; credit formatting/escaping/substitution order; the pack importer against a synthetic pack; `test_import_pack.py` travel-derivation regression for authored connector ownership/local doorways, deleted-weld retention, legacy array ends and absent hosts; browser-builder embedding, closed inputs, cache-independence, refusals and script-data escaping; strip completeness; CLI artifact LF bytes; injected-data equivalence between editions; catalog differential, source-freshness and artifact travel-tail contracts; authored anchor/host geometry; JS-canonical number spellings; ref-hint collision check. |
+| 2 | jsdom, ~100 KB fixtures | Overlay build/apply/resolve, per-pack storage/migration, lossless partial and sparse-variant export, anchored hub/connector movement and absence suppression, edition-aware Delete, hide-restore, ghost alpha, author-edition guards, script-close escaping through the standalone export, browser-builder adapter/conversion identity modulo line endings (`assertSame` normalizes them); the browser-built artifact's LF bytes are asserted here, and the CLI artifact's independently in layer 1, so normalized parity establishes byte identity. Covers tokenization/report/download seams, travel-graph **semantics**, and world-link anchoring mechanics. Fast, and canonical data can be **mutated to simulate an update**. |
 | 3 | Node + jsdom, real 18 MB artifact | JavaScript parse/stringify identity for all injected blobs after normalizing the intentional `<\/` script-safety escape (Node-only, no installed modules); smoke on both editions; travel search and real routes; the drawn route's state, lifecycle, per-level position sources, realm accounting and leg navigation; the untouched-overlay invariant across all 11 continents; view-vs-edit timing. |
-| 4 | Real browser | The builder directory picker and conversion, `FileReader`, drag-and-drop, genuine downloads, the CSS cascade, and the rendered bitmap. |
+| 4 | Real browser | The builder directory picker and conversion, `FileReader`, drag-and-drop, genuine downloads, the CSS cascade, and the rendered bitmap. The opt-in `shots.js` sweep captures every continent for human calibration review. |
+
+**The plan-gate hook is not a fifth layer, and wiring it in here would be a mistake.**
+`.claude/hooks/check-plan-codex-fold.test.js` runs standalone (`node` that path, no dependencies)
+because these four layers gate the map artifact and a release tag, while that one gates harness
+plumbing on no release path — coupling them would make a hook edit a release concern. Run it when
+you change the hook, not when you cut a build.
 
 Layer 4 uses `playwright-core` against an **already-installed** Chromium-family browser
 via `executablePath`, which avoids the ~150 MB `playwright install` download. It searches
@@ -47,11 +53,35 @@ Written down because each one is a mistake worth not repeating:
   resolution, unused aliases/overrides/exclusions, broadened filters,
   normalized display names, weakened offset/exit recovery, sampled nearest points and bypassed
   caches, including a colliding transformed-cache key, a removed transformed-point mapping, wrong
-  missing-scale and rotation defaults, and reversed supplied rotation. The real-pack marker bridge
-  separately injects an instrumented `MapGeom` resolver and requires tagged index and target
-  consumption; its source grep is only a secondary signal. This closes the partial-resolver defect
-  that could certify a verifier-local replica instead of the
-  runtime resolution contract.
+  missing-scale and rotation defaults, and reversed supplied rotation. The layered fixture's marker bridge in
+  `marker-bridge.js` requires the production `MapGeom` resolver through an instrumented index
+  and tagged transition results, closing the partial-resolver defect that could certify a
+  verifier-local replica. Both converter suites use the shared dependency-free module. Real-pack
+  bridges are dormant while production catalogs are empty and print a `NOTE`; both Brewall and
+  root-only `count === 0` assertions fail on the first marker-derived record, requiring instrumentation
+  to be re-enabled on the real-pack path then.
+
+- **Authored anchors have both geometry and consumer gates.** `verify.py anchors` checks every
+  published hub and connector-end host against the selected cache and the measured 358.2-unit
+  bound; changing a host key or local point makes the command fail. When one calibration's source
+  trace has no geometry under a diagnosed authored point, an exact calibration/entry/host/local/
+  distance/AABB pin prints `EXCEPT` instead of widening the bound. A pin fails as `anchor exception
+  stale`, `anchor exception unnecessary`, or `anchor exception unused` when its source measurement
+  changes, the ordinary bound starts passing, or the entry is no longer consumed; re-measure pins
+  from the selected production cache just as the bound is re-measured. The pinned gaps are root
+  `Antonica hubs[13]` and `connectors[10].b`, and Good's `Antonica hubs[14]`; every other anchor in
+  those families and all Brewall anchors use the ordinary bound. The jsdom anchor cases then move
+  host zones, exercise nearest-outline ownership, suppress absent hosts in view and edit modes,
+  round-trip standalone HTML, and free a moved published hub without a jump.
+- **Pack storage and deletion are tested at their real entry points.** `pack-storage.test.js` keeps
+  two pack keys isolated and drives per-continent/world legacy migration, reload and reset in both
+  editions. `hide-io.test.js` dispatches a real `KeyboardEvent('Delete')`: a published user hub
+  hides without re-indexing, a user-added hub splices, and the author edition retains deletion.
+- **`shots.js` is deliberately outside `run.py`.** It refuses a non-empty destination, selects the
+  last expansion before visiting every authored continent, asserts navigation and HUD state, and
+  rejects a non-empty continent whose canvas has no mean absolute pixel delta from the background.
+  A zero-zone continent instead must remain canvas-blank and named. The PNGs are evidence for human
+  calibration sign-off, not an automated substitute for it.
 
 - **Both front ends' LF bytes are asserted independently.** `test_markers.py` requires the inline
   `build.main()` writer to disable newline translation explicitly, while `verify.py lf` scans the
@@ -146,25 +176,27 @@ Written down because each one is a mistake worth not repeating:
   must be available: either mismatch is a failure naming the remediation, never a comparison that
   disappears behind `SKIP`. Both cases report the number of source files compared. The root-only
   case builds in an isolated ignored data copy and pins all 32 skipped keys, all 89 surviving keys,
-  the sole `newsebexp` catalog record, and the retained empty Plane of Hate. Before deleting that
-  scratch tree it requires every marker-named catalog entry to resolve from its anchor label to the
-  injected zone key, with a non-zero count; the one root-only artifact is discovery-on. The
+  rostered `newsebexp`, an empty discovery catalog, and the retained empty Plane of Hate. Before
+  deleting that scratch tree it checks every marker-named catalog entry when any exist; the committed
+  discovery-on travel fixture supplies the non-empty catalog acceptance path. The
   enclosing runner may still skip the whole optional layer when the machine-local pack
   configuration or Node is absent, or under `--quick`.
-- **Browser-converter parity includes discovery on its only production path.** Fixture, Brewall,
-  root-only and browser-builder comparisons all use the same discovery-bearing Python artifact.
+- **Browser-converter parity includes discovery on its production path.** Fixture, Brewall,
+  root-only and browser-builder comparisons use the same Python-shaped artifacts, and a committed
+  discovery-on travel fixture runs through both the Python and browser converters.
   The fixture's two-manifest differential removes only `discovered` and `discoveredPalette` from a
   copied manifest, then proves the catalog is an append that preserves authored records and palette
   indices. The Brewall pass also compares JavaScript and Python `znorm` over every accepted/rejected
   discovery key and every transition-marker label actually read, so real pack spellings exercise
   the shared resolver boundary. `derivedtravel` separately proves the authored `TRAVEL.walk` prefix
-  and exact non-empty catalog tail.
+  and exact catalog tail, including the empty production catalog.
 - **The derived-travel check reads the artifact, not the authored graph verifier.** `verify.py travel`
   stays bare-clone-safe and owns only `data/travel.json`. `derivedtravel` instead extracts the built
   `ALL` and `TRAVEL`, requires the authored walk array as an unchanged prefix, and compares the
   ordered tail directly with manifest records whose costs were already produced during conversion.
-  It also rejects absent endpoints and authored-pair collisions. Requiring at least one tail edge is
-  the control against a green check with the entire merge removed; the step is skipped under
+  It also rejects absent endpoints and authored-pair collisions. The discovery-on fixture removes
+  the derived edge from the Python and browser artifacts independently, so either missing merge fails
+  even though the production catalog is empty. The step is skipped under
   `--quick` because it needs the real artifact and generated cache.
 - **Discovered-zone runtime behaviour uses a viewer fixture, not the converter fixture.**
   `discovered-runtime.test.js` consumes an ordinary injected zone whose display name resolves from
@@ -237,6 +269,7 @@ Written down because each one is a mistake worth not repeating:
   distant, so calling it an automatic weld makes the author round-trip correctly report a deletion
   and turns the base fixture inconsistent. Layer 1 separately calls `build()` over a partial cache,
   because a viewer fixture with pre-filtered links cannot prove the build performed that filtering.
+  `skip-zone-solo-brewall` keeps every continent non-empty, isolating skipped-zone refusal from a guard that only rejects wholly empty continents.
 - **Two escapes with nothing testing them.** A hub label is free text, so a script-close
   sequence in one would end the `<script>` element it is baked into. `build.py`'s `inject()`
   and the client-side `esc()` in `exportStandaloneHTML` each already prevented that, and
@@ -301,7 +334,7 @@ glyph's own annulus, so 29px of genuine route came back as a spire false positiv
 have been "fixed" by loosening the threshold that was doing the work.
 
 **Route dimming is sampled on the target zone's own outline, clear of both the route and adjacent
-discovered geometry.** A 40-pixel square around North Ro's centroid also included `newsebexp`, whose
+zone geometry.** A 40-pixel square around North Ro's centroid also included `newsebexp`, whose
 off-route outline legitimately changes when the route turns on; that contaminated the on-route
 control with evidence that dimming worked. The browser test now chooses the outline midpoint with
 the greatest clearance and keeps the original `> 1.5` delta ratio. Disabling dimming makes that

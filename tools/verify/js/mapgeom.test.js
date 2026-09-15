@@ -114,6 +114,7 @@ thin_b = mapgeom.cost_points(thin_zone, False)
 thin_t_a = mapgeom.cost_points(thin_zone, True)
 thin_t_b = mapgeom.cost_points(thin_zone, True)
 late = mapgeom.nearest_outline_point(p['geometry']['lateZone'], 9999, 9999, False)
+segment_distance = mapgeom.dist_to_zone(p['geometry']['segmentZone'], 5, 3)
 
 out = {
   'pinned': pinned, 'numericNorm': numeric_norm, 'numericCost': numeric_cost,
@@ -142,6 +143,7 @@ out = {
     'thinTransformed': [[rounded_bits(v) for v in point] for point in thin_t_a],
     'thinTransformedLength': len(thin_t_a), 'transformedMemoized': thin_t_a is thin_t_b,
     'privateKeys': sorted(k for k in thin_zone if k.startswith('_')), 'late': list(late),
+    'segmentDistance': bits(segment_distance),
   },
 }
 json.dump(out, sys.stdout, separators=(',', ':'))
@@ -203,6 +205,7 @@ const geometry = {
     segs: Array.from({ length: 201 }, (_, i) => [i, i, i + 0.5, i + 0.5]),
   },
   lateZone: { cx: 0, cy: 0, segs: Array.from({ length: 300 }, (_, i) => [i, i, i + 0.25, i + 0.25]) },
+  segmentZone: { cx: 0, cy: 0, segs: [[0, 0, 10, 0]] },
 };
 geometry.lateZone.segs[299][2] = 9999;
 geometry.lateZone.segs[299][3] = 9999;
@@ -299,7 +302,7 @@ const wantExports = ['COST_SAMPLE', 'UNITS_PER_COST', 'ZALIAS', 'DISCOVERY_EXCLU
   'DISCOVERED_ZONE_COLOR', 'LINK_OVERRIDE', 'roundHalfEven', 'round1', 'norm', 'tpoint', 'tinv',
   'znorm', 'zidxFrom', 'resolveZone', 'transitionTargets', 'discoverySeriesStem',
   'discoveryDerivedParent', 'discoveryDisplayName', 'detailOffset', 'exitPointsFrom',
-  'nearestOutlinePoint', 'costPoints', 'costBetween'].sort();
+  'nearestOutlinePoint', 'distToZone', 'costPoints', 'costBetween'].sort();
 assert.deepStrictEqual(Object.keys(MapGeom).sort(), wantExports, 'exact public export set');
 assert.deepStrictEqual(MapGeom.ZALIAS, python.constants.ZALIAS);
 assert.deepStrictEqual(MapGeom.LINK_OVERRIDE, python.constants.LINK_OVERRIDE);
@@ -352,6 +355,7 @@ const firstTransformed = MapGeom.costPoints(thin, true);
 const secondTransformed = MapGeom.costPoints(thin, true);
 const transformedBits = firstTransformed.map(point => point.map(roundedBits));
 const late = MapGeom.nearestOutlinePoint(geometry.lateZone, 9999, 9999, false);
+const segmentDistance = bits(MapGeom.distToZone(geometry.segmentZone, 5, 3));
 assert.deepStrictEqual(offset, python.geometry.offset);
 assert.strictEqual(MapGeom.detailOffset(geometry.zone, geometry.badDetail), null);
 assert.deepStrictEqual(exitList, python.geometry.exits);
@@ -377,8 +381,11 @@ assert.deepStrictEqual(late, [9999, 9999], 'nearest outline scans every endpoint
 assert.deepStrictEqual({ offset, badOffset: null, exits: exitList, costs, thinLength: firstPoints.length,
   memoized: firstPoints === secondPoints, thinTransformed: transformedBits,
   thinTransformedLength: firstTransformed.length,
-  transformedMemoized: firstTransformed === secondTransformed, privateKeys, late }, python.geometry);
-pass('detail/exit geometry', 'confirmed offset, rejection, duplicate first-wins, exhaustive nearest scan');
+  transformedMemoized: firstTransformed === secondTransformed, privateKeys, late,
+  segmentDistance }, python.geometry);
+assert.strictEqual(MapGeom.distToZone(geometry.segmentZone, 5, 3), 3,
+  'segment-interior projection, not endpoint distance');
+pass('detail/exit geometry', 'confirmed offset, rejection, duplicate first-wins, exhaustive nearest scan, exact segment distance');
 pass('cost paths', 'four doorway/fallback branches, 200-point thinning, _cpts/_cpts_t memoization');
 
 const ties = [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5];
@@ -401,15 +408,28 @@ assert(parityCall > dependencyBlock && parityCall < quickGate,
 assert(parityCall < npmGate, 'mapgeom parity registration must precede the node_modules gate');
 assert(runner.includes('results.append(("mapgeom Python/JavaScript parity", "SKIP"))'),
   'no-Node branch must append the exact named SKIP result');
-const bridgeSource = fs.readFileSync(path.join(REPO, 'tools', 'verify', 'js',
-  'pack-convert-full.test.js'), 'utf8');
-assert(bridgeSource.includes(
-  "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
-  'real-pack bridge must import MapGeom through the step-1 seam');
-assert(bridgeSource.includes('geom = MapGeom') && bridgeSource.includes('geom.zidxFrom(entries)') &&
+for (const caller of ['pack-convert-full.test.js', 'pack-convert.test.js']) {
+  const source = fs.readFileSync(path.join(__dirname, caller), 'utf8');
+  assert(source.includes(
+    "const MapGeom = require(process.env.EQL_MAPGEOM_JS || '../../../src/mapgeom.js')"),
+    `${caller} must import MapGeom through the step-1 seam`);
+  assert.strictEqual((source.match(/require\s*\([^)]*mapgeom\.js/g) || []).length, 1,
+    `${caller} must require mapgeom.js exactly once`);
+  assert.strictEqual((source.match(/mapgeom\.js/g) || []).length, 1,
+    `${caller} must name mapgeom.js only in the seam import`);
+  assert(!source.includes('require.cache'), `${caller} must not acquire modules through require.cache`);
+  assert(!source.includes('require.resolve'), `${caller} must not acquire modules through require.resolve`);
+  assert(/assertMarkerBridge\([^)]*\bMapGeom\b/.test(source),
+    `${caller} must expose and consume the injected MapGeom seam`);
+  assert(!/function\s+znorm\b/.test(source), `${caller} must not restore local znorm`);
+}
+const bridgeSource = fs.readFileSync(path.join(__dirname, 'marker-bridge.js'), 'utf8');
+assert(bridgeSource.includes('geom.zidxFrom(entries)') &&
   bridgeSource.includes('geom.transitionTargets(zidx, record.anchor, full)'),
-  'real-pack bridge must expose and consume the injected MapGeom seam');
-assert(!/function\s+znorm\b/.test(bridgeSource), 'real-pack bridge must not restore local znorm');
+  'marker-bridge.js must expose and consume the injected MapGeom seam');
+assert(!/require\s*\([^)]*mapgeom\.js/.test(bridgeSource),
+  'marker-bridge.js must not import mapgeom.js directly');
+assert(!/function\s+znorm\b/.test(bridgeSource), 'marker-bridge.js must not restore local znorm');
 assert.deepStrictEqual(families, ['numeric', 'transforms', 'resolution', 'discovery classifiers',
   'detail/exit geometry', 'cost paths'], 'all named PASS families must execute in order');
 

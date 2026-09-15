@@ -245,6 +245,23 @@ def nearest_outline_point(z, px, py, transformed):
     return bp
 
 
+def dist_to_zone(z, px, py):
+    """Exact distance from a world point to the zone's transformed outline segments."""
+    best = float("inf")
+    for seg in z["segs"]:
+        ax, ay = tpoint(z, seg[0], seg[1])
+        bx, by = tpoint(z, seg[2], seg[3])
+        dx, dy = bx - ax, by - ay
+        length2 = dx * dx + dy * dy
+        t = ((px - ax) * dx + (py - ay) * dy) / length2 if length2 else 0
+        t = max(0, min(1, t))
+        qx, qy = ax + t * dx, ay + t * dy
+        distance2 = (px - qx) ** 2 + (py - qy) ** 2
+        if distance2 < best:
+            best = distance2
+    return math.sqrt(best)
+
+
 def cost_points(z, transformed):
     """Outline points for the cost measurement, thinned for an O(n*m) closest-pair scan.
 

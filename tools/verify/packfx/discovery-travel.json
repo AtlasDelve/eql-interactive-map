@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "groups": {},
+  "capabilities": [],
+  "overrides": {
+    "added": [],
+    "removed": []
+  },
+  "walk": [
+    {
+      "z": [
+        "alpha",
+        "beta"
+      ],
+      "cost": 4.2
+    }
+  ],
+  "routes": []
+}
