@@ -171,6 +171,9 @@ check("credit names a community pack exactly",
 check("credit does not infer provenance from maps dirname",
       fixture_credit(os.path.join("game", "maps"), []),
       "EQL · selected maps folder")
+check("credit preserves a long-s basename under lowercase matching",
+      fixture_credit(os.path.join("game", "mapſ"), []),
+      "EQL · mapſ map data")
 check("credit singular root-zone clause",
       fixture_credit(os.path.join("game", "maps", "Layered"), [1]),
       "EQL · Layered map data · 1 zone from the game's own maps")

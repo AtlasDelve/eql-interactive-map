@@ -61,7 +61,7 @@ function assertMarkerBridge(artifact, manifest, geom, requireMarkers) {
         `${cont}/${record.anchor}: no zlink targets marker-derived ${record.key}`);
     }
   }
-  if (requireMarkers) assert(count >= 1, 'root-only discovery bridge checked zero marker-derived catalog entries');
+  if (requireMarkers) assert(count >= 1, 'instrumented fixture bridge checked zero marker-derived catalog entries');
   const crossContinent = [...keyContinents].filter(([, continents]) => continents.size > 1)
     .map(([key, continents]) => ({ key, continents: [...continents].sort() }));
   return { count, resolutions, keyCount: keyContinents.size, crossContinent };

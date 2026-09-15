@@ -1100,6 +1100,16 @@ try:
               hub_rows["Testland:0"]["host"], "beta")
         check("authored hub distance is the ownership sentinel",
               hub_rows["Testland:0"]["dist"], 0)
+        for label, hub, expected in (
+                ("authored hub_host returns the ownership sentinel without fallback coordinates",
+                 {"anchor": "beta"}, ("beta", 0.0)),
+                ("absent authored hub_host returns unresolved without fallback coordinates",
+                 {"anchor": "absent"}, (None, float("inf")))):
+            try:
+                result = DTG.hub_host(dzones, hub)
+            except Exception as exc:
+                result = (type(exc).__name__, str(exc))
+            check(label, result, expected)
         check("hub label mismatch follows the authored host",
               any(n[1] == "hub-host-mismatch" and "hub 0 " in n[2] for n in dnotes), True)
         check("legacy hub still resolves to gamma", hub_rows["Testland:1"]["host"], "gamma")
