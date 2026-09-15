@@ -53,9 +53,10 @@ Codex's side of this — the executor role and its stop-and-ask list — lives i
 ## Plan review: a Codex pass, then advisor
 
 Before finalizing or submitting a plan in this repo, run a Codex pass over it, fold the findings
-in, and **then** call `advisor()`. The gate applies to `ExitPlanMode` and to any plan for a
+in, and **then** call `advisor()`. The rule covers `ExitPlanMode` and any plan for a
 multi-file change, a 3+ step task, an architectural decision, or an ambiguous requirement — the
-same threshold that sends the work into plan mode in the first place.
+same threshold that sends the work into plan mode in the first place. **On the `Edit|Write` path a
+hook enforces it; on `ExitPlanMode` nothing does, so that half is yours to keep** (below).
 
 **This is the closing step of phase 1 above**, and the split workflow makes it worth more than it
 was: the pass now runs on the same engine that has to execute the plan, so an objection is a
@@ -107,11 +108,14 @@ too — that is what the pre-hook plans used to record the same thing. A fold se
 content** does not count, and once a plan carries amendments the **newest** `## Amendment N` needs
 its own `## Codex fold — Amendment N`; earlier ones are grandfathered.
 
-**On `ExitPlanMode` the gate is a discipline, not a mechanism — run the pass yourself.** The hook
-is registered for `ExitPlanMode` but has never been observed firing, and the one test of it was
-confounded by Claude Code snapshotting hooks at session start. Whether `PreToolUse` dispatches
-`ExitPlanMode` at all is **open**; the retest and its two outcomes are recorded in the hook's own
-header. Until someone runs it from a fresh session, assume nothing blocks you here.
+**On `ExitPlanMode` the gate is a discipline, not a mechanism — run the pass yourself.** This is
+settled, not provisional: **as of Claude Code 2.1.270 no `PreToolUse` invocation reaches the hook for
+`ExitPlanMode`**, measured from a fresh session with out-of-band instrumentation logging every
+invocation — it recorded the plan-file `Write` and recorded nothing for an approved, fold-less
+`ExitPlanMode`. So the matcher in `settings.json` is inert and **nothing blocks you here.** The
+measurement is version-scoped and decays on Anthropic's release schedule; re-measure only if a
+changelog suggests it, and instrument the same way. **Do not re-run the old two-outcome retest — it
+is spent.**
 
 If Codex is missing, unauthenticated, or the pass fails, say so plainly and continue: a failed or
 skipped Codex pass must never block the `advisor()` call.
