@@ -86,6 +86,22 @@ let ovText;
                    { z1: 'beta', z2: 'gamma', locked: true, manual: true }]);
   }
 
+  console.log('\n-- cross-continent zone entry binds the destination edit state');
+  {
+    const a = load(fx('discovered-zone', 'author'));
+    a.ev("enterCont('Antonica');setEdit(true);setEdit(false)");
+    a.ev("enterCont('Faydwer');setEdit(true)");
+    eq('previous continent welds are already built', a.ev("EDIT['Faydwer'].linksReady"), true);
+    const destination = a.ev("Object.keys(EDIT['Antonica'].zones)");
+    const previous = a.ev("Object.keys(EDIT['Faydwer'].zones)");
+    ok('destination and previous rosters differ', JSON.stringify(destination) !== JSON.stringify(previous));
+    a.ev("enterZone('Antonica','alpha')");
+    eq('cross-continent entry reaches the destination zone', a.ev('[cur,level]'), ['Antonica', 'zone']);
+    eq('zone entry binds the destination roster', a.ev('Object.keys(zones)'), destination);
+    // Direct invocation pins the latent consumer; the zone UI hides the save controls.
+    eq('zone-level snapshot contains the destination roster', a.ev('Object.keys(snapshot().zones)'), destination);
+  }
+
   console.log('\n-- partial builds round-trip layout data while unsafe author actions stay blocked');
   {
     const a = load(fx('skip-zone', 'author'));

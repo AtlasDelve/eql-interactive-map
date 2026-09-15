@@ -852,6 +852,7 @@ function enterCont(name){if(!XPAC_CONT.has(name))return;
  fitBox(contBbox(name));draw();}
 function enterZone(cont,z){if(!XPAC_CONT.has(cont))return;
  level="zone";cur=cont;zcur=z;hover=null;focus=null;zhover=null;cv.style.cursor='';document.getElementById('bAlt').style.display='none';
+ if(EDIT[cont])bindES(cont);
  zdata=DETAIL[cont].zones[z]; zpal=DETAIL[cont].palette; zgroups={};
  for(const s of zdata.segs){(zgroups[s[4]]=zgroups[s[4]]||[]).push(s);}
  zlinks=[];
